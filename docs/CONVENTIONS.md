@@ -49,12 +49,13 @@ FactoryError                  # base class
 │   └── RetryableError        # network, timeout, 429, 5xx → retried 3× (2s/4s/8s)
 ├── BudgetExceededError       # daily budget would be exceeded → stop the stage, alert
 ├── PolicyBlockedError        # blocklist hit, similarity too high, missing disclosure → item rejected/archived
+├── StatusTransitionError     # a status move DATABASE.md §4 doesn't allow → always a bug
 └── QualityCheckError         # automated QA failed → item stays 'generated' with reason
 ```
 
 - One item failing must never stop the batch. Catch at the item level, set `failed` with a reason, and continue.
 - Never use a bare `except:`. Never swallow errors silently; log and record them.
-- Status changes go through one function, `db.set_status(content_id, new_status, reason=None)`. It validates the transition against `DATABASE.md` §4.
+- Status changes go through one function, `db.set_status(conn, content_id, new_status, reason=None)`. It validates the transition against `DATABASE.md` §4 and raises `StatusTransitionError` otherwise. The connection is passed in explicitly (no global state).
 
 ## 5. Comments and docstrings
 

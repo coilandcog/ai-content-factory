@@ -13,6 +13,8 @@
 - Money isn't stored at this stage.
 - Never delete content rows; use the status `archived`.
 - `PRAGMA journal_mode = WAL` lets readers and writers work at the same time, so the Telegram bot and the stages don't block each other.
+- **Migrations** are applied in number order, each in one transaction. The number of the last applied file is stored in SQLite's built-in `PRAGMA user_version`, so there's no migrations table (D-054). `factory db init` creates the file, applies pending migrations and upserts the channel rows from YAML; it's safe to re-run.
+- **Rules the database enforces itself** (D-054), so a code bug can't break them: `posts.ai_disclosure` must be 1 (D-039); `contents.affiliate_links_json` must be `NULL` (D-009); a `reviews` row with `reject` or `redo` needs a non-empty `reason`; at most one `scripts` row per content has `is_current = 1` (partial unique index); `scripts` has `UNIQUE(content_id, version)`. `contents.pillar` and `contents.hook_type` have no `CHECK`, because their values come from each channel's YAML and the content strategy.
 
 ## 2. Entity relationships
 
@@ -264,6 +266,11 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | `rejected` | Owner rejected it | review | `archived` |
 | `failed` | Stage error after retries | any | `status_before_failure` via `factory retry` |
 | `archived` | Kept for history, ignored by stages | owner / system | (end) |
+
+Rules for `failed` (enforced by `db.set_status()`):
+- Any **working** status can move to `failed`: `idea`, `scripted`, `script_approved`, `awaiting_clips`, `generated`, `assembled`, `approved`, `scheduled`, `published`. `analyzed`, `rejected`, `archived` and `failed` can't, because no stage works on them. The previous status is saved in `status_before_failure`.
+- `failed` can only move back to `status_before_failure` (what `factory retry` does); that clears `status_before_failure`.
+- `scripted → scripted` (Gate 1 redo) is the only move to the same status.
 
 The main path is the one in the PRD: **idea → scripted → generated → approved → published → analyzed**. The extra statuses (`script_approved`, `awaiting_clips`, `assembled`, `scheduled`) mark the waiting points between those steps.
 

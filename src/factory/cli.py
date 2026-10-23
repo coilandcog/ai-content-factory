@@ -16,6 +16,7 @@ from factory.config import (
     load_channel,
     load_settings,
 )
+from factory.db import connect, migrate, upsert_channel
 from factory.errors import ConfigError
 
 app = typer.Typer(
@@ -25,6 +26,10 @@ app = typer.Typer(
 )
 config_app = typer.Typer(help="Validate and inspect configuration.", no_args_is_help=True)
 app.add_typer(config_app, name="config")
+db_app = typer.Typer(help="Create and update the SQLite database.", no_args_is_help=True)
+app.add_typer(db_app, name="db")
+
+ConfigDirOption = Annotated[Path, typer.Option(help="Folder holding settings.yaml and channels/.")]
 
 # Stage name -> (help text, ROADMAP task that builds it). Order = pipeline order.
 STAGES: dict[str, tuple[str, str]] = {
@@ -55,11 +60,7 @@ for _name, (_help, _task) in STAGES.items():
 
 
 @config_app.command("check")
-def config_check(
-    config_dir: Annotated[
-        Path, typer.Option(help="Folder holding settings.yaml and channels/.")
-    ] = CONFIG_DIR,
-) -> None:
+def config_check(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
     """Validate settings.yaml and every channel profile, then print a summary."""
     # Check every file, not just the first broken one, so one run shows all problems.
     failed = False
@@ -80,6 +81,29 @@ def config_check(
             failed = True
     if failed:
         raise typer.Exit(code=1)
+
+
+@db_app.command("init")
+def db_init(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Create the database if needed, apply pending migrations and save channel rows from YAML."""
+    try:
+        settings = load_settings(config_dir)
+        channels = [load_channel(slug, config_dir) for slug in channel_slugs(config_dir)]
+    except ConfigError as exc:
+        typer.echo(f"ERROR {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    # Paths in settings.yaml are relative to the folder that contains config/ (the repo root).
+    db_path = config_dir.parent / settings.paths.db_path
+    conn = connect(db_path)
+    try:
+        applied = migrate(conn)
+        for channel in channels:
+            upsert_channel(conn, channel)
+    finally:
+        conn.close()
+    typer.echo(f"Database: {db_path}")
+    typer.echo(f"Migrations applied: {', '.join(applied)}" if applied else "Migrations: up to date")
+    typer.echo(f"Channels saved: {', '.join(ch.slug for ch in channels) or 'none'}")
 
 
 def _settings_summary(settings: Settings) -> str:

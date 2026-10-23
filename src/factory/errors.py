@@ -9,3 +9,7 @@ class FactoryError(Exception):
 
 class ConfigError(FactoryError):
     """Bad YAML or settings. Stop immediately: nothing can run on a broken config."""
+
+
+class StatusTransitionError(FactoryError):
+    """A status change that DATABASE.md §4 doesn't allow; it always points to a bug."""
