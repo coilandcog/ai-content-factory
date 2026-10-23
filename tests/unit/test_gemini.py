@@ -80,7 +80,7 @@ def test_invalid_json_is_reasked_once_with_the_errors() -> None:
 def test_invalid_twice_raises() -> None:
     sdk = FakeGenaiClient(reply("not json at all"), reply("{}"))
 
-    with pytest.raises(IntegrationError, match="invalid ObjectFacts twice"):
+    with pytest.raises(IntegrationError, match="invalid ObjectFacts 2 times"):
         ask(client(sdk))
 
 

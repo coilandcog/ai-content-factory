@@ -54,7 +54,7 @@ flowchart LR
 |---|---|---|---|---|---|---|
 | **discover** | `factory discover` | Channel `seed_topics`, `pillars` | Rows in `trend_signals` | — | Wikimedia Pageviews API; YouTube Data API `search.list` / `videos.list`; Google Trends CSV exported manually by the owner (`factory trends import`) | Not needed |
 | **ideate** | `factory ideate` | Signals, catalog history, winning patterns | `contents` rows with score breakdown | new → `idea` | Gemini API free tier; Ollama fallback | Claude API, about €3–8 |
-| **script** | `factory script` | `idea` contents with score ≥ threshold | `scripts`, `sources`; Gate 1 request | `idea` → `scripted` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
+| **script** | `factory script` | `idea` contents with score ≥ threshold, or no score yet (created with `factory new`) | `scripts`, `sources`; Gate 1 request | `idea` → `scripted`; blocklisted topic → `archived` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
 | **review (Gate 1)** | `factory review --gate script` | `scripted` | `reviews` row | → `script_approved` / `rejected` / back to `scripted` | Terminal (Phase 1); Telegram bot (Phase 2) | — |
 | **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams | → `awaiting_clips` → `generated` | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
 | **assemble** | `factory assemble` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `cover.jpg`, `metadata.json`; automated QA | → `assembled` | FFmpeg + MoviePy | Not needed |
@@ -297,6 +297,7 @@ ai-content-factory/
 │   ├── logging_setup.py          # JSON-lines + console logging, secret redaction
 │   ├── budgets.py                # api_usage tracking and budget checks
 │   ├── prompts.py                # Jinja2 prompt loader: channel override, then prompts/default
+│   ├── context.py                # AppContext (config + db) passed to stages; StageResult counts
 │   ├── stages/
 │   │   ├── discover.py
 │   │   ├── ideate.py

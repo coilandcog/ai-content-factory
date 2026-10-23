@@ -1,0 +1,449 @@
+"""Script stage: idea -> scripted (ARCHITECTURE.md §2, CONTENT_STRATEGY.md §5-7).
+
+For each idea: optional Wikipedia reference -> one Gemini call returning a ScriptDraft whose rules
+(word count, shot mix, beat order, sources, no repeated hook/beat) are part of the schema, so the
+client's automatic re-ask fixes rule breaks -> source URL check -> scripts + sources rows.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+import sqlite3
+from typing import Any, ClassVar, Literal
+
+import httpx
+from pydantic import BaseModel, Field, create_model, model_validator
+
+from factory.budgets import check_and_record
+from factory.config import ChannelConfig
+from factory.context import AppContext, StageResult
+from factory.db import set_status
+from factory.errors import BudgetExceededError, ConfigError, FactoryError, PolicyBlockedError
+from factory.integrations.gemini import GeminiClient
+from factory.integrations.wikimedia import WikiSummary, page_summary
+from factory.prompts import render_prompt
+
+log = logging.getLogger("factory.script")
+
+HOOK_TYPES = (
+    "why_question",
+    "hidden_everyday",
+    "surprising_number",
+    "myth_bust",
+    "what_if",
+    "reveal",
+)
+BEAT_ORDERS: dict[str, tuple[str, ...]] = {
+    "classic": ("studio", "cutaway", "flow", "in_situ"),
+    "context_first": ("in_situ", "studio", "cutaway", "flow"),
+    "action_first": ("flow", "cutaway", "studio", "in_situ"),
+    "cold_open": ("cutaway", "flow", "in_situ", "studio"),
+}
+# Fields each beat's Flow template needs (DESIGN_SYSTEM.md §10.2).
+CLIP_FIELDS: dict[str, tuple[str, ...]] = {
+    "studio": ("hero_feature",),
+    "cutaway": ("internals", "focus_part"),
+    "flow": ("energy", "path", "process"),
+    "in_situ": ("context",),
+}
+MIN_DIAGRAMS = {"short": 2, "deep_dive": 4, "episode": 4}  # TESTING.md §4 QA rule
+MIN_CLIPS, MAX_CLIPS = 3, 5  # DESIGN_SYSTEM.md §10.5
+# Ask for 3 sources, keep the item if at least 2 open: one invented URL then costs nothing.
+SOURCES_ASKED, SOURCES_NEEDED = 3, 2
+# Small models miscount words; two corrections cost at most 3 Gemini calls per idea.
+MAX_REASKS = 2
+CLIP_MAX_S = 8.0
+SOURCE_TIMEOUT_S = 10.0
+
+
+# --- the ScriptDraft schema ----------------------------------------------------------------
+
+
+class PolicyCheck(BaseModel):
+    allowed: bool
+    reason: str
+
+
+class Shot(BaseModel):
+    n: int = Field(ge=1)
+    beat: Literal["studio", "cutaway", "flow", "in_situ"]
+    kind: Literal["flow_clip", "still", "diagram"]
+    description: str = Field(min_length=5)
+    # Gemini schemas support ge/le, not gt/lt. Descriptions are part of the schema Gemini reads.
+    duration_s: float = Field(
+        ge=0.5, le=12, description="Seconds on screen; a flow_clip is at most 8 seconds"
+    )
+    hero_feature: str | None = None
+    internals: str | None = None
+    focus_part: str | None = None
+    energy: Literal["electric", "heat", "fluid"] | None = None
+    path: str | None = None
+    process: str | None = None
+    context: str | None = None
+
+    @model_validator(mode="after")
+    def _clip_has_template_fields(self) -> Shot:
+        if self.kind == "flow_clip":
+            missing = [f for f in CLIP_FIELDS[self.beat] if not getattr(self, f)]
+            if missing:
+                raise ValueError(f"shot {self.n} ({self.beat} flow_clip) needs {missing}")
+            # A Veo clip is at most 8 s long, so cap the plan instead of rejecting the script;
+            # the coverage rule in ScriptDraft still catches a resulting gap.
+            self.duration_s = min(self.duration_s, CLIP_MAX_S)
+        return self
+
+    def prompt_vars(self) -> dict[str, str]:
+        return {f: getattr(self, f) for f in CLIP_FIELDS[self.beat] if getattr(self, f)}
+
+
+class SourceDraft(BaseModel):
+    url: str = Field(pattern=r"^https?://\S+$")
+    title: str
+    publisher: str
+    claim: str
+
+
+class ScriptDraftBase(BaseModel):
+    """Fields shared by every format; script_schema() adds hook_type/beat_order and limits."""
+
+    # No defaults on purpose: a field with a default becomes optional in the JSON schema, and
+    # Gemini then leaves it out. A refused topic sends them empty instead.
+    policy: PolicyCheck
+    working_title: str
+    hook: str
+    body: str
+    engineer_note_draft: str
+    loop_line: str
+    shots: list[Shot]
+    sources: list[SourceDraft]
+
+    # Set per call by script_schema(); not part of the JSON.
+    min_words: ClassVar[int] = 0
+    max_words: ClassVar[int] = 10_000
+    min_diagrams: ClassVar[int] = 0
+    wpm: ClassVar[int] = 160
+    reference_url: ClassVar[str | None] = None
+    allowed_hooks: ClassVar[tuple[str, ...]] = HOOK_TYPES
+    allowed_beats: ClassVar[tuple[str, ...]] = tuple(BEAT_ORDERS)
+
+    def narration(self) -> str:
+        """Everything the narrator says, in order (stored as scripts.body_text)."""
+        parts = (self.hook, self.body, self.engineer_note_draft, self.loop_line)
+        return " ".join(p.strip() for p in parts if p.strip())
+
+    @model_validator(mode="after")
+    def _channel_rules(self) -> ScriptDraftBase:
+        if not self.policy.allowed:
+            return self  # a refused topic needs no script
+        problems = _rule_problems(self)
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+
+def _rule_problems(draft: Any) -> list[str]:
+    problems: list[str] = []
+    for name in ("working_title", "hook", "body", "engineer_note_draft", "loop_line"):
+        if not getattr(draft, name).strip():
+            problems.append(f"{name} must not be empty")
+    words = word_count(draft.narration())
+    if not draft.min_words <= words <= draft.max_words:
+        problems.append(
+            f"narration has {words} words; it must have {draft.min_words}-{draft.max_words}"
+        )
+    shots = draft.shots
+    if [s.n for s in shots] != list(range(1, len(shots) + 1)):
+        problems.append("shots must be numbered 1, 2, 3, ... in order")
+    clips = sum(s.kind == "flow_clip" for s in shots)
+    if not MIN_CLIPS <= clips <= MAX_CLIPS:
+        problems.append(f"{clips} flow_clip shots; use {MIN_CLIPS}-{MAX_CLIPS}")
+    diagrams = sum(s.kind == "diagram" for s in shots)
+    if diagrams < draft.min_diagrams:
+        problems.append(f"{diagrams} diagram shots; use at least {draft.min_diagrams}")
+    first_seen = list(dict.fromkeys(s.beat for s in shots))
+    expected = list(BEAT_ORDERS[draft.beat_order])
+    if first_seen != expected:
+        problems.append(f"beats first appear as {first_seen}; beat_order needs {expected}")
+    needed_s = 0.85 * words / draft.wpm * 60
+    total_s = sum(s.duration_s for s in shots)
+    if total_s < needed_s:
+        problems.append(f"shots last {total_s:.0f} s; they must cover at least {needed_s:.0f} s")
+    if len(draft.sources) < SOURCES_ASKED:
+        problems.append(f"{len(draft.sources)} sources; give {SOURCES_ASKED} different ones")
+    if draft.reference_url and draft.reference_url not in [s.url for s in draft.sources]:
+        problems.append(f"list {draft.reference_url} as a source")
+    return problems
+
+
+def script_schema(
+    channel: ChannelConfig,
+    fmt: str,
+    *,
+    previous: tuple[str | None, str | None],
+    reference_url: str | None,
+) -> type[ScriptDraftBase]:
+    """Build the ScriptDraft model for one item.
+
+    The previous video's hook_type and beat_order are left out of the allowed values, so Gemini
+    cannot repeat them (CONTENT_STRATEGY.md §6-7). Word limits come from the format's seconds and
+    the narrator's words per minute in the YAML.
+    """
+    prev_hook, prev_beat = previous
+    hooks = tuple(h for h in HOOK_TYPES if h != prev_hook)
+    beats = tuple(b for b in BEAT_ORDERS if b != prev_beat)
+    model = create_model(
+        f"ScriptDraft_{fmt}",
+        __base__=ScriptDraftBase,
+        hook_type=(Literal[hooks], ...),
+        beat_order=(Literal[beats], ...),
+    )
+    video_format = getattr(channel.formats, fmt)
+    wpm = channel.voice.target_wpm
+    model.min_words = round(video_format.min_s * wpm / 60)
+    model.max_words = round(video_format.max_s * wpm / 60)
+    model.min_diagrams = MIN_DIAGRAMS[fmt]
+    model.wpm = wpm
+    model.reference_url = reference_url
+    model.allowed_hooks = hooks
+    model.allowed_beats = beats
+    return model
+
+
+def word_count(text: str) -> int:
+    return len(re.findall(r"[A-Za-z0-9]+(?:['’][A-Za-z]+)?", text))
+
+
+# --- the stage -------------------------------------------------------------------------------
+
+
+def run(
+    ctx: AppContext,
+    *,
+    limit: int | None = None,
+    llm: GeminiClient | None = None,
+    http: httpx.Client | None = None,
+) -> StageResult:
+    """Script every eligible idea of the channel. One failing item never stops the others;
+    going over the daily Gemini budget stops the whole stage (BudgetExceededError)."""
+    result = StageResult()
+    ideas = _eligible_ideas(ctx, limit)
+    if not ideas:
+        log.info("no ideas to script", extra={"event": "script_nothing"})
+        return result
+    llm = llm or _gemini(ctx)
+    own_http = http is None
+    http = http or _http_client(ctx)
+    try:
+        for row in ideas:
+            _script_one_safely(ctx, row, llm, http, result)
+    finally:
+        if own_http:
+            http.close()
+    return result
+
+
+def _script_one_safely(
+    ctx: AppContext, row: sqlite3.Row, llm: GeminiClient, http: httpx.Client, result: StageResult
+) -> None:
+    content_id = row["id"]
+    extra = {"content_id": content_id}
+    try:
+        script_id = _script_one(ctx, row, llm, http)
+    except BudgetExceededError:
+        raise  # stop the stage; the remaining ideas wait for tomorrow
+    except PolicyBlockedError as exc:
+        set_status(ctx.conn, content_id, "archived", reason=f"blocked: {exc}")
+        log.warning("#%s archived: %s", content_id, exc, extra={**extra, "event": "script_blocked"})
+        result.processed += 1
+    except Exception as exc:  # one bad item must not stop the batch (CONVENTIONS §4)
+        set_status(ctx.conn, content_id, "failed", reason=str(exc)[:500])
+        log.exception("#%s failed", content_id, extra={**extra, "event": "script_failed"})
+        result.failed += 1
+    else:
+        log.info(
+            "#%s scripted (script %s)", content_id, script_id, extra={**extra, "event": "scripted"}
+        )
+        result.processed += 1
+
+
+def _script_one(ctx: AppContext, row: sqlite3.Row, llm: GeminiClient, http: httpx.Client) -> int:
+    channel, conn = ctx.channel, ctx.conn
+    reference = page_summary(
+        http, row["object_name"], before_call=lambda: check_and_record(conn, channel, "wikimedia")
+    )
+    previous = _previous_variety(conn, row["channel_id"], row["id"])
+    schema = script_schema(
+        channel,
+        row["format"],
+        previous=previous,
+        reference_url=reference.url if reference else None,
+    )
+    system, user = _prompts(ctx, row, schema, reference)
+    draft = llm.generate_json(
+        system=system.text, prompt=user.text, schema=schema, max_reasks=MAX_REASKS
+    )
+    if not draft.policy.allowed:
+        raise PolicyBlockedError(draft.policy.reason)
+    sources = [s for s in draft.sources if _reachable(http, s.url)]
+    if len(sources) < SOURCES_NEEDED:
+        raise FactoryError(
+            f"only {len(sources)} of {len(draft.sources)} sources could be opened: "
+            + ", ".join(s.url for s in draft.sources)
+        )
+    return _save(conn, row["id"], draft, sources, llm.model, f"{system.version}+{user.version}")
+
+
+def _eligible_ideas(ctx: AppContext, limit: int | None) -> list[sqlite3.Row]:
+    # Items created by hand (factory new) have no score yet; the owner chose them, so they count.
+    return ctx.conn.execute(
+        """
+        SELECT c.* FROM contents c JOIN channels ch ON ch.id = c.channel_id
+        WHERE ch.slug = ? AND c.status = 'idea'
+          AND (c.virality_score IS NULL OR c.virality_score >= ?)
+        ORDER BY c.id LIMIT ?
+        """,
+        (ctx.channel.slug, ctx.channel.scoring.min_virality_score, limit or -1),
+    ).fetchall()
+
+
+def _previous_variety(
+    conn: sqlite3.Connection, channel_id: int, content_id: int
+) -> tuple[str | None, str | None]:
+    """hook_type and beat_order of the channel's most recent other scripted item."""
+    row = conn.execute(
+        """
+        SELECT hook_type, beat_order FROM contents
+        WHERE channel_id = ? AND id <> ? AND hook_type IS NOT NULL
+        ORDER BY updated_at DESC, id DESC LIMIT 1
+        """,
+        (channel_id, content_id),
+    ).fetchone()
+    return (row["hook_type"], row["beat_order"]) if row else (None, None)
+
+
+def _prompts(
+    ctx: AppContext, row: sqlite3.Row, schema: type[ScriptDraftBase], reference: WikiSummary | None
+) -> tuple[Any, Any]:
+    channel = ctx.channel
+    video_format = getattr(channel.formats, row["format"])
+    prompts_root = ctx.root / ctx.settings.paths.prompts_dir
+    system = render_prompt("script_system", channel, prompts_root=prompts_root)
+    user = render_prompt(
+        f"script_{row['format']}",
+        channel,
+        prompts_root=prompts_root,
+        item=row,
+        series=video_format.series,
+        target_s=round((video_format.min_s + video_format.max_s) / 2),
+        allowed_hooks=list(schema.allowed_hooks),
+        allowed_beats=list(schema.allowed_beats),
+        min_words=schema.min_words,
+        max_words=schema.max_words,
+        # A target in the middle of the range keeps the model away from the edges.
+        target_words=(target_words := round((schema.min_words + schema.max_words) / 2)),
+        target_total_s=round(target_words / schema.wpm * 60),
+        min_clips=MIN_CLIPS,
+        max_clips=MAX_CLIPS,
+        min_diagrams=schema.min_diagrams,
+        reference=reference,
+    )
+    return system, user
+
+
+def _reachable(http: httpx.Client, url: str) -> bool:
+    """Does the cited page open (HTTP 2xx after redirects)? One request per source."""
+    try:
+        return http.get(url).is_success
+    except httpx.HTTPError:
+        return False
+
+
+def _save(
+    conn: sqlite3.Connection,
+    content_id: int,
+    draft: ScriptDraftBase,
+    sources: list[SourceDraft],
+    model: str,
+    prompt_version: str,
+) -> int:
+    narration = draft.narration()
+    words = word_count(narration)
+    shot_list = [
+        {
+            "n": s.n,
+            "beat": s.beat,
+            "kind": s.kind,
+            "description": s.description,
+            "duration_s": s.duration_s,
+            "prompt_vars": s.prompt_vars() if s.kind == "flow_clip" else {},
+        }
+        for s in draft.shots
+    ]
+    # One transaction: set_status runs last, and its commit also commits the rows above. If the
+    # status change is refused, nothing has been committed and everything is rolled back.
+    with conn:
+        conn.execute("UPDATE scripts SET is_current = 0 WHERE content_id = ?", (content_id,))
+        version = conn.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM scripts WHERE content_id = ?", (content_id,)
+        ).fetchone()[0]
+        script_id = conn.execute(
+            """
+            INSERT INTO scripts (content_id, version, hook, body_text, engineer_note, loop_line,
+                word_count, est_duration_s, shot_list_json, llm_provider, llm_model,
+                prompt_version, is_current)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'gemini', ?, ?, 1)
+            """,
+            (
+                content_id,
+                version,
+                draft.hook,
+                narration,
+                draft.engineer_note_draft,
+                draft.loop_line,
+                words,
+                round(words / draft.wpm * 60, 1),
+                json.dumps(shot_list, ensure_ascii=False),
+                model,
+                prompt_version,
+            ),
+        ).lastrowid
+        conn.executemany(
+            """
+            INSERT INTO sources (content_id, url, title, publisher, claim, accessed_at)
+            VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            """,
+            [(content_id, s.url, s.title, s.publisher, s.claim) for s in sources],
+        )
+        conn.execute(
+            "UPDATE contents SET working_title = ?, hook_type = ?, beat_order = ? WHERE id = ?",
+            (draft.working_title, draft.hook_type, draft.beat_order, content_id),
+        )
+        set_status(conn, content_id, "scripted")
+    return script_id
+
+
+# --- clients ---------------------------------------------------------------------------------
+
+
+def _gemini(ctx: AppContext) -> GeminiClient:
+    if ctx.env.gemini_api_key is None:
+        raise ConfigError("GEMINI_API_KEY is missing in .env")
+    return GeminiClient(
+        ctx.env.gemini_api_key.get_secret_value(),
+        ctx.channel.llm.model,
+        before_call=lambda: check_and_record(ctx.conn, ctx.channel, "gemini"),
+    )
+
+
+def _http_client(ctx: AppContext) -> httpx.Client:
+    agent = ctx.env.wikimedia_user_agent
+    if not agent or "CHANNEL_EMAIL_HERE" in agent:
+        raise ConfigError(
+            "WIKIMEDIA_USER_AGENT is missing in .env; Wikimedia requires e.g. "
+            "'CoilAndCogFactory/0.1 (contact: you@example.com)'"
+        )
+    return httpx.Client(
+        timeout=SOURCE_TIMEOUT_S, follow_redirects=True, headers={"User-Agent": agent}
+    )

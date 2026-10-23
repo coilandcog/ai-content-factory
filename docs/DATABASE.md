@@ -111,7 +111,7 @@ The YAML is the source of truth for settings. This row exists so foreign keys wo
 | content_id | INTEGER FK | |
 | version | INTEGER | 1, 2, … (each Gate 1 "redo" creates a new version) |
 | hook | TEXT | |
-| body_text | TEXT | Full narration text, final spelling |
+| body_text | TEXT | Full narration text, final spelling: hook + body + Engineer's Note + loop line, joined in speaking order (the script stage stores the parts separately too) |
 | engineer_note | TEXT | Owner-approved insight |
 | loop_line | TEXT | |
 | word_count | INTEGER | |

@@ -53,32 +53,36 @@ class GeminiClient:
             api_key=api_key, http_options=types.HttpOptions(timeout=TIMEOUT_MS)
         )
 
-    def generate_json[M: BaseModel](self, *, system: str, prompt: str, schema: type[M]) -> M:
+    def generate_json[M: BaseModel](
+        self, *, system: str, prompt: str, schema: type[M], max_reasks: int = 1
+    ) -> M:
         """Return Gemini's answer as a `schema` object.
 
-        If the JSON doesn't match the schema, ask once more with the validation errors; a
-        second mismatch raises IntegrationError.
+        If the JSON doesn't match the schema, ask again (up to `max_reasks` times) with the
+        validation errors appended; still no match raises IntegrationError.
         """
-        text = self._send(system, prompt, schema)
-        try:
-            return schema.model_validate_json(text)
-        except ValidationError as first:
-            log.warning(
-                "Gemini answer did not match %s; asking once more",
-                schema.__name__,
-                extra={"event": "gemini_reask"},
-            )
-            reask = (
-                f"{prompt}\n\nYour previous answer did not match the required JSON schema:\n"
-                f"{_short_errors(first)}\nReturn only the corrected JSON."
-            )
-            text = self._send(system, reask, schema)
+        request = prompt
+        for attempt in range(max_reasks + 1):
+            text = self._send(system, request, schema)
             try:
                 return schema.model_validate_json(text)
-            except ValidationError as second:
-                raise IntegrationError(
-                    f"Gemini returned invalid {schema.__name__} twice: {_short_errors(second)}"
-                ) from second
+            except ValidationError as exc:
+                problems = _short_errors(exc)
+                if attempt == max_reasks:
+                    raise IntegrationError(
+                        f"Gemini returned invalid {schema.__name__} {attempt + 1} times: {problems}"
+                    ) from exc
+                log.warning(
+                    "Gemini answer did not match %s (%s); asking again",
+                    schema.__name__,
+                    problems.replace("\n", " "),
+                    extra={"event": "gemini_reask"},
+                )
+                request = (
+                    f"{prompt}\n\nYour previous answer did not match the required JSON schema:\n"
+                    f"{problems}\nReturn only the corrected JSON."
+                )
+        raise AssertionError("unreachable")
 
     def _send(self, system: str, prompt: str, schema: type[BaseModel]) -> str:
         """One logical request, retried on RetryableError only (429, 5xx, network)."""

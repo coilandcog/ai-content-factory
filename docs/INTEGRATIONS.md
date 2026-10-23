@@ -25,9 +25,10 @@ Each section is a **contract**: what we call, how we authenticate, the limits, a
 | Model | `llm.model: gemini-3.5-flash-lite` in the channel YAML (D-051). `gemini-2.5-flash` and `gemini-2.5-flash-lite` return 404 "no longer available to new users" | ✔ 2026-10-23 (test call HTTP 200) |
 | Free-tier limits | Per **project and per model** (not per key); RPD resets at midnight Pacific (09:00 Berlin). Read in AI Studio → Rate Limit on 2026-10-23 (see table below). Google changes them often: re-check when 429s appear | ✔ 2026-10-23 |
 | Our volume | About 10 calls per content, 50–60 per day maximum → `budgets_per_day.gemini_calls: 60` | — |
-| Client | `factory.integrations.gemini.GeminiClient(api_key, model, before_call=...)`; `generate_json(system=, prompt=, schema=)` returns the validated Pydantic object. `before_call` runs before **every** attempt (stages pass `budgets.check_and_record(..., "gemini")`, so each retry counts). Timeout 30 s. The key comes from `GEMINI_API_KEY` via `load_env()` (a `SecretStr`). Prompts are logged only at DEBUG | ✔ 2026-10-23 (task 1.2) |
+| Client | `factory.integrations.gemini.GeminiClient(api_key, model, before_call=...)`; `generate_json(system=, prompt=, schema=, max_reasks=1)` returns the validated Pydantic object, re-asking up to `max_reasks` times with the validation errors (the script stage uses 2). `before_call` runs before **every** attempt (stages pass `budgets.check_and_record(..., "gemini")`, so each retry counts). Timeout 30 s. The key comes from `GEMINI_API_KEY` via `load_env()` (a `SecretStr`). Prompts are logged only at DEBUG | ✔ 2026-10-23 (task 1.2) |
 | Request | System prompt (from a Jinja2 template) plus a user prompt; `response_mime_type="application/json"` with a JSON schema for structured output | ✔ |
-| Response | JSON validated against a Pydantic model (`IdeaBatch`, `ScriptDraft`, `PostMetadata`). On a validation error, one automatic re-ask with the error message, then fail | — |
+| Response | JSON validated against a Pydantic model (`IdeaBatch`, `ScriptDraft`, `PostMetadata`). On a validation error, an automatic re-ask with the error message (1 by default, 2 for scripts), then fail | ✔ |
+| Schema rules | Gemini's schema format rejects `exclusiveMinimum`/`exclusiveMaximum` (use `ge`/`le`, not `gt`/`lt`), and fields with defaults become optional, so Gemini leaves them out: make every field required. A unit test converts each schema with the SDK offline | ✔ 2026-10-23 |
 | Errors | 429, 5xx or network error → retry (§0); other 4xx → `IntegrationError`; empty or blocked answer → `IntegrationError` with the block or finish reason; quota exhausted for the day → `BudgetExceededError` → switch to the Ollama fallback for **metadata only** (scripts wait for the next day) | — |
 | Privacy | Free-tier inputs may be used by Google to improve products. Send only public topic material, never secrets or personal data | ✔ (pricing page: "Used to improve our products: Yes") |
 
@@ -51,12 +52,15 @@ RPM = requests per minute, TPM = input tokens per minute, RPD = requests per day
 | Use | Titles, hashtags and captions when Gemini is unavailable. **Not** used for full scripts (quality too low) |
 | Errors | Connection refused → `IntegrationError("Ollama not running")` → the stage skips the item and sends an alert |
 
-## 3. Wikimedia Pageviews API (discover)
+## 3. Wikimedia APIs (discover; script reference)
+
+**Script reference (task 1.3, D-058):** before writing a script, `integrations/wikimedia.page_summary()` makes two calls, `GET https://en.wikipedia.org/w/api.php?action=opensearch&search=<object>&limit=1` (best title) and `GET https://en.wikipedia.org/api/rest_v1/page/summary/<Title>` (lead text). The text goes into the prompt and the article must be cited. Best effort: any failure, no article or a disambiguation page means no reference, and the script is written without one. Each call is counted in `api_usage` as `wikimedia`. The same `User-Agent` is used when checking that cited source URLs open (one GET each; 2xx after redirects counts as reachable).
+
 
 | Item | Contract | Verified |
 |---|---|---|
 | Endpoint | `GET https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/{Article}/daily/{YYYYMMDD}/{YYYYMMDD}` | ✔ (public REST API) |
-| Auth | None. **Required:** a descriptive `User-Agent` header from `WIKIMEDIA_USER_AGENT`, including a contact email | ✔ |
+| Auth | None. **Required:** a descriptive `User-Agent` header from `WIKIMEDIA_USER_AGENT`, including contact details: an email or a website URL, e.g. `CoilAndCogFactory/0.1 (https://coilandcog.github.io)` | ✔ |
 | Use | Demand per seed topic: 7-day views and the trend ratio (last 7 days ÷ previous 28-day average) | — |
 | Limits | Be polite: at most 10 requests/second; we make about 50 per day | — |
 | Errors | 404 (no such article) → skip the topic and log a warning; 429/5xx → retry | — |

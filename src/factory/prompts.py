@@ -36,6 +36,7 @@ def render_prompt(
 ) -> RenderedPrompt:
     """Render <name>.j2, preferring the channel's override over prompts/default.
 
+    Templates always get `channel` (the ChannelConfig) plus the keyword variables passed here.
     A variable the template uses but the caller didn't pass is an error, not an empty gap.
     """
     search_path = [_channel_dir(channel, prompts_root), prompts_root / DEFAULT_DIR_NAME]
@@ -47,7 +48,7 @@ def render_prompt(
     )
     try:
         template = env.get_template(f"{name}.j2")
-        text = template.render(**variables)
+        text = template.render(channel=channel, **variables)  # every template can use `channel`
     except jinja2.TemplateNotFound as exc:
         raise ConfigError(
             f"prompt template '{name}.j2' not found in {[str(p) for p in search_path]}"

@@ -47,7 +47,7 @@ Why: on YouTube, any vertical or square video of 3 minutes or less is a Short, a
 
 ## 5. Script structure
 
-The narrator speaks at about 160 words per minute.
+The narrator speaks at about 160 words per minute. The script stage enforces the word range from the channel YAML: `min_s × target_wpm / 60` to `max_s × target_wpm / 60` words (Short 80–133, Deep Dive 173–400), and asks the model for the middle of that range.
 
 **Short (~40 s)**
 

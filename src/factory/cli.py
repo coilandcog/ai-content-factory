@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
+import textwrap
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated
 
@@ -23,6 +25,7 @@ from factory.config import (
     load_env,
     load_settings,
 )
+from factory.context import AppContext, StageResult
 from factory.db import (
     add_content,
     connect,
@@ -35,6 +38,7 @@ from factory.db import (
 from factory.errors import ConfigError, FactoryError
 from factory.logging_setup import Redactor, set_log_context, setup_logging
 from factory.media.brand import build_brand_assets
+from factory.stages import script as script_stage
 
 log = logging.getLogger("factory.cli")
 
@@ -76,6 +80,8 @@ class _Run:
     env: EnvSettings
     conn: sqlite3.Connection
     run_id: int
+    # Stages add their counts here; they end up in runs.items_processed / items_failed.
+    tally: StageResult = field(default_factory=StageResult)
 
 
 def _start(config_dir: Path) -> tuple[Settings, EnvSettings, Redactor]:
@@ -121,8 +127,9 @@ def _tracked_run(command: str, config_dir: Path) -> Iterator[_Run]:
         run_id = start_run(conn, command, env.factory_channel, env.dry_run)
         set_log_context(run_id=run_id, stage=command, channel=env.factory_channel)
         log.debug("run %s started", run_id, extra={"event": "run_started"})
+        run = _Run(settings, env, conn, run_id)
         try:
-            yield _Run(settings, env, conn, run_id)
+            yield run
         except FactoryError as exc:
             message = redact(str(exc))
             finish_run(conn, run_id, "failed", error=message)
@@ -135,10 +142,14 @@ def _tracked_run(command: str, config_dir: Path) -> Iterator[_Run]:
             finish_run(conn, run_id, "failed", error=redact(repr(exc)))
             log.exception("run %s crashed", run_id, extra={"event": "run_crashed"})
             raise
-        finish_run(conn, run_id, "ok")
-        log.info("run %s %s: ok", run_id, command, extra={"event": "run_finished"})
+        tally = run.tally
+        status = "ok" if not tally.failed else ("partial" if tally.processed else "failed")
+        finish_run(conn, run_id, status, items_processed=tally.processed, items_failed=tally.failed)
+        log.info("run %s %s: %s", run_id, command, status, extra={"event": "run_finished"})
     finally:
         conn.close()
+    if status == "failed":
+        raise typer.Exit(code=1)  # every item failed: let calling scripts notice
 
 
 # --- pipeline stages (stubs until their ROADMAP task) -----------------------------------
@@ -155,8 +166,29 @@ def _make_stub(stage: str, task: str) -> Callable[[Path], None]:
     return stub
 
 
+def script(
+    limit: Annotated[int | None, typer.Option(help="Script at most this many ideas.")] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Write scripts for eligible ideas with Gemini: idea -> scripted (ROADMAP 1.3)."""
+    with _tracked_run("script", config_dir) as run:
+        ctx = _context(run, config_dir)
+        result = script_stage.run(ctx, limit=limit)
+        run.tally.processed, run.tally.failed = result.processed, result.failed
+        typer.echo(f"Scripted or archived: {result.processed}, failed: {result.failed}")
+
+
+# Stages that are built; the rest stay stubs. Registered in pipeline order for --help.
+IMPLEMENTED: dict[str, Callable[..., None]] = {"script": script}
+
 for _name, (_help, _task) in STAGES.items():
-    app.command(name=_name, help=_help)(_make_stub(_name, _task))
+    app.command(name=_name, help=_help)(IMPLEMENTED.get(_name) or _make_stub(_name, _task))
+
+
+def _context(run: _Run, config_dir: Path) -> AppContext:
+    """The AppContext a stage needs, for the channel named by FACTORY_CHANNEL."""
+    channel = load_channel(run.env.factory_channel, config_dir)
+    return AppContext(run.settings, run.env, channel, run.conn, config_dir.parent, run.run_id)
 
 
 # --- status -------------------------------------------------------------------------------
@@ -186,6 +218,9 @@ def new(
 @app.command()
 def status(
     content_id: Annotated[int | None, typer.Argument(help="Show one item in detail.")] = None,
+    show: Annotated[
+        str | None, typer.Option(help="With an id: 'script' prints the current script.")
+    ] = None,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
     """Show the channel summary, or one content item when an id is given."""
@@ -193,8 +228,12 @@ def status(
         channel = load_channel(run.env.factory_channel, config_dir)
         if content_id is None:
             typer.echo(_status_report(run.conn, channel, run.env.dry_run, run.run_id))
-        else:
-            typer.echo(_content_report(run.conn, content_id))
+            return
+        typer.echo(_content_report(run.conn, content_id))
+        if show == "script":
+            typer.echo(_script_report(run.conn, content_id))
+        elif show is not None:
+            raise FactoryError(f"--show accepts 'script', not '{show}'")
 
 
 def _content_report(conn: sqlite3.Connection, content_id: int) -> str:
@@ -216,7 +255,48 @@ def _content_report(conn: sqlite3.Connection, content_id: int) -> str:
         lines.append(f"  failed while: {row['status_before_failure']}")
     if row["status_reason"]:
         lines.append(f"  reason: {row['status_reason']}")
+    if row["working_title"]:
+        lines.append(f"  title: {row['working_title']}")
+        lines.append(f"  hook: {row['hook_type']} | beats: {row['beat_order']}")
     lines.append(f"  created: {row['created_at']} | updated: {row['updated_at']}")
+    return "\n".join(lines)
+
+
+def _script_report(conn: sqlite3.Connection, content_id: int) -> str:
+    """The current script as plain text: narration parts, shot list and sources (for Gate 1)."""
+    script = conn.execute(
+        "SELECT * FROM scripts WHERE content_id = ? AND is_current = 1", (content_id,)
+    ).fetchone()
+    if script is None:
+        raise FactoryError(f"content #{content_id} has no script yet: run `factory script`")
+    shots = json.loads(script["shot_list_json"])
+    sources = conn.execute(
+        "SELECT url, publisher, claim FROM sources WHERE content_id = ? ORDER BY id", (content_id,)
+    ).fetchall()
+    lines = [
+        "",
+        f"Script v{script['version']} | {script['word_count']} words | "
+        f"~{script['est_duration_s']:.0f} s | {script['llm_model']} | "
+        f"prompt {script['prompt_version']}",
+        "",
+        f"HOOK:  {script['hook']}",
+        "",
+        "NARRATION:",
+        textwrap.fill(script["body_text"], width=96, initial_indent="  ", subsequent_indent="  "),
+        "",
+        f"ENGINEER'S NOTE (draft, yours to edit at Gate 1):  {script['engineer_note']}",
+        f"LOOP LINE:  {script['loop_line']}",
+        "",
+        "SHOTS:",
+    ]
+    for shot in shots:
+        extra = ", ".join(f"{k}={v}" for k, v in shot["prompt_vars"].items())
+        lines.append(
+            f"  {shot['n']:>2}. {shot['beat']:<8} {shot['kind']:<9} {shot['duration_s']:>4.1f} s  "
+            f"{shot['description']}" + (f"  [{extra}]" if extra else "")
+        )
+    lines += ["", "SOURCES:"]
+    lines += [f"  - {s['url']} ({s['publisher']}): {s['claim']}" for s in sources]
     return "\n".join(lines)
 
 

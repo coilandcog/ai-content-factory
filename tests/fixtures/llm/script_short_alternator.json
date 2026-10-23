@@ -1,0 +1,91 @@
+{
+  "policy": {
+    "allowed": true,
+    "reason": "Explains how a car part works; no repair steps."
+  },
+  "working_title": "Why your battery doesn't die while you drive",
+  "hook_type": "why_question",
+  "beat_order": "classic",
+  "hook": "Why doesn't your car battery go flat while you drive?",
+  "body": "Because a belt from the engine spins a small generator called the alternator. Inside, a spinning rotor carries an electromagnet. Its moving magnetic field sweeps past copper coils in the stator and pushes current through them. That current flips direction constantly, so a set of diodes turns it into one-way current the battery can store. A regulator keeps the voltage near fourteen volts, whether you idle or cruise.",
+  "engineer_note_draft": "As an engineer, what surprises me is how much power such a small part makes from a rubber belt.",
+  "loop_line": "So next time you start the engine, remember why your battery stays alive.",
+  "shots": [
+    {
+      "n": 1,
+      "beat": "studio",
+      "kind": "flow_clip",
+      "description": "Alternator on the pedestal, slow orbit",
+      "duration_s": 6,
+      "hero_feature": "the pulley and cooling fins"
+    },
+    {
+      "n": 2,
+      "beat": "cutaway",
+      "kind": "flow_clip",
+      "description": "Casing opens to reveal rotor and stator",
+      "duration_s": 7,
+      "internals": "rotor, stator windings and diode plate",
+      "focus_part": "the rotor"
+    },
+    {
+      "n": 3,
+      "beat": "cutaway",
+      "kind": "diagram",
+      "description": "Labels: rotor, stator, diodes, regulator",
+      "duration_s": 4
+    },
+    {
+      "n": 4,
+      "beat": "flow",
+      "kind": "flow_clip",
+      "description": "Cyan current flows from the stator coils",
+      "duration_s": 8,
+      "energy": "electric",
+      "path": "the stator coils into the diode plate",
+      "process": "alternating current becoming direct current"
+    },
+    {
+      "n": 5,
+      "beat": "flow",
+      "kind": "diagram",
+      "description": "AC wave becoming flat DC line, label 14 V",
+      "duration_s": 5
+    },
+    {
+      "n": 6,
+      "beat": "in_situ",
+      "kind": "flow_clip",
+      "description": "Alternator in an engine bay, belt spinning",
+      "duration_s": 6,
+      "context": "a modern car engine bay"
+    },
+    {
+      "n": 7,
+      "beat": "studio",
+      "kind": "still",
+      "description": "Hero three-quarter view for the loop line",
+      "duration_s": 5
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Alternator",
+      "title": "Alternator",
+      "publisher": "Wikipedia",
+      "claim": "Rotor, stator and rectifier produce DC to charge the battery"
+    },
+    {
+      "url": "https://www.example-university.edu/ee/alternator-basics",
+      "title": "Alternator basics",
+      "publisher": "Example University",
+      "claim": "Regulators hold charging voltage near 14 V"
+    },
+    {
+      "url": "https://www.example-standards.org/charging-systems",
+      "title": "Vehicle charging systems",
+      "publisher": "Example Standards Body",
+      "claim": "Diodes rectify the alternator's AC output"
+    }
+  ]
+}

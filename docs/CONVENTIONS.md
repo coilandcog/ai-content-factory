@@ -69,7 +69,7 @@ FactoryError                  # base class
 
 - Prompts live in `prompts/default/*.j2`; channels can override them in `prompts/<slug>/`.
 - Every LLM call records `prompt_version`: the first 10 hex characters of the SHA-256 of the template file (`factory.prompts.template_version`). It works before a commit and changes with every edit (D-057).
-- Load templates with `factory.prompts.render_prompt(name, channel, **vars)`: it uses `prompts/<channel prompts_dir>/<name>.j2` if present, else `prompts/default/<name>.j2`. A variable the template uses but the caller didn't pass is an error.
+- Load templates with `factory.prompts.render_prompt(name, channel, **vars)`: it uses `prompts/<channel prompts_dir>/<name>.j2` if present, else `prompts/default/<name>.j2`. Every template automatically gets `channel` (the ChannelConfig); other variables are passed as keywords. A variable the template uses but the caller didn't pass is an error. Shared parts can be pulled in with `{% include "x.j2" %}`, which also respects channel overrides.
 - Changes to prompts get their own commit and a short note on the expected effect.
 
 ## 7. Git

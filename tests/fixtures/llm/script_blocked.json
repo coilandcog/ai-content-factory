@@ -1,0 +1,15 @@
+{
+  "policy": {
+    "allowed": false,
+    "reason": "Explains how to bypass an emissions control device."
+  },
+  "hook_type": "why_question",
+  "beat_order": "classic",
+  "working_title": "",
+  "hook": "",
+  "body": "",
+  "engineer_note_draft": "",
+  "loop_line": "",
+  "shots": [],
+  "sources": []
+}

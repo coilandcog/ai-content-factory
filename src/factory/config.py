@@ -237,6 +237,7 @@ class EnvSettings(StrictModel):
     dry_run: bool
     factory_channel: KebabSlug
     gemini_api_key: SecretStr | None = None  # from GEMINI_API_KEY
+    wikimedia_user_agent: str | None = None  # from WIKIMEDIA_USER_AGENT (not a secret)
     # repr=False keeps this field out of repr() entirely.
     secrets: tuple[SecretStr, ...] = Field(default=(), repr=False)
 
@@ -259,6 +260,7 @@ def load_env(root: Path = REPO_ROOT) -> EnvSettings:
             dry_run=_parse_dry_run(merged.get("DRY_RUN")),
             factory_channel=merged.get("FACTORY_CHANNEL", "coil-and-cog"),
             gemini_api_key=merged.get("GEMINI_API_KEY") or None,
+            wikimedia_user_agent=merged.get("WIKIMEDIA_USER_AGENT") or None,
             secrets=secrets,
         )
     except ValidationError as exc:

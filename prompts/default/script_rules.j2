@@ -1,0 +1,51 @@
+Hook: pick hook_type from {{ allowed_hooks | join(", ") }}.
+{%- set formulas = {
+  "why_question": "\"Why does/doesn't {everyday thing} {surprising behavior}?\"",
+  "hidden_everyday": "\"You use this every day, but you've never seen inside it.\"",
+  "surprising_number": "\"{Big or small number} + {object}\"",
+  "myth_bust": "\"Most people think {X}. Actually {Y}.\"",
+  "what_if": "\"What happens if {part} fails or stops?\"",
+  "reveal": "\"Inside this {object} is a {surprising thing}.\"",
+} %}
+{% for name in allowed_hooks %}- {{ name }}: {{ formulas[name] }}
+{% endfor %}
+Visual beats: Studio (object on a dark pedestal), Cutaway (casing opens to show the inside),
+Flow (glowing energy moves through the parts), In situ (the part installed where it is used).
+Pick beat_order from:
+{%- set orders = {
+  "classic": "studio, cutaway, flow, in_situ",
+  "context_first": "in_situ, studio, cutaway, flow",
+  "action_first": "flow, cutaway, studio, in_situ",
+  "cold_open": "cutaway, flow, in_situ, studio",
+} %}
+{% for name in allowed_beats %}- {{ name }}: {{ orders[name] }}
+{% endfor %}
+Narration fields:
+- hook: the first sentence, at most 2 seconds of speech.
+- body: everything between hook and Engineer's Note.
+- engineer_note_draft: one first-person sentence of insight, starting like "As an engineer, what surprises me is ...".
+  It is a draft the channel's engineer will edit, so make it a genuine, checkable observation, never a made-up personal story.
+- loop_line: the last sentence; it should flow naturally back into the hook when the video loops.
+- Total narration (hook + body + engineer_note_draft + loop_line): aim for about {{ target_words }} words.
+  It must stay between {{ min_words }} and {{ max_words }} words; count before answering.
+
+Shot list ("shots"), numbered from 1, covering the whole narration: shot durations must add up to at least the
+narration's length, about {{ target_total_s }} seconds for {{ target_words }} words. Add stills or diagrams to fill time.
+- kind "flow_clip": an 8-second AI video clip, at most 8 seconds. Use {{ min_clips }} to {{ max_clips }} of them.
+  Every flow_clip needs its beat's fields: studio -> hero_feature; cutaway -> internals and focus_part;
+  flow -> energy (electric, heat or fluid), path and process; in_situ -> context.
+- kind "still": an AI still image that will be slowly animated.
+- kind "diagram": a labelled overlay drawn by code (name the labels in the description). At least {{ min_diagrams }} diagrams.
+- Every one of the four beats appears, and the first appearance of each beat follows the chosen beat_order.
+
+Sources ("sources"): exactly 3 different real web pages that support the main facts, each with url, title, publisher and the claim it supports.
+Every URL is checked automatically, so only cite pages you are sure exist. Prefer stable pages: Wikipedia articles,
+university or standards-body pages, and long-standing technical references. Never guess a URL path.
+{% if reference %}
+Reference text (Wikipedia, "{{ reference.title }}"). Base the facts on it, and list {{ reference.url }} as the first source:
+"""
+{{ reference.extract }}
+"""
+{% else %}
+No reference text is available for this topic; only use facts you are certain of.
+{% endif %}

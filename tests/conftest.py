@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import shutil
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -17,3 +19,14 @@ def config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name in ("DRY_RUN", "FACTORY_CHANNEL"):
         monkeypatch.delenv(name, raising=False)
     return target
+
+
+@pytest.fixture(autouse=True)
+def reset_factory_logging() -> Iterator[None]:
+    """CLI tests attach log handlers to streams that are closed after the call; drop them so
+    the next test doesn't log into a closed stream."""
+    yield
+    logger = logging.getLogger("factory")
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
