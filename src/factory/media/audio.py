@@ -39,15 +39,27 @@ def normalize_to_wav(pcm_f32: bytes, *, input_rate: int, out_path: Path) -> Loud
     if not pcm_f32:
         raise FactoryError("no audio to normalise")
     raw_input = ["-f", "f32le", "-ar", str(input_rate), "-ac", "1", "-i", "-"]
+    return _normalize(raw_input, out_path, input_bytes=pcm_f32)
+
+
+def normalize_file(in_path: Path, out_path: Path) -> Loudness:
+    """The same -14 LUFS / limiter treatment for an audio file (e.g. a finished mix, any
+    channel count), written as a 48 kHz, 16-bit WAV."""
+    return _normalize(["-i", str(in_path)], out_path)
+
+
+def _normalize(
+    input_args: list[str], out_path: Path, *, input_bytes: bytes | None = None
+) -> Loudness:
     measured = _loudnorm_report(
-        run_ffmpeg([*raw_input, "-af", "loudnorm=print_format=json", "-f", "null", "-"],
-                   input_bytes=pcm_f32)
+        run_ffmpeg([*input_args, "-af", "loudnorm=print_format=json", "-f", "null", "-"],
+                   input_bytes=input_bytes)
     )  # fmt: skip
     gain_db = TARGET_LUFS - float(measured["input_i"])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     for _ in range(MAX_ROUNDS):
-        run_ffmpeg([*raw_input, "-af", _gain_chain(gain_db), "-ar", str(OUTPUT_RATE),
-                    "-c:a", "pcm_s16le", str(out_path)], input_bytes=pcm_f32)  # fmt: skip
+        run_ffmpeg([*input_args, "-af", _gain_chain(gain_db), "-ar", str(OUTPUT_RATE),
+                    "-c:a", "pcm_s16le", str(out_path)], input_bytes=input_bytes)  # fmt: skip
         result = measure_loudness(out_path)
         miss = TARGET_LUFS - result.integrated_lufs
         if abs(miss) <= TOLERANCE_LU:

@@ -86,10 +86,11 @@ These are our own work and a major part of the "original value" each video adds.
 ## 8. Audio mix
 
 - **Voice:** −14 LUFS target after mastering. Light compression and a high-pass filter at 80 Hz.
-- **Music:** sits about 22 dB under the voice, with sidechain ducking (music automatically gets quieter whenever the narrator speaks).
-  - **YouTube render:** a track from the YouTube Audio Library.
-  - **TikTok render:** no music. The owner adds a TikTok sound when posting.
-- **Sound effects** (Phase 2, optional): only self-made or from YouTube's Audio Library, and only in the YouTube render.
+- **Music:** about 15 dB under the voice on average (owner's pick by ear, D-069): about 6 dB under in pauses and under the sting, ducked several dB more while the narrator speaks (sidechain ducking: the music automatically gets quieter whenever the voice is present); fades out over the last 1.5 s. The earlier "22 dB under" was inaudible on phone and laptop speakers.
+  - **YouTube render:** a track from the YouTube Audio Library, registered with `factory music add` and picked least-used first.
+  - **TikTok render:** no music at all (verified: digital silence where nobody speaks). The owner adds a TikTok sound when posting.
+- **Veo's own sound** (D-068): the Flow clips' generated sound (motors, clicks, whirs) plays under its clip in **both** renders, about 10 dB under the voice in pauses and ~18 dB under it while the narrator speaks (ducked like the music). It's Flow output (D-052) and not music, so D-042 still holds. Stills and diagrams are silent. Other sound effects: none for now.
+- **Master:** the whole mix is brought to −14 LUFS with a true-peak limiter (≤ −1 dBTP), the same method as the voice.
 
 ## 9. Intro, outro, covers and thumbnails
 
@@ -110,6 +111,7 @@ Deep graphite studio background (#0E1116), matte graphite pedestal.
 Dramatic cyan (#00D1FF) rim light from the left, warm amber (#FF8A00) rim light from the right.
 Shallow depth of field, crisp metal and copper detail, subtle film grain, slow smooth camera motion.
 No text, no logos, no brand names, no people, no hands, no faces.
+Sound: realistic mechanical sounds of the object only; no music, no voices, no narration.
 ```
 
 ### 10.2 Beat templates (`flow_shot_<beat>.j2`)

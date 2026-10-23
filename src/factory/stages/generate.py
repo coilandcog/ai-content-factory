@@ -53,12 +53,12 @@ def run(
     `tts` builds the speech function only when a voiceover is needed (loading Kokoro is slow).
     """
     result = StageResult()
-    approved = _items(ctx, "script_approved", limit)
+    approved = items_in_status(ctx, "script_approved", limit)
     speech = (tts or _kokoro)() if approved else None
     for row in approved:
-        _safely(ctx, row, result, partial(_issue, ctx, speech=speech))
-    for row in _items(ctx, "awaiting_clips", limit):
-        _safely(ctx, row, result, partial(_collect, ctx))
+        run_safely(ctx, row, result, partial(_issue, ctx, speech=speech))
+    for row in items_in_status(ctx, "awaiting_clips", limit):
+        run_safely(ctx, row, result, partial(_collect, ctx))
     return result
 
 
@@ -78,7 +78,7 @@ def inbox_dir(ctx: AppContext, content_id: int) -> Path:
 
 def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
     content_id = row["id"]
-    script = _current_script(ctx, content_id)
+    script = current_script(ctx, content_id)
     shots = _flow_shots(script)
     if not shots:
         raise FactoryError("the script has no flow_clip shots")
@@ -100,7 +100,7 @@ def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
     inbox.mkdir(parents=True, exist_ok=True)
     sheet = folder / "flow_sheet.md"
     sheet.write_text(_sheet_text(ctx, row, script, shots, prompts, inbox, still_prompts))
-    _replace_assets(ctx, content_id, "flow_sheet", [{"path": sheet, "generator": "factory"}])
+    replace_assets(ctx, content_id, "flow_sheet", [{"path": sheet, "generator": "factory"}])
 
     voice.render(ctx, content_id, speech)
     set_status(ctx.conn, content_id, "awaiting_clips")
@@ -185,7 +185,7 @@ def _windows_path(path: Path) -> str:
 def _collect(ctx: AppContext, row: sqlite3.Row) -> bool:
     """Move a complete, playable clip set into the project. False = still waiting."""
     content_id = row["id"]
-    script = _current_script(ctx, content_id)
+    script = current_script(ctx, content_id)
     shots = _flow_shots(script)
     inbox = inbox_dir(ctx, content_id)
     problems: list[str] = []
@@ -277,7 +277,7 @@ def _store_clips(
                 "height": int(video["height"]),
             }
         )
-    _replace_assets(ctx, content_id, "flow_clip", rows)
+    replace_assets(ctx, content_id, "flow_clip", rows)
     return {r["shot_n"]: r["path"] for r in rows}
 
 
@@ -305,7 +305,7 @@ def _make_stills(
             Image.open(provided).convert("RGB").save(image)
             origin = {"generator": "google_flow", "prompt": prompts.get(str(n))}
         else:
-            clip_n = _clip_for(shot, clip_shots)
+            clip_n = clip_for(shot, clip_shots)
             stills.sharpest_frame(clips[clip_n], image)
             origin = {"generator": "ffmpeg", "model": f"frame of shot_{clip_n:02d}"}
         common = {"shot_n": n, "license": "google_flow_output"}
@@ -317,8 +317,8 @@ def _make_stills(
             {"path": anim, **common, "generator": "factory", "model": "ken_burns",
              "duration_s": shot["duration_s"], "width": stills.FRAME[0], "height": stills.FRAME[1]}
         )  # fmt: skip
-    _replace_assets(ctx, content_id, "still", images)
-    _replace_assets(ctx, content_id, "still_anim", animations)
+    replace_assets(ctx, content_id, "still", images)
+    replace_assets(ctx, content_id, "still_anim", animations)
 
 
 def _make_diagrams(
@@ -341,12 +341,12 @@ def _make_diagrams(
             shot["labels"], shot.get("energy"), ctx.channel, font, folder / f"diag_{n:02d}.png"
         )
         background = folder / f".frame_{n:02d}.png"
-        stills.sharpest_frame(clips[_clip_for(shot, clip_shots)], background, samples=3)
+        stills.sharpest_frame(clips[clip_for(shot, clip_shots)], background, samples=3)
         diagrams.preview_diagram(card, background, folder / f"diag_{n:02d}_preview.jpg")
         background.unlink()
         rows.append({"path": card, "shot_n": n, "generator": "pillow", "license": "own_work",
                      "width": diagrams.FRAME[0], "height": diagrams.FRAME[1]})  # fmt: skip
-    _replace_assets(ctx, content_id, "diagram", rows)
+    replace_assets(ctx, content_id, "diagram", rows)
 
 
 def _owner_still(inbox: Path, n: int) -> Path | None:
@@ -357,7 +357,7 @@ def _owner_still(inbox: Path, n: int) -> Path | None:
     return None
 
 
-def _clip_for(shot: dict, clip_shots: list[dict]) -> int:
+def clip_for(shot: dict, clip_shots: list[dict]) -> int:
     """The clip to borrow a frame from: same beat if possible, then the nearest shot number."""
     same_beat = [s for s in clip_shots if s["beat"] == shot["beat"]] or clip_shots
     return min(same_beat, key=lambda s: abs(s["n"] - shot["n"]))["n"]
@@ -366,7 +366,7 @@ def _clip_for(shot: dict, clip_shots: list[dict]) -> int:
 # --- helpers ---------------------------------------------------------------------------------
 
 
-def _items(ctx: AppContext, status: str, limit: int | None) -> list[sqlite3.Row]:
+def items_in_status(ctx: AppContext, status: str, limit: int | None) -> list[sqlite3.Row]:
     return ctx.conn.execute(
         """
         SELECT c.* FROM contents c JOIN channels ch ON ch.id = c.channel_id
@@ -376,7 +376,7 @@ def _items(ctx: AppContext, status: str, limit: int | None) -> list[sqlite3.Row]
     ).fetchall()
 
 
-def _safely(
+def run_safely(
     ctx: AppContext, row: sqlite3.Row, result: StageResult, step: Callable[[sqlite3.Row], bool]
 ) -> None:
     """Run one item's step; a broken item becomes `failed` without stopping the others."""
@@ -397,7 +397,7 @@ def _safely(
         result.skipped += 1
 
 
-def _current_script(ctx: AppContext, content_id: int) -> sqlite3.Row:
+def current_script(ctx: AppContext, content_id: int) -> sqlite3.Row:
     script = ctx.conn.execute(
         "SELECT * FROM scripts WHERE content_id = ? AND is_current = 1", (content_id,)
     ).fetchone()
@@ -414,7 +414,7 @@ def _shots(script: sqlite3.Row, kind: str) -> list[dict]:
     return [s for s in json.loads(script["shot_list_json"]) if s["kind"] == kind]
 
 
-def _replace_assets(ctx: AppContext, content_id: int, kind: str, rows: list[dict]) -> None:
+def replace_assets(ctx: AppContext, content_id: int, kind: str, rows: list[dict]) -> None:
     """Replace all assets of one kind for an item (re-running never duplicates rows)."""
     with ctx.conn:
         ctx.conn.execute("DELETE FROM assets WHERE content_id = ? AND kind = ?", (content_id, kind))

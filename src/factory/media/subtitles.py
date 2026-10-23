@@ -229,7 +229,7 @@ def render_preview(
     The subtitles are drawn at full 1080x1920 size (where their positions are defined), then the
     picture is scaled to 540x960 to keep the file small.
     """
-    subtitles = f"ass={_filter_arg(ass_path)}:fontsdir={_filter_arg(fonts_dir)}"
+    subtitles = f"ass={filter_arg(ass_path)}:fontsdir={filter_arg(fonts_dir)}"
     run_ffmpeg(
         [
             "-f", "lavfi", "-i", f"color=c=0x{background.lstrip('#')}:s=1080x1920:r=30",
@@ -243,7 +243,7 @@ def render_preview(
     return out_path
 
 
-def _filter_arg(path: Path) -> str:
+def filter_arg(path: Path) -> str:
     """Escape a path for use inside an FFmpeg filter argument (':' and '\\' and quotes)."""
     escaped = str(path).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
     return f"'{escaped}'"

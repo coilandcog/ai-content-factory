@@ -57,7 +57,7 @@ flowchart LR
 | **script** | `factory script` | `idea` contents with score ≥ threshold, or no score yet (created with `factory new`) | `scripts`, `sources`; Gate 1 request | `idea` → `scripted`; blocklisted topic → `archived` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
 | **review (Gate 1)** | `factory review --gate script` | `scripted` | `reviews` row | → `script_approved` / `rejected` / back to `scripted` | Terminal (Phase 1); Telegram bot (Phase 2) | — |
 | **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams | → `awaiting_clips` (sheet + voice + subtitles issued) → `generated` (all clips in the inbox, then animated stills and diagram cards made) | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
-| **assemble** | `factory assemble` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `cover.jpg`, `metadata.json`; automated QA | → `assembled` | FFmpeg + MoviePy | Not needed |
+| **assemble** | `factory assemble [--force]` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `preview_720p.mp4`, `music.txt` (task 1.9); `cover.jpg`, `metadata.json`, automated QA (tasks 1.10–1.11) | → `assembled` only after QA passes (task 1.10); stays `generated` until then | FFmpeg only (D-068) | Not needed |
 | **review (Gate 2)** | `factory review --gate final` | `assembled` | `reviews` row | → `approved` / `rejected` / back to `generated` | Terminal, later Telegram | — |
 | **publish** | `factory publish` | `approved` | `posts` rows | → `scheduled` → `published` | YouTube Data API (scheduled private → public); TikTok Content Posting API (inbox draft) | Not needed |
 | **learn** | `factory learn` | `published` posts | `metrics`, `performance_labels`, weekly report | → `analyzed` (after 28-day metrics) | YouTube Analytics API; TikTok Display API; weekly TikTok CSV | Not needed |
@@ -69,6 +69,7 @@ Helper commands:
 - `factory voice audition [--voices a,b,c] [--text ...|--content-id N]`: the same text read by several Kokoro voices into `data/audition/voice_<id>.wav`, to choose `voice.voice_id`.
 - `factory voice render <content_id>`: the current script as `voice.wav` (48 kHz, −14 LUFS), `voice_words.json` and word-highlight `subs.ass` in the item's asset folder, plus `assets` rows (`voiceover`, `subtitles`). The generate stage calls the same code.
 - `factory voice preview <content_id>`: `subs_preview.mp4` (540×960, voice + burned-in subtitles) to check the subtitles on a phone.
+- `factory music add <file> --title ... [--artist ... --attribution ... --license-url ... --mood ...]` / `factory music list`: the YouTube Audio Library tracks used in YouTube renders (copied into `assets_static/music/youtube_audio_library/`, recorded in `music_tracks`, picked least-used first).
 - `factory brand build`: rebuilds `assets_static/logo/` (logo, avatar, stings) from the channel's `display_name` and `brand.palette`.
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
 - `factory retry <content_id>`
@@ -267,7 +268,7 @@ From any non-terminal status, an item can move to `failed`. `factory retry` retu
 | Embeddings | sentence-transformers `all-MiniLM-L6-v2` (Apache 2.0) | Local similarity check, no quota |
 | TTS | `kokoro` (Apache 2.0) + `espeak-ng` | Good quality on CPU, commercial use OK |
 | Word timing | Kokoro's token timestamps, aligned to the script with `difflib` (D-065). `faster-whisper` (MIT, `small.en`, int8 on CPU) is the documented fallback for audio Kokoro didn't make (e.g. an owner-recorded Engineer's Note, D-040) | Exact for Kokoro audio by construction; no extra model or recognition errors |
-| Video | FFmpeg (system; the binary is set in settings.yaml `tools`, Ubuntu's build with libass) + MoviePy | Standard, free; libass burns the ASS subtitles |
+| Video | FFmpeg only (system; the binary is set in settings.yaml `tools`, Ubuntu's build with libass). MoviePy is not used (D-068) | One FFmpeg filter graph does the whole edit; libass burns the ASS subtitles |
 | Images | Pillow | Diagrams, logo, thumbnails |
 | Google APIs | `google-api-python-client`, `google-auth-oauthlib` | Official clients |
 | Telegram | `python-telegram-bot` | Mature; long polling, so no public server needed |
@@ -307,6 +308,7 @@ ai-content-factory/
 │   ├── budgets.py                # api_usage tracking and budget checks
 │   ├── prompts.py                # Jinja2 prompt loader: channel override, then prompts/default
 │   ├── context.py                # AppContext (config + db) passed to stages; StageResult counts
+│   ├── music.py                  # YouTube Audio Library tracks: add, list, pick least-used
 │   ├── stages/
 │   │   ├── discover.py
 │   │   ├── ideate.py
@@ -332,6 +334,7 @@ ai-content-factory/
 │       ├── ffmpeg.py             # thin wrappers around ffmpeg/ffprobe
 │       ├── brand.py              # logo, avatar and sting built from the channel YAML
 │       ├── audio.py              # loudness: normalise to −14 LUFS / 48 kHz, measure
+│       ├── compose.py            # assembly: timeline maths, video graph, audio mixes, mux, preview
 │       ├── subtitles.py          # word alignment, ASS generation with word highlight, preview
 │       ├── diagrams.py           # label-card overlay PNGs + previews (Pillow)
 │       ├── stills.py             # sharpest clip frame; Ken Burns animation

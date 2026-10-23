@@ -15,6 +15,7 @@ from typing import Annotated
 import click
 import typer
 
+from factory import music
 from factory.budgets import usage_date, usage_today
 from factory.config import (
     CONFIG_DIR,
@@ -41,6 +42,7 @@ from factory.integrations.kokoro_tts import KokoroTTS
 from factory.logging_setup import Redactor, set_log_context, setup_logging
 from factory.media import ffmpeg, subtitles
 from factory.media.brand import build_brand_assets
+from factory.stages import assemble as assemble_stage
 from factory.stages import generate as generate_stage
 from factory.stages import review as review_stage
 from factory.stages import script as script_stage
@@ -61,6 +63,10 @@ brand_app = typer.Typer(help="Build logo, avatar and sting files.", no_args_is_h
 app.add_typer(brand_app, name="brand")
 voice_app = typer.Typer(help="Voice audition and voiceover (Kokoro).", no_args_is_help=True)
 app.add_typer(voice_app, name="voice")
+music_app = typer.Typer(
+    help="YouTube Audio Library tracks for YouTube renders.", no_args_is_help=True
+)
+app.add_typer(music_app, name="music")
 
 ConfigDirOption = Annotated[Path, typer.Option(help="Folder holding settings.yaml and channels/.")]
 
@@ -329,10 +335,24 @@ def generate(
         )
 
 
+def assemble(
+    limit: Annotated[int | None, typer.Option(help="Render at most this many items.")] = None,
+    force: Annotated[bool, typer.Option(help="Render again even if renders exist.")] = False,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Edit generated items into render_youtube.mp4, render_tiktok.mp4 and a 720p preview (1.9)."""
+    with _tracked_run("assemble", config_dir) as run:
+        ctx = _context(run, config_dir)
+        result = assemble_stage.run(ctx, limit=limit, force=force)
+        run.tally.processed, run.tally.failed = result.processed, result.failed
+        typer.echo(f"Rendered: {result.processed}, failed: {result.failed}")
+
+
 # Stages that are built; the rest stay stubs. Registered in pipeline order for --help.
 IMPLEMENTED: dict[str, Callable[..., None]] = {
     "script": script,
     "generate": generate,
+    "assemble": assemble,
     "review": review,
 }
 
@@ -452,6 +472,8 @@ def _script_report(conn: sqlite3.Connection, content_id: int) -> str:
     ]
     for shot in shots:
         extra = ", ".join(f"{k}={v}" for k, v in shot["prompt_vars"].items())
+        if shot.get("labels"):  # diagram label cards (task 1.8): check them before approving
+            extra = f"labels: {', '.join(shot['labels'])}; dots: {shot.get('energy') or 'electric'}"
         lines.append(
             f"  {shot['n']:>2}. {shot['beat']:<8} {shot['kind']:<9} {shot['duration_s']:>4.1f} s  "
             f"{shot['description']}" + (f"  [{extra}]" if extra else "")
@@ -672,6 +694,48 @@ def _voice_line(f: voice_stage.VoiceFile, root: Path) -> str:
         f"wrote {f.path.relative_to(root)}  ({f.voice_id}, {f.duration_s:.1f} s, "
         f"{f.loudness.integrated_lufs:.1f} LUFS, peak {f.loudness.true_peak_dbtp:.1f} dBTP)"
     )
+
+
+# --- music ----------------------------------------------------------------------------------
+
+
+@music_app.command("add")
+def music_add(
+    path: Annotated[
+        Path, typer.Argument(help="A track downloaded from the YouTube Audio Library.")
+    ],
+    title: Annotated[str, typer.Option(help="The track's title as shown in the Audio Library.")],
+    artist: Annotated[str | None, typer.Option(help="The artist.")] = None,
+    attribution: Annotated[
+        str | None,
+        typer.Option(help="Attribution text, only if the Audio Library says it's required."),
+    ] = None,
+    license_url: Annotated[str | None, typer.Option(help="Link to the track's license.")] = None,
+    mood: Annotated[str | None, typer.Option(help="e.g. calm, cinematic.")] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Add a YouTube Audio Library track to the library (used only in YouTube renders)."""
+    with _tracked_run("music add", config_dir) as run:
+        ctx = _context(run, config_dir)
+        track = music.add_track(
+            ctx, path, title=title, artist=artist, attribution=attribution,
+            license_url=license_url, mood=mood,
+        )  # fmt: skip
+        typer.echo(f"Added track #{track.id}: {track.title} -> {track.path.relative_to(ctx.root)}")
+        run.tally.processed = 1
+
+
+@music_app.command("list")
+def music_list(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Show the library and how often each track has been used."""
+    with _tracked_run("music list", config_dir) as run:
+        ctx = _context(run, config_dir)
+        tracks = music.list_tracks(ctx)
+        if not tracks:
+            typer.echo('No tracks yet: `uv run factory music add <file> --title "..."`')
+        for track, uses in tracks:
+            note = " (attribution required)" if track.attribution_text else ""
+            typer.echo(f"#{track.id} {track.title} - {track.artist or '?'}: used {uses}x{note}")
 
 
 # --- database -------------------------------------------------------------------------------

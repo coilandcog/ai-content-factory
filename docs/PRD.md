@@ -42,7 +42,7 @@ There is one user, **the owner**:
 
 - One channel: Coil & Cog, niche "How Machines Work", with pillars `machines` and `everyday_things`.
 - Formats: **Short** (30–50 s, 9:16) and **Deep Dive** (65–150 s, 9:16).
-- A Python CLI (`factory <stage>`) covering: discover (Wikipedia pageviews, YouTube search signals, and a weekly Google Trends CSV you export by hand), ideate (Gemini, scored), script (Gemini, with sources and an Engineer's Note), generate (Flow prompt sheet → manual Flow clips; Kokoro voiceover; animated stills; diagrams; subtitles), and assemble (FFmpeg/MoviePy, separate YouTube and TikTok renders).
+- A Python CLI (`factory <stage>`) covering: discover (Wikipedia pageviews, YouTube search signals, and a weekly Google Trends CSV you export by hand), ideate (Gemini, scored), script (Gemini, with sources and an Engineer's Note), generate (Flow prompt sheet → manual Flow clips; Kokoro voiceover; animated stills; diagrams; subtitles), and assemble (FFmpeg, separate YouTube and TikTok renders).
 - Gate 1 (script) and Gate 2 (final) approvals happen in the terminal in Phase 1 and move to Telegram in Phase 2.
 - Manual upload in Phase 1. Posting starts in week 3–4.
 - SQLite database, assets on disk, a JSON-lines log.

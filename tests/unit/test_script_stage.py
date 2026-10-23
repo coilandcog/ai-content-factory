@@ -274,6 +274,7 @@ def test_show_script_prints_every_part(config_dir: Path) -> None:
         "ENGINEER'S NOTE (draft, yours to edit at Gate 1):  As an engineer",
         " 4. flow     flow_clip  8.0 s",
         "energy=electric",
+        "[labels: Rotor, Stator, Diodes, Regulator; dots: electric]",
         f"- {WIKI_URL} (Wikipedia)",
     ]:
         assert text in shown.output
