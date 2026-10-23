@@ -23,7 +23,15 @@ from factory.config import (
     load_env,
     load_settings,
 )
-from factory.db import connect, finish_run, migrate, schema_version, start_run, upsert_channel
+from factory.db import (
+    add_content,
+    connect,
+    finish_run,
+    migrate,
+    schema_version,
+    start_run,
+    upsert_channel,
+)
 from factory.errors import ConfigError, FactoryError
 from factory.logging_setup import Redactor, set_log_context, setup_logging
 from factory.media.brand import build_brand_assets
@@ -155,11 +163,61 @@ for _name, (_help, _task) in STAGES.items():
 
 
 @app.command()
-def status(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
-    """Show content counts, today's budget use and the last runs for FACTORY_CHANNEL."""
+def new(
+    object_name: Annotated[str, typer.Option("--object", help="What the video explains.")],
+    fmt: Annotated[str, typer.Option("--format", help="short | deep_dive (enabled formats).")],
+    pillar: Annotated[str, typer.Option(help="One of the channel's pillars, e.g. machines.")],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Create a content item by hand, with status 'idea' (ROADMAP 1.1)."""
+    with _tracked_run("new", config_dir) as run:
+        channel = load_channel(run.env.factory_channel, config_dir)
+        content_id = add_content(run.conn, channel, object_name=object_name, fmt=fmt, pillar=pillar)
+        log.info(
+            "created %s %s (%s)",
+            fmt,
+            object_name,
+            pillar,
+            extra={"event": "content_created", "content_id": content_id},
+        )
+        typer.echo(f"Created content #{content_id}: status idea")
+
+
+@app.command()
+def status(
+    content_id: Annotated[int | None, typer.Argument(help="Show one item in detail.")] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Show the channel summary, or one content item when an id is given."""
     with _tracked_run("status", config_dir) as run:
         channel = load_channel(run.env.factory_channel, config_dir)
-        typer.echo(_status_report(run.conn, channel, run.env.dry_run, run.run_id))
+        if content_id is None:
+            typer.echo(_status_report(run.conn, channel, run.env.dry_run, run.run_id))
+        else:
+            typer.echo(_content_report(run.conn, content_id))
+
+
+def _content_report(conn: sqlite3.Connection, content_id: int) -> str:
+    row = conn.execute(
+        """
+        SELECT c.*, ch.slug FROM contents c JOIN channels ch ON ch.id = c.channel_id
+        WHERE c.id = ?
+        """,
+        (content_id,),
+    ).fetchone()
+    if row is None:
+        raise FactoryError(f"content #{content_id} does not exist")
+    lines = [
+        f"Content #{row['id']} ({row['slug']})",
+        f"  object: {row['object_name']} | format: {row['format']} | pillar: {row['pillar']}",
+        f"  status: {row['status']}",
+    ]
+    if row["status_before_failure"]:
+        lines.append(f"  failed while: {row['status_before_failure']}")
+    if row["status_reason"]:
+        lines.append(f"  reason: {row['status_reason']}")
+    lines.append(f"  created: {row['created_at']} | updated: {row['updated_at']}")
+    return "\n".join(lines)
 
 
 def _status_report(

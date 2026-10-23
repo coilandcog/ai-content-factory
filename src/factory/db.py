@@ -149,6 +149,50 @@ def upsert_channel(conn: sqlite3.Connection, channel: ChannelConfig) -> int:
     return rows[0]["id"]
 
 
+def add_content(
+    conn: sqlite3.Connection,
+    channel: ChannelConfig,
+    *,
+    object_name: str,
+    fmt: str,
+    pillar: str,
+) -> int:
+    """Create one content item with status 'idea' and return its id.
+
+    The format must be enabled and the pillar must exist in the channel YAML; the database has
+    no fixed pillar list because pillars differ per channel.
+    """
+    name = " ".join(object_name.split()).lower()  # "  CVT  Gearbox " -> "cvt gearbox"
+    if not name:
+        raise FactoryError("--object must not be empty")
+    video_format = getattr(channel.formats, fmt, None)
+    if video_format is None or not video_format.enabled:
+        enabled = [
+            n for n in ("short", "deep_dive", "episode") if getattr(channel.formats, n).enabled
+        ]
+        raise FactoryError(
+            f"format '{fmt}' is not enabled for {channel.slug}; use one of {enabled}"
+        )
+    pillars = [p.id for p in channel.niche.pillars]
+    if pillar not in pillars:
+        raise FactoryError(
+            f"pillar '{pillar}' is not defined for {channel.slug}; use one of {pillars}"
+        )
+    with conn:
+        cur = conn.execute(
+            """
+            INSERT INTO contents (channel_id, format, pillar, object_name)
+            SELECT id, ?, ?, ? FROM channels WHERE slug = ?
+            """,
+            (fmt, pillar, name, channel.slug),
+        )
+    if cur.rowcount != 1:
+        raise FactoryError(
+            f"channel '{channel.slug}' is not in the database: run `factory db init`"
+        )
+    return cur.lastrowid
+
+
 def set_status(
     conn: sqlite3.Connection, content_id: int, new_status: str, reason: str | None = None
 ) -> None:

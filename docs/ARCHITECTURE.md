@@ -64,6 +64,7 @@ flowchart LR
 
 Helper commands:
 - `factory db init|migrate|backup`
+- `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
 - `factory flow-log --credits N`: logs Flow credits you spent.
 - `factory brand build`: rebuilds `assets_static/logo/` (logo, avatar, stings) from the channel's `display_name` and `brand.palette`.
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
