@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from fakes.fake_tts import make_fake_tts
+from PIL import Image
 from typer.testing import CliRunner
 
 from factory.cli import app
@@ -14,6 +15,7 @@ from factory.config import REPO_ROOT, EnvSettings, load_channel, load_settings
 from factory.context import AppContext
 from factory.db import add_content, connect, migrate, set_status, upsert_channel
 from factory.errors import BudgetExceededError
+from factory.media.ffmpeg import probe
 from factory.stages import generate
 
 pytestmark = pytest.mark.slow  # runs ffmpeg
@@ -24,12 +26,14 @@ SHOTS = [
     {"n": 2, "beat": "cutaway", "kind": "flow_clip", "description": "Casing opens",
      "duration_s": 7, "prompt_vars": {"internals": "rotor and stator", "focus_part": "the rotor"}},
     {"n": 3, "beat": "cutaway", "kind": "diagram", "description": "Labels", "duration_s": 4,
-     "prompt_vars": {}},
+     "prompt_vars": {}, "labels": ["rotor", "stator coils"], "energy": "electric"},
     {"n": 4, "beat": "flow", "kind": "flow_clip", "description": "Current flows",
      "duration_s": 8, "prompt_vars": {"energy": "electric", "path": "the stator coils",
                                        "process": "AC becoming DC"}},
     {"n": 5, "beat": "in_situ", "kind": "flow_clip", "description": "Engine bay",
      "duration_s": 6, "prompt_vars": {"context": "a car engine bay"}},
+    {"n": 6, "beat": "studio", "kind": "still", "description": "Hero view of the alternator",
+     "duration_s": 2, "prompt_vars": {}},
 ]  # fmt: skip
 CLIPS = [1, 2, 4, 5]
 
@@ -116,6 +120,21 @@ def test_approved_script_gets_flow_sheet_inbox_and_voice(ctx: AppContext) -> Non
     assert (ctx.root / "data" / "inbox" / "flow" / "000001").is_dir()
     assert (folder / "voice.wav").is_file()
     assert len(assets(ctx, "flow_sheet")) == 1 and len(assets(ctx, "voiceover")) == 1
+    assert "You don't have to make them" in sheet and "Save as: `still_06.png`" in sheet
+    assert "Still frame of the alternator: Hero view" in prompts["6"]
+
+
+def test_script_without_diagram_labels_is_refused_before_any_flow_work(ctx: AppContext) -> None:
+    content_id = approved_item(ctx)
+    old = [{**s, "labels": []} if s["kind"] == "diagram" else s for s in SHOTS]
+    with ctx.conn:
+        ctx.conn.execute("UPDATE scripts SET shot_list_json = ?", (json.dumps(old),))
+
+    result = run(ctx)
+
+    assert (result.failed, status(ctx, content_id)) == (1, "failed")
+    reason = ctx.conn.execute("SELECT status_reason FROM contents").fetchone()[0]
+    assert "have no labels" in reason and "redo the script" in reason
 
 
 def test_missing_or_bad_clips_keep_the_item_waiting(ctx: AppContext) -> None:
@@ -156,7 +175,37 @@ def test_complete_clip_set_is_collected(ctx: AppContext) -> None:
     assert first["path"].endswith(f"{content_id:06d}/clips/shot_01.mp4")
     assert "rests on the pedestal" in first["prompt"]
     assert (inbox / "shot_01.mp4").is_file()  # the original download stays in the inbox
+    folder = ctx.root / "data" / "assets" / "coil-and-cog" / f"{content_id:06d}"
+    [still] = assets(ctx, "still")
+    assert (still["generator"], still["model"]) == ("ffmpeg", "frame of shot_01")  # same beat
+    [anim] = assets(ctx, "still_anim")
+    info = probe(folder / "stills" / "still_06_anim.mp4")
+    video = next(s for s in info["streams"] if s["codec_type"] == "video")
+    assert (video["width"], video["height"], video["r_frame_rate"]) == (1080, 1920, "30/1")
+    assert float(info["format"]["duration"]) == pytest.approx(2.0, abs=0.1)
+    [diagram] = assets(ctx, "diagram")
+    assert (diagram["shot_n"], diagram["generator"], diagram["license"]) == (
+        3,
+        "pillow",
+        "own_work",
+    )
+    assert (folder / "diagrams" / "diag_03_preview.jpg").is_file()
     assert run(ctx).processed == 0  # nothing left to do: safe to re-run
+
+
+def test_owner_still_in_the_inbox_is_used(ctx: AppContext) -> None:
+    content_id = approved_item(ctx)
+    run(ctx)
+    inbox = generate.inbox_dir(ctx, content_id)
+    for n in CLIPS:
+        make_clip(inbox / f"shot_{n:02d}.mp4")
+    Image.new("RGB", (900, 1600), "#334455").save(inbox / "still_06.jpg")
+
+    run(ctx)
+
+    [still] = assets(ctx, "still")
+    assert still["generator"] == "google_flow"
+    assert "Hero view" in still["prompt"]
 
 
 def test_flow_log_respects_the_daily_budget(ctx: AppContext) -> None:

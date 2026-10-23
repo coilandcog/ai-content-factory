@@ -299,10 +299,11 @@ def test_schema_converts_to_a_gemini_schema(fmt: str) -> None:
 def test_flow_clip_longer_than_8_s_is_capped() -> None:
     shot = stage.Shot(
         n=1, beat="in_situ", kind="flow_clip", description="Engine bay, belt spinning",
-        duration_s=10, context="a car engine bay",
+        duration_s=10, context="a car engine bay", labels=["ignored"],
     )  # fmt: skip
 
     assert shot.duration_s == 8.0
+    assert shot.labels == []  # labels only belong to diagrams
 
 
 def test_trailing_ellipsis_loop_line_is_corrected(ctx: AppContext) -> None:
@@ -339,3 +340,37 @@ def test_user_agent_without_contact_is_refused(ctx: AppContext) -> None:
     )
     with pytest.raises(ConfigError, match="has no contact details"):
         stage.run(bare, llm=llm_for(ctx, FakeGenaiClient()))
+
+
+@pytest.mark.parametrize(
+    ("labels", "problem"),
+    [
+        ([], "needs 1-4 labels"),
+        (["A", "B", "C", "D", "E"], "needs 1-4 labels"),
+        (["Rotor", "One two three four five"], "at most 4 words"),
+    ],
+)
+def test_diagram_label_rules(labels: list[str], problem: str) -> None:
+    with pytest.raises(ValueError, match=problem):
+        stage.Shot(
+            n=3, beat="cutaway", kind="diagram", description="Label card", duration_s=4,
+            labels=labels,
+        )  # fmt: skip
+
+
+def test_diagram_labels_and_energy_are_stored_in_the_shot_list(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+
+    run_stage(ctx, FakeGenaiClient(fixture_reply("script_short_alternator")))
+
+    shots = json.loads(
+        ctx.conn.execute(
+            "SELECT shot_list_json FROM scripts WHERE content_id = ?", (content_id,)
+        ).fetchone()[0]
+    )
+    assert shots[2]["labels"] == ["Rotor", "Stator", "Diodes", "Regulator"]
+    assert (shots[4]["labels"], shots[4]["energy"]) == (
+        ["Alternating Current", "Direct Current"],
+        "electric",
+    )
+    assert "labels" not in shots[0]  # flow clips carry prompt_vars instead

@@ -36,7 +36,9 @@ narration's length, about {{ target_total_s }} seconds for {{ target_words }} wo
   Every flow_clip needs its beat's fields: studio -> hero_feature; cutaway -> internals and focus_part;
   flow -> energy (electric, heat or fluid), path and process; in_situ -> context.
 - kind "still": an AI still image that will be slowly animated.
-- kind "diagram": a labelled overlay drawn by code (name the labels in the description). At least {{ min_diagrams }} diagrams.
+- kind "diagram": a label card drawn by code over the picture: "labels" holds 1-4 part names of at most 4 words each
+  (e.g. ["Rotor", "Stator Coils", "Diode Bridge"]), and "energy" picks the colour of their dots. At least {{ min_diagrams }} diagrams.
+  Every other shot has "labels": [].
 - Every one of the four beats appears, and the first appearance of each beat follows the chosen beat_order.
 
 Sources ("sources"): exactly 3 different real web pages that support the main facts, each with url, title, publisher and the claim it supports.

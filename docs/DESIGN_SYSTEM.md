@@ -77,7 +77,8 @@ These are free Google Fonts under the Open Font License, so commercial use is OK
 
 These are our own work and a major part of the "original value" each video adds.
 
-- **Elements:** arrows, part labels, flow paths, simple cross-section outlines, number callouts.
+- **Elements (launch, D-067): the label card.** AI footage doesn't tell us where each part sits in the frame, so arrows would point at the wrong place. A rounded graphite card (~80% opaque, 3 px outline in the energy colour) in the upper safe area (x 90–920, y 260 to at most 1100, clear of the subtitles) lists 1–4 part labels, each with a dot in the energy colour (cyan electric, amber heat, blue fluid; cyan if none). Inter SemiBold 44 px, shrunk to no less than 30 px if a label wouldn't fit. Arrows, flow paths, cross-sections and number callouts need part positions, so they wait until we have them.
+- **Source:** the script's diagram shots carry `labels` (1–4, ≤4 words) and `energy`; `factory generate` draws `diagrams/diag_NN.png` and a `diag_NN_preview.jpg` (the card over a clip frame) to check readability.
 - **Rendering:** Pillow produces transparent PNG layers, and FFmpeg overlays them with fades and slides of 6–10 frames.
 - **Amount:** at least 2 diagram moments per Short and at least 4 per Deep Dive.
 - **Labels:** 4 words or fewer; part names in Title Case.
@@ -147,6 +148,8 @@ Slow push-in from a wide view to the part. Realistic but clean environment, no v
 {{ style_block }}
 Still frame: {{ description }}. Composition leaves the area {{ safe_area_hint }} clear for labels.
 ```
+
+**Stills are optional for the owner (D-067):** the Flow sheet lists a ready prompt per `still` shot. If `still_NN.png` (or .jpg/.webp) is in the Flow inbox it is used; otherwise the factory takes the sharpest of 8 frames from a clip of the same beat (else the nearest shot). Each still becomes `stills/still_NN_anim.mp4`: a 1080×1920, 30 fps Ken Burns move (zoom 1.00↔1.08 with a slight pan, eased, alternating per shot). Parallax would need a depth model and is not done.
 
 ### 10.4 Episode opener (16:9) (`flow_episode_opener.j2`)
 

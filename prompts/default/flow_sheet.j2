@@ -26,3 +26,21 @@ Save as: `shot_{{ "%02d" | format(shot.n) }}.mp4`
 {{ shot.prompt }}
 ```
 {% endfor %}
+{% if stills %}
+
+## Optional: still images ({{ stills | length }})
+
+These shots are slow zooms over a still picture. **You don't have to make them:** if no image is in the
+inbox, the factory uses the sharpest frame of one of your clips. If you have spare credits, generate an
+image in Flow (9:16) and save it as `still_NN.png` (or .jpg/.webp) next to the clips.
+{% for still in stills %}
+
+### Still {{ "%02d" | format(still.n) }}: {{ still.beat }} ({{ still.duration_s }} s in the edit)
+
+Save as: `still_{{ "%02d" | format(still.n) }}.png`
+
+```text
+{{ still.prompt }}
+```
+{% endfor %}
+{% endif %}

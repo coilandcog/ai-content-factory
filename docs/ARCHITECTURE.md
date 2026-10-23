@@ -56,7 +56,7 @@ flowchart LR
 | **ideate** | `factory ideate` | Signals, catalog history, winning patterns | `contents` rows with score breakdown | new → `idea` | Gemini API free tier; Ollama fallback | Claude API, about €3–8 |
 | **script** | `factory script` | `idea` contents with score ≥ threshold, or no score yet (created with `factory new`) | `scripts`, `sources`; Gate 1 request | `idea` → `scripted`; blocklisted topic → `archived` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
 | **review (Gate 1)** | `factory review --gate script` | `scripted` | `reviews` row | → `script_approved` / `rejected` / back to `scripted` | Terminal (Phase 1); Telegram bot (Phase 2) | — |
-| **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams | → `awaiting_clips` (sheet + voice issued) → `generated` (all clips in the inbox) | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
+| **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams | → `awaiting_clips` (sheet + voice + subtitles issued) → `generated` (all clips in the inbox, then animated stills and diagram cards made) | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
 | **assemble** | `factory assemble` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `cover.jpg`, `metadata.json`; automated QA | → `assembled` | FFmpeg + MoviePy | Not needed |
 | **review (Gate 2)** | `factory review --gate final` | `assembled` | `reviews` row | → `approved` / `rejected` / back to `generated` | Terminal, later Telegram | — |
 | **publish** | `factory publish` | `approved` | `posts` rows | → `scheduled` → `published` | YouTube Data API (scheduled private → public); TikTok Content Posting API (inbox draft) | Not needed |
@@ -333,8 +333,8 @@ ai-content-factory/
 │       ├── brand.py              # logo, avatar and sting built from the channel YAML
 │       ├── audio.py              # loudness: normalise to −14 LUFS / 48 kHz, measure
 │       ├── subtitles.py          # word alignment, ASS generation with word highlight, preview
-│       ├── diagrams.py           # Pillow overlay layers
-│       ├── stills.py             # Ken Burns / parallax animation
+│       ├── diagrams.py           # label-card overlay PNGs + previews (Pillow)
+│       ├── stills.py             # sharpest clip frame; Ken Burns animation
 │       ├── thumbnails.py
 │       └── qa.py                 # automated quality checks
 ├── tests/

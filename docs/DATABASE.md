@@ -116,7 +116,7 @@ The YAML is the source of truth for settings. This row exists so foreign keys wo
 | loop_line | TEXT | |
 | word_count | INTEGER | |
 | est_duration_s | REAL | `word_count / voice.target_wpm * 60` (142 wpm for Coil & Cog, D-066) |
-| shot_list_json | TEXT | List of `{n, beat, kind: flow_clip\|still\|diagram, description, duration_s, prompt_vars}` |
+| shot_list_json | TEXT | List of `{n, beat, kind: flow_clip\|still\|diagram, description, duration_s, prompt_vars}`; diagram shots also carry `labels` (1–4, ≤4 words) and `energy` (D-067) |
 | similarity_max | REAL | Highest similarity to the last 30 scripts |
 | llm_provider / llm_model | TEXT | |
 | prompt_version | TEXT | First 10 hex chars of a SHA-256 over the template and its includes; system and user prompt joined with `+` (D-057) |

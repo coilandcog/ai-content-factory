@@ -17,7 +17,8 @@
       "kind": "flow_clip",
       "description": "Alternator on the pedestal, slow orbit",
       "duration_s": 6,
-      "hero_feature": "the pulley and cooling fins"
+      "hero_feature": "the pulley and cooling fins",
+      "labels": []
     },
     {
       "n": 2,
@@ -26,14 +27,21 @@
       "description": "Casing opens to reveal rotor and stator",
       "duration_s": 7,
       "internals": "rotor, stator windings and diode plate",
-      "focus_part": "the rotor"
+      "focus_part": "the rotor",
+      "labels": []
     },
     {
       "n": 3,
       "beat": "cutaway",
       "kind": "diagram",
       "description": "Labels: rotor, stator, diodes, regulator",
-      "duration_s": 4
+      "duration_s": 4,
+      "labels": [
+        "Rotor",
+        "Stator",
+        "Diodes",
+        "Regulator"
+      ]
     },
     {
       "n": 4,
@@ -43,14 +51,20 @@
       "duration_s": 8,
       "energy": "electric",
       "path": "the stator coils into the diode plate",
-      "process": "alternating current becoming direct current"
+      "process": "alternating current becoming direct current",
+      "labels": []
     },
     {
       "n": 5,
       "beat": "flow",
       "kind": "diagram",
       "description": "AC wave becoming flat DC line, label 14 V",
-      "duration_s": 5
+      "duration_s": 5,
+      "labels": [
+        "Alternating Current",
+        "Direct Current"
+      ],
+      "energy": "electric"
     },
     {
       "n": 6,
@@ -58,14 +72,16 @@
       "kind": "flow_clip",
       "description": "Alternator in an engine bay, belt spinning",
       "duration_s": 6,
-      "context": "a modern car engine bay"
+      "context": "a modern car engine bay",
+      "labels": []
     },
     {
       "n": 7,
       "beat": "studio",
       "kind": "still",
       "description": "Hero three-quarter view for the loop line",
-      "duration_s": 5
+      "duration_s": 5,
+      "labels": []
     }
   ],
   "sources": [

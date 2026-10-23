@@ -56,6 +56,7 @@ SOURCES_ASKED, SOURCES_NEEDED = 3, 2
 # Small models miscount words; two corrections cost at most 3 Gemini calls per idea.
 MAX_REASKS = 2
 CLIP_MAX_S = 8.0
+MAX_LABELS, MAX_LABEL_WORDS = 4, 4  # DESIGN_SYSTEM.md §7: labels of 4 words or fewer
 SOURCE_TIMEOUT_S = 10.0
 
 
@@ -83,9 +84,21 @@ class Shot(BaseModel):
     path: str | None = None
     process: str | None = None
     context: str | None = None
+    # Required (Gemini leaves out optional fields): the diagram's part labels, [] for other kinds.
+    labels: list[str] = Field(description="diagram only: 1-4 labels of at most 4 words; else []")
 
     @model_validator(mode="after")
     def _clip_has_template_fields(self) -> Shot:
+        if self.kind == "diagram":
+            labels = [label.strip() for label in self.labels if label.strip()]
+            if not 1 <= len(labels) <= MAX_LABELS:
+                raise ValueError(f"shot {self.n} (diagram) needs 1-{MAX_LABELS} labels")
+            long = [label for label in labels if len(label.split()) > MAX_LABEL_WORDS]
+            if long:
+                raise ValueError(f"shot {self.n}: labels have at most 4 words: {long}")
+            self.labels = labels
+        else:
+            self.labels = []
         if self.kind == "flow_clip":
             missing = [f for f in CLIP_FIELDS[self.beat] if not getattr(self, f)]
             if missing:
@@ -442,6 +455,7 @@ def _save(
             "description": s.description,
             "duration_s": s.duration_s,
             "prompt_vars": s.prompt_vars() if s.kind == "flow_clip" else {},
+            **({"labels": s.labels, "energy": s.energy} if s.kind == "diagram" else {}),
         }
         for s in draft.shots
     ]
