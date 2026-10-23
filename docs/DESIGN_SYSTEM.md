@@ -9,7 +9,8 @@
 | Name | **Coil & Cog** |
 | Handle | `@coilandcog` (YouTube and TikTok) |
 | Tagline | "See what moves inside." |
-| Logo | A text logo, "COIL & COG", in Montserrat ExtraBold. The `&` is in cyan `#00D1FF`; the rest is off-white on graphite. Built in code (Pillow), so there's no third-party license risk. Saved in `assets_static/logo/`. |
+| Logo | A text logo, "COIL & COG", in Montserrat ExtraBold. The `&` is in cyan `#00D1FF`; the rest is off-white on graphite. Built in code (Pillow), so there's no third-party license risk. Saved in `assets_static/logo/` by `factory brand build`: `logo.png` (transparent), `logo_on_bg.png` (on graphite). |
+| Avatar | `avatar_800.png`: an 800×800 monogram, "C&C" with the cyan `&`, on graphite. The full name would be unreadable at profile-picture size, and the monogram stays inside the circle crop YouTube and TikTok apply. Use it as the profile picture on both platforms. |
 | Personality | A calm, curious engineer friend who shows you the inside of things |
 
 ## 2. Voice and tone
@@ -91,7 +92,7 @@ These are our own work and a major part of the "original value" each video adds.
 ## 9. Intro, outro, covers and thumbnails
 
 - **Intro:** none. The hook line and visual start at frame 1.
-- **Outro:** the loop line, then a 1-second logo sting (the logo fades in with a cyan "spark" sweep). The sting is built once with FFmpeg and stored as `assets_static/logo/sting_1080x1920.mp4` and `sting_1920x1080.mp4`.
+- **Outro:** the loop line, then a 1-second logo sting (the logo fades in with a cyan "spark" sweep). The sting is built by `factory brand build` and stored as `assets_static/logo/sting_1080x1920.mp4` and `sting_1920x1080.mp4`: 1.0 s, 30 fps, H.264 `yuv420p`, with a silent 48 kHz stereo AAC track so it joins cleanly onto narrated clips. The logo fades in over 0.45 s and the spark crosses the letters between 0.10 s and 0.75 s. Frames are drawn with Pillow and encoded by FFmpeg (the installed FFmpeg has no `drawtext` filter).
 - **Shorts and Deep Dive covers:** the best Cutaway frame, picked automatically as the sharpest frame in the Cutaway beat, then confirmed by the owner at Gate 2.
 - **Episode thumbnails:** one object, glowing and cut open, on graphite; at most 3 words in Montserrat ExtraBold; 1280×720 JPG under 2 MB.
 

@@ -26,6 +26,7 @@ from factory.config import (
 from factory.db import connect, finish_run, migrate, schema_version, start_run, upsert_channel
 from factory.errors import ConfigError, FactoryError
 from factory.logging_setup import Redactor, set_log_context, setup_logging
+from factory.media.brand import build_brand_assets
 
 log = logging.getLogger("factory.cli")
 
@@ -38,6 +39,8 @@ config_app = typer.Typer(help="Validate and inspect configuration.", no_args_is_
 app.add_typer(config_app, name="config")
 db_app = typer.Typer(help="Create and update the SQLite database.", no_args_is_help=True)
 app.add_typer(db_app, name="db")
+brand_app = typer.Typer(help="Build logo, avatar and sting files.", no_args_is_help=True)
+app.add_typer(brand_app, name="brand")
 
 ConfigDirOption = Annotated[Path, typer.Option(help="Folder holding settings.yaml and channels/.")]
 
@@ -259,6 +262,20 @@ def _channel_summary(ch: ChannelConfig) -> str:
             f"flow {b.flow_credits} credits",
         ]
     )
+
+
+# --- brand ----------------------------------------------------------------------------------
+
+
+@brand_app.command("build")
+def brand_build(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Rebuild logo.png, logo_on_bg.png, avatar_800.png and both stings from the channel YAML."""
+    with _tracked_run("brand build", config_dir) as run:
+        channel = load_channel(run.env.factory_channel, config_dir)
+        static_dir = config_dir.parent / run.settings.paths.assets_static_dir
+        written = build_brand_assets(channel, static_dir / "fonts", static_dir / "logo")
+        for path in written:
+            typer.echo(f"wrote {path.relative_to(config_dir.parent)}")
 
 
 # --- database -------------------------------------------------------------------------------

@@ -88,7 +88,7 @@ We disclose on **every** video, even where it may not be strictly required, beca
 | Stills | Flow images or FLUX.1-schnell (Apache 2.0) | Commercial use OK | `assets.license` |
 | Voice | Kokoro-82M (Apache 2.0) | Commercial use OK ✔ | `assets.license = apache-2.0` |
 | Diagrams, logo, sting | Our own code (Pillow/FFmpeg) | Own work | `own_work` |
-| Fonts | Montserrat, Inter (SIL Open Font License) | Commercial use OK | — |
+| Fonts | Montserrat ExtraBold, Inter SemiBold (SIL Open Font License 1.1), static TTFs from the official repositories; sources, versions and license texts in `assets_static/fonts/LICENSES.md` | Commercial use OK ✔ | — |
 | Music, YouTube render | **YouTube Audio Library only** ([Help](https://support.google.com/youtube/answer/3376882)). Copyright-safe on YouTube; attribution added when the track requires it | ✔ (YouTube only) | `music_tracks`, `assets.music_track_id` |
 | Music, TikTok render | **None in the file**; the owner adds a TikTok library sound in the app | TikTok's own license | — |
 
