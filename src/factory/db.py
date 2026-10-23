@@ -193,6 +193,16 @@ def add_content(
     return cur.lastrowid
 
 
+def note_reason(conn: sqlite3.Connection, content_id: int, reason: str | None) -> None:
+    """Store why an item is waiting without changing its status (e.g. QA failed, stays
+    `generated`); set_status can't do that because a move to the same status isn't allowed."""
+    with conn:
+        conn.execute(
+            f"UPDATE contents SET status_reason = ?, updated_at = {_NOW_UTC} WHERE id = ?",
+            (reason, content_id),
+        )
+
+
 def set_status(
     conn: sqlite3.Connection, content_id: int, new_status: str, reason: str | None = None
 ) -> None:

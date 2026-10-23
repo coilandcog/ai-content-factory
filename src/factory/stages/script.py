@@ -336,7 +336,7 @@ def _script_one(
     reference = page_summary(
         http, row["object_name"], before_call=lambda: check_and_record(conn, channel, "wikimedia")
     )
-    previous = _previous_variety(conn, row["channel_id"], row["id"])
+    previous = previous_variety(conn, row["channel_id"], row["id"])
     schema = script_schema(
         channel,
         row["format"],
@@ -371,7 +371,7 @@ def _eligible_ideas(ctx: AppContext, limit: int | None) -> list[sqlite3.Row]:
     ).fetchall()
 
 
-def _previous_variety(
+def previous_variety(
     conn: sqlite3.Connection, channel_id: int, content_id: int
 ) -> tuple[str | None, str | None]:
     """hook_type and beat_order of the channel's most recent other scripted item."""

@@ -4,8 +4,8 @@ and preview_720p.mp4.
 The timeline follows the narration: the shot list's planned durations are scaled to fill
 voice.wav exactly, then the 1 s logo sting follows. The video is rendered once; the YouTube mix
 adds an Audio Library track, the TikTok mix has no music (D-042). Both keep the Flow clips' own
-sound under the voice (D-068). Automated QA and the move to `assembled` come in task 1.10, so the
-status stays `generated` here.
+sound under the voice (D-068). Then the cover is picked and automated QA runs (task 1.10, D-070):
+a pass moves the item to `assembled`, a failure keeps it `generated` with the reasons.
 """
 
 from __future__ import annotations
@@ -16,37 +16,119 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
+from PIL import Image, ImageOps
+
 from factory.context import AppContext, StageResult
+from factory.db import note_reason, set_status
 from factory.errors import FactoryError
-from factory.media import compose, stills
+from factory.media import compose, qa, stills
 from factory.media.audio import measure_loudness, normalize_file
 from factory.media.ffmpeg import probe
 from factory.music import Track, pick_track
 from factory.stages import generate, voice
+from factory.stages.script import MIN_DIAGRAMS, previous_variety
 from factory.stages.voice import asset_dir
 
 log = logging.getLogger("factory.assemble")
 
 RENDERS = ("render_youtube.mp4", "render_tiktok.mp4")
 PREVIEW = "preview_720p.mp4"
+QA_REPORT = "qa_report.json"
 SILENT_LUFS = -60.0  # quieter than this counts as "no sound" (e.g. a clip with a silent track)
 
 
 def run(ctx: AppContext, *, limit: int | None = None, force: bool = False) -> StageResult:
-    """Render every generated item that has no renders yet (`force` re-renders them)."""
+    """Render generated items (unless renders exist; `force` re-renders), pick the cover, then
+    run QA: a pass moves the item to `assembled`, a failure keeps it `generated` with the reason.
+
+    StageResult: processed = passed QA, skipped = QA failed (fix and run again), failed = error.
+    """
     result = StageResult()
-    items = [
-        row
-        for row in generate.items_in_status(ctx, "generated", limit)
-        if force or not all((asset_dir(ctx, row["id"]) / name).is_file() for name in RENDERS)
-    ]
+    items = generate.items_in_status(ctx, "generated", limit)
     if not items:
         log.info("nothing to assemble", extra={"event": "assemble_nothing"})
         return result
-    pick_track(ctx)  # stop before any work if the music library is empty
+    if any(force or not _rendered(ctx, row["id"]) for row in items):
+        pick_track(ctx)  # stop before any work if the music library is empty
     for row in items:
-        generate.run_safely(ctx, row, result, lambda r: _assemble(ctx, r))
+        generate.run_safely(ctx, row, result, lambda r: _assemble_and_check(ctx, r, force))
     return result
+
+
+def _rendered(ctx: AppContext, content_id: int) -> bool:
+    return all((asset_dir(ctx, content_id) / name).is_file() for name in RENDERS)
+
+
+def _assemble_and_check(ctx: AppContext, row: sqlite3.Row, force: bool) -> bool:
+    content_id = row["id"]
+    if force or not _rendered(ctx, content_id):
+        _assemble(ctx, row)
+    folder = asset_dir(ctx, content_id)
+    _pick_cover(ctx, content_id, folder)
+    checks = qa.run_checks(_qa_inputs(ctx, row, folder))
+    qa.write_report(checks, folder / QA_REPORT)
+    failed = qa.failures(checks)
+    extra = {"content_id": content_id}
+    if failed:
+        reason = "QA failed: " + "; ".join(f"{c.name}: {c.detail}" for c in failed)
+        note_reason(ctx.conn, content_id, reason[:1000])
+        log.warning("#%s %s", content_id, reason, extra={**extra, "event": "qa_failed"})
+        return False
+    set_status(ctx.conn, content_id, "assembled")
+    log.info("#%s QA passed -> assembled", content_id, extra={**extra, "event": "qa_passed"})
+    return True
+
+
+def _qa_inputs(ctx: AppContext, row: sqlite3.Row, folder: Path) -> qa.QaInputs:
+    script = generate.current_script(ctx, row["id"])
+    shots = json.loads(script["shot_list_json"])
+    video_format = getattr(ctx.channel.formats, row["format"])
+    source = ctx.conn.execute(
+        """
+        SELECT t.source FROM assets a JOIN music_tracks t ON t.id = a.music_track_id
+        WHERE a.content_id = ? AND a.kind = 'music'
+        """,
+        (row["id"],),
+    ).fetchone()
+    return qa.QaInputs(
+        folder=folder,
+        aspect=video_format.aspect,
+        min_s=video_format.min_s,
+        max_s=video_format.max_s,
+        min_diagrams=MIN_DIAGRAMS[row["format"]],
+        diagram_shots=[s["n"] for s in shots if s["kind"] == "diagram"],
+        subtitle_font=voice.subtitle_font(ctx),
+        music_source=source["source"] if source else None,
+        variety=(
+            (row["hook_type"], row["beat_order"]),
+            previous_variety(ctx.conn, row["channel_id"], row["id"]),
+        ),
+    )
+
+
+def _pick_cover(ctx: AppContext, content_id: int, folder: Path) -> Path:
+    """cover.jpg: the sharpest frame of the Cutaway clip (else the first clip), 1080x1920, no
+    text (DESIGN_SYSTEM.md §9). The owner confirms it at Gate 2."""
+    shots = json.loads(generate.current_script(ctx, content_id)["shot_list_json"])
+    clips = [s for s in shots if s["kind"] == "flow_clip"]
+    chosen = next((s for s in clips if s["beat"] == "cutaway"), clips[0])
+    clip = folder / "clips" / f"shot_{chosen['n']:02d}.mp4"
+    with tempfile.TemporaryDirectory(prefix=".cover-", dir=folder) as tmp:
+        frame = Image.open(stills.sharpest_frame(clip, Path(tmp) / "frame.png")).convert("RGB")
+        cover = ImageOps.fit(frame, (1080, 1920), Image.Resampling.LANCZOS)
+    path = folder / "cover.jpg"
+    cover.save(path, quality=92)
+    details = {
+        "path": path,
+        "shot_n": chosen["n"],
+        "generator": "ffmpeg",
+        "model": f"frame of shot_{chosen['n']:02d}",
+        "license": "google_flow_output",
+        "width": 1080,
+        "height": 1920,
+    }
+    generate.replace_assets(ctx, content_id, "cover", [details])
+    return path
 
 
 def _assemble(ctx: AppContext, row: sqlite3.Row) -> bool:

@@ -96,7 +96,7 @@ These are our own work and a major part of the "original value" each video adds.
 
 - **Intro:** none. The hook line and visual start at frame 1.
 - **Outro:** the loop line, then a 1-second logo sting (the logo fades in with a cyan "spark" sweep). The sting is built by `factory brand build` and stored as `assets_static/logo/sting_1080x1920.mp4` and `sting_1920x1080.mp4`: 1.0 s, 30 fps, H.264 `yuv420p`, with a silent 48 kHz stereo AAC track so it joins cleanly onto narrated clips. The logo fades in over 0.45 s and the spark crosses the letters between 0.10 s and 0.75 s. Frames are drawn with Pillow and encoded by FFmpeg (the installed FFmpeg has no `drawtext` filter).
-- **Shorts and Deep Dive covers:** the best Cutaway frame, picked automatically as the sharpest frame in the Cutaway beat, then confirmed by the owner at Gate 2.
+- **Shorts and Deep Dive covers:** the best Cutaway frame, picked automatically as the sharpest of 8 frames from the Cutaway beat's clip (else the first clip), saved as `cover.jpg` (1080×1920, no text) by `factory assemble`, then confirmed by the owner at Gate 2.
 - **Episode thumbnails:** one object, glowing and cut open, on graphite; at most 3 words in Montserrat ExtraBold; 1280×720 JPG under 2 MB.
 
 ## 10. AI generation prompt templates

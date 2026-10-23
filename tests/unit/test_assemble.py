@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from fakes.fake_tts import make_fake_tts
+from PIL import Image
 
 from factory.config import REPO_ROOT, EnvSettings, load_channel, load_settings
 from factory.context import AppContext
@@ -28,6 +29,8 @@ SHOTS = [
      "duration_s": 2, "prompt_vars": {"internals": "rotor", "focus_part": "the rotor"}},
     {"n": 4, "beat": "studio", "kind": "still", "description": "Hero view", "duration_s": 1,
      "prompt_vars": {}},
+    {"n": 5, "beat": "studio", "kind": "diagram", "description": "Pulley", "duration_s": 1,
+     "prompt_vars": {}, "labels": ["Pulley"], "energy": "heat"},
 ]  # fmt: skip
 VOICE_S = 4.0
 SFX_HZ, MUSIC_HZ = 600, 1000  # the clip's "Veo sound" and the "music track" are test tones
@@ -70,6 +73,12 @@ def ctx(tmp_path: Path) -> AppContext:
     conn = connect(tmp_path / "test.db")
     migrate(conn)
     channel = load_channel("coil-and-cog")
+    # Test renders are 5 s long (real-length ones would make the tests slow), so this test channel
+    # accepts 2-10 s Shorts; every other QA rule is the real one.
+    short = channel.formats.short.model_copy(update={"min_s": 2, "max_s": 10})
+    channel = channel.model_copy(
+        update={"formats": channel.formats.model_copy(update={"short": short})}
+    )
     upsert_channel(conn, channel)
     for part in ("fonts", "logo"):  # fonts for subtitles and cards, the logo sting
         shutil.copytree(REPO_ROOT / "assets_static" / part, tmp_path / "assets_static" / part)
@@ -143,8 +152,30 @@ def test_both_renders_and_preview_are_made_and_tiktok_has_no_music(ctx: AppConte
     assert {"render_youtube", "render_tiktok", "preview", "music"} <= kinds
     assert (folder / "music.txt").read_text().startswith("1\tCalm Gears")
     status = ctx.conn.execute("SELECT status FROM contents").fetchone()[0]
-    assert status == "generated"  # QA and `assembled` come with task 1.10
-    assert assemble.run(ctx).processed == 0  # renders exist: nothing to do
+    assert status == "assembled"  # every QA check passed
+    report = json.loads((folder / "qa_report.json").read_text())
+    assert {r["check"] for r in report if r["ok"] is not True} == {"metadata", "similarity"}
+    cover = Image.open(folder / "cover.jpg")
+    assert cover.size == (1080, 1920)
+    [cover_row] = ctx.conn.execute("SELECT shot_n FROM assets WHERE kind = 'cover'").fetchall()
+    assert cover_row[0] == 3  # the Cutaway clip
+    assert assemble.run(ctx).processed == 0  # nothing left in `generated`
+
+
+@pytest.mark.slow
+def test_broken_item_stays_generated_with_the_reason(ctx: AppContext) -> None:
+    content_id = generated_item(ctx)
+    add_music(ctx)
+    row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
+    assemble._assemble(ctx, row)  # render only
+    (generate.asset_dir(ctx, content_id) / "subs.ass").unlink()  # ROADMAP 1.10: break something
+
+    result = assemble.run(ctx)  # renders exist, so this runs QA only
+
+    status, reason = ctx.conn.execute("SELECT status, status_reason FROM contents").fetchone()
+    assert (result.processed, result.skipped, result.failed) == (0, 1, 0)
+    assert status == "generated"
+    assert reason.startswith("QA failed: subtitles: subs.ass missing")
 
 
 @pytest.mark.slow

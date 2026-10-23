@@ -340,12 +340,16 @@ def assemble(
     force: Annotated[bool, typer.Option(help="Render again even if renders exist.")] = False,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
-    """Edit generated items into render_youtube.mp4, render_tiktok.mp4 and a 720p preview (1.9)."""
+    """Render generated items (YouTube, TikTok, 720p preview, cover), then run the automated QA:
+    a pass moves the item to `assembled`, a failure keeps it `generated` with the reason."""
     with _tracked_run("assemble", config_dir) as run:
         ctx = _context(run, config_dir)
         result = assemble_stage.run(ctx, limit=limit, force=force)
         run.tally.processed, run.tally.failed = result.processed, result.failed
-        typer.echo(f"Rendered: {result.processed}, failed: {result.failed}")
+        typer.echo(
+            f"QA passed -> assembled: {result.processed}, QA failed: {result.skipped} "
+            f"(reasons: `factory status <id>`), errors: {result.failed}"
+        )
 
 
 # Stages that are built; the rest stay stubs. Registered in pipeline order for --help.

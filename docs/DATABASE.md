@@ -267,6 +267,8 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | `failed` | Stage error after retries | any | `status_before_failure` via `factory retry` |
 | `archived` | Kept for history, ignored by stages | owner / system | (end) |
 
+`db.note_reason()` sets `status_reason` without changing the status (used when QA fails and the item stays `generated`).
+
 Rules for `failed` (enforced by `db.set_status()`):
 - Any **working** status can move to `failed`: `idea`, `scripted`, `script_approved`, `awaiting_clips`, `generated`, `assembled`, `approved`, `scheduled`, `published`. `analyzed`, `rejected`, `archived` and `failed` can't, because no stage works on them. The previous status is saved in `status_before_failure`.
 - `failed` can only move back to `status_before_failure` (what `factory retry` does); that clears `status_before_failure`.

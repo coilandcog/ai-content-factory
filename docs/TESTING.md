@@ -44,17 +44,17 @@
 
 ### Automated (assemble stage, `media/qa.py`)
 
-A failure raises `QualityCheckError`, and the item stays `generated` with a reason.
-- [ ] 1080×1920 (or 1920×1080 for Episodes), 30 fps, H.264, AAC.
-- [ ] Duration within the format bounds (Short 30–50 s, Deep Dive 65–150 s, Episode 300–600 s).
-- [ ] Integrated loudness −14 ±1 LUFS; true peak ≤ −1 dBTP.
-- [ ] Subtitles exist, cover the whole narration, and no line is longer than ~4 words × 2 lines.
-- [ ] No subtitle or label outside the safe zones (`DESIGN_SYSTEM.md` §6).
-- [ ] At least 2 (Short) or 4 (Deep Dive) diagram moments.
-- [ ] `metadata.json` contains the disclosure line; Deep Dive descriptions list at least 2 sources.
-- [ ] YouTube render's music track is from `music_tracks` with `source = youtube_audio_library`; TikTok render has **no** music.
-- [ ] `beat_order` and `hook_type` differ from the previous content; similarity is below 0.80.
-- [ ] Preview file is under 45 MB.
+`factory assemble` runs these after rendering (or on existing renders) and writes `qa_report.json`. All pass → `assembled`; any failure → the item stays `generated` and the failures become its `status_reason` (shown by `factory status <id>`). A check that can't run counts as a failure, never a pass (D-070).
+- [x] 1080×1920 (or 1920×1080 for Episodes), 30 fps, H.264, yuv420p, AAC 48 kHz (both renders).
+- [x] Duration within the format bounds from the channel YAML (Short 30–50 s, Deep Dive 65–150 s, Episode 300–600 s), sting included.
+- [x] Integrated loudness −14 ±1 LUFS; true peak ≤ −1 dBTP (both renders).
+- [x] `subs.ass` exists, its events run from the first to the last spoken word, at most 4 words per line and 2 lines.
+- [x] No subtitle or label outside the safe zones (`DESIGN_SYSTEM.md` §6): subtitle lines ≤ 760 px with the real font and the baseline ≥ 480 px above the bottom; diagram cards inside x 90–920, y 220–1100.
+- [x] At least 2 (Short) or 4 (Deep Dive) diagram files.
+- [ ] `metadata.json` contains the disclosure line; Deep Dive descriptions list at least 2 sources. *(Reported as "not checked yet" until task 1.11.)*
+- [x] YouTube render's music track is from `music_tracks` with `source = youtube_audio_library`; TikTok render has **no** music (silent under the logo sting, where nothing else plays).
+- [x] `beat_order` and `hook_type` differ from the previous content. Similarity below 0.80: *"not checked yet" until task 1.13.*
+- [x] Preview file is under 45 MB.
 
 ### Human (Gate 2)
 
