@@ -22,3 +22,6 @@ build/
 .DS_Store
 Thumbs.db
 *:Zone.Identifier
+
+# Owner's local command cheat sheet (kept up to date, never committed)
+CHEATSHEET.md
