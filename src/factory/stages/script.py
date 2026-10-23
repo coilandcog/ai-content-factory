@@ -407,12 +407,21 @@ def _prompts(
     return system, user
 
 
+# A page that refuses robots still exists; an invented URL answers 404/410 (D-064).
+EXISTS_BUT_BLOCKS_BOTS = {401, 403, 429}
+
+
 def _reachable(http: httpx.Client, url: str) -> bool:
-    """Does the cited page open (HTTP 2xx after redirects)? One request per source."""
+    """Does the cited page exist? One request per source, following redirects.
+
+    2xx = yes. 401/403/429 = yes too: sites like Britannica and Wikipedia sometimes refuse
+    scripts, but the page is there. 404/410, server errors and dead domains = no.
+    """
     try:
-        return http.get(url).is_success
+        status = http.get(url).status_code
     except httpx.HTTPError:
         return False
+    return 200 <= status < 300 or status in EXISTS_BUT_BLOCKS_BOTS
 
 
 def _save(
@@ -498,7 +507,13 @@ def _http_client(ctx: AppContext) -> httpx.Client:
     if not agent or "CHANNEL_EMAIL_HERE" in agent:
         raise ConfigError(
             "WIKIMEDIA_USER_AGENT is missing in .env; Wikimedia requires e.g. "
-            "'CoilAndCogFactory/0.1 (contact: you@example.com)'"
+            "'CoilAndCogFactory/0.1 (https://coilandcog.github.io)'"
+        )
+    # Wikimedia blocks agents without contact details more often (robot policy, D-064).
+    if not re.search(r"\(.*(https?://|@).*\)", agent):
+        raise ConfigError(
+            f"WIKIMEDIA_USER_AGENT '{agent}' has no contact details; use e.g. "
+            "'CoilAndCogFactory/0.1 (https://coilandcog.github.io)'"
         )
     return httpx.Client(
         timeout=SOURCE_TIMEOUT_S, follow_redirects=True, headers={"User-Agent": agent}

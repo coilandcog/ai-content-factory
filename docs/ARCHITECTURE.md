@@ -56,7 +56,7 @@ flowchart LR
 | **ideate** | `factory ideate` | Signals, catalog history, winning patterns | `contents` rows with score breakdown | new → `idea` | Gemini API free tier; Ollama fallback | Claude API, about €3–8 |
 | **script** | `factory script` | `idea` contents with score ≥ threshold, or no score yet (created with `factory new`) | `scripts`, `sources`; Gate 1 request | `idea` → `scripted`; blocklisted topic → `archived` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
 | **review (Gate 1)** | `factory review --gate script` | `scripted` | `reviews` row | → `script_approved` / `rejected` / back to `scripted` | Terminal (Phase 1); Telegram bot (Phase 2) | — |
-| **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams | → `awaiting_clips` → `generated` | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
+| **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams | → `awaiting_clips` (sheet + voice issued) → `generated` (all clips in the inbox) | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
 | **assemble** | `factory assemble` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `cover.jpg`, `metadata.json`; automated QA | → `assembled` | FFmpeg + MoviePy | Not needed |
 | **review (Gate 2)** | `factory review --gate final` | `assembled` | `reviews` row | → `approved` / `rejected` / back to `generated` | Terminal, later Telegram | — |
 | **publish** | `factory publish` | `approved` | `posts` rows | → `scheduled` → `published` | YouTube Data API (scheduled private → public); TikTok Content Posting API (inbox draft) | Not needed |
@@ -65,7 +65,7 @@ flowchart LR
 Helper commands:
 - `factory db init|migrate|backup`
 - `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
-- `factory flow-log --credits N`: logs Flow credits you spent.
+- `factory flow-log --credits N`: logs Flow credits you spent (refused above `budgets_per_day.flow_credits`).
 - `factory voice audition [--voices a,b,c] [--text ...|--content-id N]`: the same text read by several Kokoro voices into `data/audition/voice_<id>.wav`, to choose `voice.voice_id`.
 - `factory voice render <content_id>`: the current script as `voice.wav` (48 kHz, −14 LUFS) in the item's asset folder, plus an `assets` row. The generate stage (task 1.6) will call the same code.
 - `factory brand build`: rebuilds `assets_static/logo/` (logo, avatar, stings) from the channel's `display_name` and `brand.palette`.

@@ -54,7 +54,7 @@ RPM = requests per minute, TPM = input tokens per minute, RPD = requests per day
 
 ## 3. Wikimedia APIs (discover; script reference)
 
-**Script reference (task 1.3, D-058):** before writing a script, `integrations/wikimedia.page_summary()` makes two calls, `GET https://en.wikipedia.org/w/api.php?action=opensearch&search=<object>&limit=1` (best title) and `GET https://en.wikipedia.org/api/rest_v1/page/summary/<Title>` (lead text). The text goes into the prompt and the article must be cited. Best effort: any failure, no article or a disambiguation page means no reference, and the script is written without one. Each call is counted in `api_usage` as `wikimedia`. The same `User-Agent` is used when checking that cited source URLs open (one GET each; 2xx after redirects counts as reachable).
+**Script reference (task 1.3, D-058):** before writing a script, `integrations/wikimedia.page_summary()` makes two calls, `GET https://en.wikipedia.org/w/api.php?action=opensearch&search=<object>&limit=1` (best title) and `GET https://en.wikipedia.org/api/rest_v1/page/summary/<Title>` (lead text). The text goes into the prompt and the article must be cited. Best effort: any failure, no article or a disambiguation page means no reference, and the script is written without one. Each call is counted in `api_usage` as `wikimedia`. The same `User-Agent` is used when checking that cited source URLs open (one GET each, following redirects). 2xx counts as existing, and so do 401/403/429, because Wikipedia and Britannica sometimes refuse scripts while the page exists; 404/410, 5xx and dead domains count as missing (invented URLs answer 404). `factory script` refuses to start if `WIKIMEDIA_USER_AGENT` has no contact details in parentheses, because Wikimedia blocked a bare `CoilAndCogFactory/0.1` with 403 "Please respect our robot policy" (D-064).
 
 
 | Item | Contract | Verified |
@@ -137,10 +137,11 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 | Item | Contract | Verified |
 |---|---|---|
 | Access | flow.google, signed in with the channel Google account; free plan | ✔ |
-| Credits | Free plan: **50 credits/day**. Veo 3.1 Lite = 10, Fast = 20, Quality = 100 | ✔ |
+| Credits | Free plan: **50 credits/day**. **Veo 3.1 Fast = 20, Veo 3.1 Lite = 10** (owner read Flow's model menu, 2026-10-23; Ultra subscribers pay 10 for Fast per the changelog). So 2 final clips per day; `stages/generate.FLOW_CREDITS_PER_CLIP = 20` | ✔ (owner) |
 | Policy | Final clips use **Fast** (Lite is "Preview" in Google Cloud terms; Lite is for testing only). About 2 final clips per day | — |
 | Input | `flow_sheet.md`: per shot, its number, beat, duration and the full prompt (rendered from the `DESIGN_SYSTEM.md` §10 templates) | — |
-| Output | Owner downloads MP4s → `data/inbox/flow/<content_id>/shot_NN.mp4` | — |
+| Owner settings | Flow "Agent settings": video **9:16** and **x1** (x2 makes two clips per prompt and doubles the credits); keep "Confirm before generating: Always". Model menu name: "Veo 3.1 - Fast" | ✔ (screenshots 2026-10-23) |
+| Output | Owner downloads MP4s → `data/inbox/flow/<content_id>/shot_NN.mp4` (`factory generate` creates the folder and prints its Windows path). `generate` accepts a clip when ffprobe reads a video stream, the frame is portrait and it lasts ≥3 s; it copies the set to `clips/` and records model, exact prompt and license per clip. The clip's own audio is kept untouched (use decided in task 1.9) | ✔ (task 1.6) |
 | Logging | `factory flow-log --credits N` updates `api_usage(service="flow")` | — |
 | Watermark | Free output has no visible watermark (owner checked). Invisible SynthID marking may still be present | ✔ (owner) |
 | Terms | Flow (labs.google) is governed by the Google Terms of Service, the Generative AI Additional Terms and the Prohibited Use Policy. Google "won't claim ownership" of generated content; commercial use isn't restricted; users must be 18+. We must not claim the content is solely human-made (D-039 covers this), must not bypass safety features or watermarks, and must not use outputs to train ML models. See D-052 | ✔ 2026-10-23 |

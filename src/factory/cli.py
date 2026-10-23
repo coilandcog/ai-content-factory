@@ -40,6 +40,7 @@ from factory.errors import ConfigError, FactoryError
 from factory.integrations.kokoro_tts import KokoroTTS
 from factory.logging_setup import Redactor, set_log_context, setup_logging
 from factory.media.brand import build_brand_assets
+from factory.stages import generate as generate_stage
 from factory.stages import review as review_stage
 from factory.stages import script as script_stage
 from factory.stages import voice as voice_stage
@@ -309,8 +310,29 @@ def _echo_approval(content_id: int, approval: review_stage.Approval) -> None:
         typer.echo(f"WARNING {approval.warning}")
 
 
+def generate(
+    limit: Annotated[
+        int | None, typer.Option(help="Handle at most this many items per pass.")
+    ] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Write Flow sheets + voice for approved scripts, then collect finished clips (ROADMAP 1.6)."""
+    with _tracked_run("generate", config_dir) as run:
+        ctx = _context(run, config_dir)
+        result = generate_stage.run(ctx, limit=limit)
+        run.tally.processed, run.tally.failed = result.processed, result.failed
+        typer.echo(
+            f"Moved forward: {result.processed}, waiting for clips: {result.skipped}, "
+            f"failed: {result.failed}"
+        )
+
+
 # Stages that are built; the rest stay stubs. Registered in pipeline order for --help.
-IMPLEMENTED: dict[str, Callable[..., None]] = {"script": script, "review": review}
+IMPLEMENTED: dict[str, Callable[..., None]] = {
+    "script": script,
+    "generate": generate,
+    "review": review,
+}
 
 for _name, (_help, _task) in STAGES.items():
     app.command(name=_name, help=_help)(IMPLEMENTED.get(_name) or _make_stub(_name, _task))
@@ -551,6 +573,20 @@ def brand_build(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
         written = build_brand_assets(channel, static_dir / "fonts", static_dir / "logo")
         for path in written:
             typer.echo(f"wrote {path.relative_to(config_dir.parent)}")
+
+
+# --- Flow credits ---------------------------------------------------------------------------
+
+
+@app.command("flow-log")
+def flow_log(
+    credits: Annotated[int, typer.Option(help="Flow credits you just spent.", min=1)],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Record Flow credits spent today; refused if it would pass budgets_per_day.flow_credits."""
+    with _tracked_run("flow-log", config_dir) as run:
+        used, budget = generate_stage.flow_log(_context(run, config_dir), credits)
+        typer.echo(f"Flow credits today: {used} of {budget} ({budget - used} left)")
 
 
 # --- voice ----------------------------------------------------------------------------------

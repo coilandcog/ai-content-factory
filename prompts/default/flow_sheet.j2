@@ -1,0 +1,28 @@
+# Flow sheet: #{{ item.id }} {{ item.working_title }}
+
+- **Object:** {{ item.object_name }} | **Format:** {{ item.format }} | **Narration:** ~{{ narration_s }} s
+- **Clips to make:** {{ shots | length }} × {{ flow_model }}, **{{ credits_needed }} credits** (you have {{ credits_left }} of {{ credits_budget }} left today)
+{% if credits_needed > credits_left %}- **More than today's budget:** make {{ clips_today }} clip(s) today and the rest on the next day(s); the item waits safely until all are in the inbox.
+{% endif %}- **Voiceover:** `voice.wav` is in this folder already.
+
+## Before you start (in Flow)
+
+1. Open flow.google.com with the channel account. In **Agent settings**, set video to **9:16** and **x1** (x2 makes two clips and costs double).
+2. Choose the model **{{ flow_model }}**.
+3. For each shot below: copy the prompt, generate, check it (no text, logos, hands or faces; physics look right), then download it.
+4. Save each download with exactly this name into the inbox folder:
+   `{{ inbox_windows }}\shot_NN.mp4` (NN = the shot number below, e.g. `shot_02.mp4`).
+5. Log the credits you spent: `uv run factory flow-log --credits <N>`
+6. Run `uv run factory generate` again. It moves the clips into the project once all of them are there.
+
+Flow makes {{ clip_seconds }}-second clips; the edit uses the first seconds of each, as listed.
+{% for shot in shots %}
+
+## Shot {{ "%02d" | format(shot.n) }}: {{ shot.beat }} ({{ shot.duration_s }} s in the edit)
+
+Save as: `shot_{{ "%02d" | format(shot.n) }}.mp4`
+
+```text
+{{ shot.prompt }}
+```
+{% endfor %}

@@ -54,7 +54,9 @@ def ctx(tmp_path: Path) -> AppContext:
     channel = load_channel("coil-and-cog")
     upsert_channel(conn, channel)
     env = EnvSettings(
-        dry_run=True, factory_channel="coil-and-cog", wikimedia_user_agent="CoilAndCogTest/0.1"
+        dry_run=True,
+        factory_channel="coil-and-cog",
+        wikimedia_user_agent="CoilAndCogTest/0.1 (https://example.org)",
     )
     context = AppContext(load_settings(), env, channel, conn, REPO_ROOT)  # real prompt templates
     yield context
@@ -254,7 +256,9 @@ def test_show_script_prints_every_part(config_dir: Path) -> None:
     )
     conn = connect(config_dir.parent / "data" / "factory.db")
     env = EnvSettings(
-        dry_run=True, factory_channel="coil-and-cog", wikimedia_user_agent="CoilAndCogTest/0.1"
+        dry_run=True,
+        factory_channel="coil-and-cog",
+        wikimedia_user_agent="CoilAndCogTest/0.1 (https://example.org)",
     )
     tmp_ctx = AppContext(load_settings(), env, load_channel("coil-and-cog"), conn, REPO_ROOT)
     run_stage(tmp_ctx, FakeGenaiClient(fixture_reply("script_short_alternator")))
@@ -311,3 +315,27 @@ def test_trailing_ellipsis_loop_line_is_corrected(ctx: AppContext) -> None:
 
     assert content(ctx, content_id)["status"] == "scripted"
     assert "loop_line must be a complete sentence" in sdk.calls[1]["contents"]
+
+
+def test_bot_walls_count_as_existing_but_404_does_not(ctx: AppContext) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        codes = {"https://a.example/forbidden": 403, "https://a.example/busy": 429}
+        return httpx.Response(codes.get(str(request.url), 404))
+
+    client = http_for(handler)
+    assert stage._reachable(client, "https://a.example/forbidden")
+    assert stage._reachable(client, "https://a.example/busy")
+    assert not stage._reachable(client, "https://a.example/invented")
+
+
+def test_user_agent_without_contact_is_refused(ctx: AppContext) -> None:
+    new_idea(ctx)
+    bare = AppContext(
+        ctx.settings,
+        EnvSettings(dry_run=True, factory_channel="coil-and-cog", wikimedia_user_agent="Bot/1.0"),
+        ctx.channel,
+        ctx.conn,
+        ctx.root,
+    )
+    with pytest.raises(ConfigError, match="has no contact details"):
+        stage.run(bare, llm=llm_for(ctx, FakeGenaiClient()))

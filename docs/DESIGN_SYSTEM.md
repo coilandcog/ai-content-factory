@@ -98,7 +98,7 @@ These are our own work and a major part of the "original value" each video adds.
 
 ## 10. AI generation prompt templates
 
-These templates live in `prompts/default/` as Jinja2 files (a text-template format where `{{ variable }}` gets filled in). A channel can override them in `prompts/<slug>/`. They're rendered by the generate stage into a **Flow prompt sheet** (`flow_sheet.md`) that the owner copies into Google Flow.
+These templates live in `prompts/default/` as Jinja2 files (a text-template format where `{{ variable }}` gets filled in). A channel can override them in `prompts/<slug>/`. They're rendered by the generate stage into a **Flow prompt sheet** (`flow_sheet.md`) that the owner copies into Google Flow. Since task 1.6 they are real files (`style_block.j2`, `flow_shot_<beat>.j2`, `flow_sheet.j2`); colors come from `brand.palette`, not hard-coded hex values, and each beat template ends with a `Scene:` line holding the shot's description from the script.
 
 ### 10.1 Shared style block (`style_block.j2`), added to every visual prompt
 
@@ -115,7 +115,7 @@ No text, no logos, no brand names, no people, no hands, no faces.
 **Studio**
 ```
 {{ style_block }}
-A {{ object }} rests on the pedestal. Slow 20-degree orbit around it, ending on a three-quarter hero angle.
+The {{ object }} rests on the pedestal. Slow 20-degree orbit around it, ending on a three-quarter hero angle.
 Highlight {{ hero_feature }}.
 ```
 

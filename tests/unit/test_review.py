@@ -61,7 +61,11 @@ def make_ctx(db_path: Path) -> AppContext:
     migrate(conn)
     channel = load_channel("coil-and-cog")
     upsert_channel(conn, channel)
-    env = EnvSettings(dry_run=True, factory_channel="coil-and-cog", wikimedia_user_agent="Test/0.1")
+    env = EnvSettings(
+        dry_run=True,
+        factory_channel="coil-and-cog",
+        wikimedia_user_agent="Test/0.1 (https://example.org)",
+    )
     return AppContext(load_settings(), env, channel, conn, REPO_ROOT)
 
 

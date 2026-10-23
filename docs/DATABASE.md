@@ -257,7 +257,7 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | `scripted` | Script draft waiting for Gate 1 | script | `script_approved`, `scripted` (redo), `rejected` |
 | `script_approved` | Owner approved the script | review | `awaiting_clips` |
 | `awaiting_clips` | Flow sheet issued; waiting for the owner's clips in `data/inbox/flow/<id>/` | generate | `generated` |
-| `generated` | Clips, voice, subtitles, stills and diagrams all present | generate | `assembled` |
+| `generated` | Clips, voice, subtitles, stills and diagrams all present. Built up task by task: since task 1.6 it means every Flow clip (checked: readable, portrait, ≥3 s) plus `voice.wav`; subtitles (1.7) and stills/diagrams (1.8) join when built | generate | `assembled` |
 | `assembled` | Renders done and automated QA passed | assemble | `approved`, `generated` (redo), `rejected` |
 | `approved` | Owner approved the final video | review | `scheduled` |
 | `scheduled` | YouTube scheduled and/or TikTok draft sent | publish | `published` |
