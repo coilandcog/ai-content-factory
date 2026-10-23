@@ -299,3 +299,15 @@ def test_flow_clip_longer_than_8_s_is_capped() -> None:
     )  # fmt: skip
 
     assert shot.duration_s == 8.0
+
+
+def test_trailing_ellipsis_loop_line_is_corrected(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+    dangling = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    dangling["loop_line"] = "That is why your battery stays charged, because..."
+    sdk = FakeGenaiClient(reply(json.dumps(dangling)), fixture_reply("script_short_alternator"))
+
+    run_stage(ctx, sdk)
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    assert "loop_line must be a complete sentence" in sdk.calls[1]["contents"]

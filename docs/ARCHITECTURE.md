@@ -82,6 +82,7 @@ Helper commands:
 | **Gate 2: Final** | After assembly and automated QA | 720p preview MP4, cover, title, captions, hashtags, disclosure checklist | Approve / Reject (with reason) / Redo |
 
 - Reject reasons are stored in `reviews.reason` and fed to the learn stage.
+- **Gate 1 in the terminal (task 1.5):** `factory review --gate script` walks through every `scripted` item: it shows the script, then asks approve / reject / redo / skip / quit. **Approve** opens the Engineer's Note in `$EDITOR` (pre-filled with the AI draft); an unchanged draft needs an explicit "keep it" confirmation. The note replaces the draft inside `scripts.body_text`, word count and duration are recalculated, and a word-range miss is a warning, not a block. **Reject** and **redo** need a reason. **Redo** immediately writes the next script version with Gemini (the feedback and the previous narration go into the prompt) and shows it for review; the previous version stays as history, and if generation fails it stays current. Flags (`--id N --decision approve|reject|redo --reason ... --note ...|--keep-note`) do the same without the menu; the Telegram bot will call the same functions (D-061).
 - Gate 2 is **never** removed.
 - Gate 1 is never fully automatic, because the Engineer's Note needs the owner. In Phase 3 it can switch to `batch_weekly`, where the whole week's scripts are reviewed in one session. The conditions are in `ROADMAP.md`.
 

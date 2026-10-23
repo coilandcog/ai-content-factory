@@ -25,7 +25,8 @@ Narration fields:
 - body: everything between hook and Engineer's Note.
 - engineer_note_draft: one first-person sentence of insight, starting like "As an engineer, what surprises me is ...".
   It is a draft the channel's engineer will edit, so make it a genuine, checkable observation, never a made-up personal story.
-- loop_line: the last sentence; it should flow naturally back into the hook when the video loops.
+- loop_line: the last sentence. It must be a complete sentence that ends with a period, question mark or
+  exclamation mark (never "..." or a dangling "because"), and it should lead naturally back to the hook when the video loops.
 - Total narration (hook + body + engineer_note_draft + loop_line): aim for about {{ target_words }} words.
   It must stay between {{ min_words }} and {{ max_words }} words; count before answering.
 
@@ -48,4 +49,15 @@ Reference text (Wikipedia, "{{ reference.title }}"). Base the facts on it, and l
 """
 {% else %}
 No reference text is available for this topic; only use facts you are certain of.
+{% endif %}
+{% if feedback %}
+This is a new version of an existing script. The channel's engineer reviewed the previous version
+and asked for these changes:
+"""
+{{ feedback.text }}
+"""
+Previous narration (keep what works, change what was asked):
+"""
+{{ feedback.previous }}
+"""
 {% endif %}

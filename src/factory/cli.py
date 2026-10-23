@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated
 
+import click
 import typer
 
 from factory.budgets import usage_date, usage_today
@@ -39,6 +40,7 @@ from factory.errors import ConfigError, FactoryError
 from factory.integrations.kokoro_tts import KokoroTTS
 from factory.logging_setup import Redactor, set_log_context, setup_logging
 from factory.media.brand import build_brand_assets
+from factory.stages import review as review_stage
 from factory.stages import script as script_stage
 from factory.stages import voice as voice_stage
 
@@ -182,8 +184,133 @@ def script(
         typer.echo(f"Scripted or archived: {result.processed}, failed: {result.failed}")
 
 
+NOTE_HELP = (
+    "# Write the Engineer's Note above: one sentence of your own insight or experience.\n"
+    "# The AI draft is pre-filled; edit or replace it. Lines starting with # are ignored.\n"
+)
+
+
+def review(
+    gate: Annotated[str, typer.Option(help="'script' = Gate 1 (Gate 2 'final' is task 1.11).")],
+    content_id: Annotated[int | None, typer.Option("--id", help="Review only this item.")] = None,
+    decision: Annotated[
+        str | None, typer.Option(help="approve | reject | redo, without the interactive menu.")
+    ] = None,
+    reason: Annotated[str | None, typer.Option(help="Required for reject and redo.")] = None,
+    note: Annotated[str | None, typer.Option(help="Your Engineer's Note (approve).")] = None,
+    keep_note: Annotated[
+        bool, typer.Option(help="Approve with the AI draft note as it is.")
+    ] = False,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Gate 1: read each scripted item, then approve, reject or redo it (ROADMAP 1.5)."""
+    with _tracked_run("review", config_dir) as run:
+        if gate == "final":
+            raise FactoryError("Gate 2 (--gate final) arrives with ROADMAP task 1.11")
+        if gate != "script":
+            raise FactoryError(f"--gate must be 'script' or 'final', not '{gate}'")
+        ctx = _context(run, config_dir)
+        if decision is not None:
+            if content_id is None:
+                raise FactoryError("--decision needs --id")
+            _decide(ctx, content_id, decision, reason, note, keep_note)
+            run.tally.processed = 1
+            return
+        items = [content_id] if content_id else [r["id"] for r in review_stage.pending(ctx)]
+        if not items:
+            typer.echo("Nothing waiting for Gate 1.")
+        for item_id in items:
+            outcome = _review_interactively(ctx, item_id)
+            if outcome == "quit":
+                break
+            if outcome != "skip":
+                run.tally.processed += 1
+
+
+def _decide(
+    ctx: AppContext,
+    content_id: int,
+    decision: str,
+    reason: str | None,
+    note: str | None,
+    keep_note: bool,
+) -> None:
+    """Non-interactive Gate 1 decision (for scripts, tests and later the Telegram bot)."""
+    if decision == "approve":
+        if note is None and not keep_note:
+            raise FactoryError('approve needs --note "..." or --keep-note')
+        text = (
+            note
+            if note is not None
+            else review_stage.current_script(ctx.conn, content_id)["engineer_note"]
+        )
+        _echo_approval(content_id, review_stage.approve(ctx, content_id, text))
+    elif decision == "reject":
+        review_stage.reject(ctx, content_id, reason or "")
+        typer.echo(f"#{content_id} rejected.")
+    elif decision == "redo":
+        script_id = review_stage.redo(ctx, content_id, reason or "")
+        typer.echo(f"#{content_id}: new script version written (script {script_id}).")
+    else:
+        raise FactoryError(f"--decision must be approve, reject or redo, not '{decision}'")
+
+
+def _review_interactively(ctx: AppContext, content_id: int) -> str:
+    """Show one item and loop until it is decided. Returns approve/reject/skip/quit."""
+    while True:
+        typer.echo(_content_report(ctx.conn, content_id))
+        typer.echo(_script_report(ctx.conn, content_id))
+        choice = typer.prompt(
+            "\n[a]pprove  [r]eject  re[d]o  [s]kip  [q]uit",
+            type=click.Choice(["a", "r", "d", "s", "q"]),
+            show_choices=False,
+        )
+        if choice == "s":
+            return "skip"
+        if choice == "q":
+            return "quit"
+        if choice == "r":
+            review_stage.reject(ctx, content_id, typer.prompt("Reason for rejecting"))
+            typer.echo(f"#{content_id} rejected.")
+            return "reject"
+        if choice == "d":
+            feedback = typer.prompt("What should change in the next version")
+            typer.echo("Writing the next version with Gemini ...")
+            try:
+                review_stage.redo(ctx, content_id, feedback)
+            except FactoryError as exc:
+                typer.echo(f"ERROR {exc}", err=True)
+            continue  # show the (new) current version again
+        draft = review_stage.current_script(ctx.conn, content_id)["engineer_note"] or ""
+        note = _edit_note(draft)
+        if not note:
+            typer.echo("No note written; not approved.")
+            continue
+        if note == draft and not typer.confirm("Keep the AI draft as your Engineer's Note?"):
+            continue
+        _echo_approval(content_id, review_stage.approve(ctx, content_id, note))
+        return "approve"
+
+
+def _edit_note(draft: str) -> str:
+    """Open the note in $EDITOR (falls back to nano/vim) and return it without # lines."""
+    edited = click.edit(f"{draft}\n\n{NOTE_HELP}", extension=".txt")
+    if edited is None:  # editor closed without saving
+        return draft
+    lines = [line for line in edited.splitlines() if not line.lstrip().startswith("#")]
+    return " ".join(" ".join(lines).split())
+
+
+def _echo_approval(content_id: int, approval: review_stage.Approval) -> None:
+    typer.echo(
+        f"#{content_id} approved: {approval.word_count} words, ~{approval.est_duration_s:.0f} s"
+    )
+    if approval.warning:
+        typer.echo(f"WARNING {approval.warning}")
+
+
 # Stages that are built; the rest stay stubs. Registered in pipeline order for --help.
-IMPLEMENTED: dict[str, Callable[..., None]] = {"script": script}
+IMPLEMENTED: dict[str, Callable[..., None]] = {"script": script, "review": review}
 
 for _name, (_help, _task) in STAGES.items():
     app.command(name=_name, help=_help)(IMPLEMENTED.get(_name) or _make_stub(_name, _task))
@@ -274,6 +401,12 @@ def _script_report(conn: sqlite3.Connection, content_id: int) -> str:
     if script is None:
         raise FactoryError(f"content #{content_id} has no script yet: run `factory script`")
     shots = json.loads(script["shot_list_json"])
+    item_status = conn.execute("SELECT status FROM contents WHERE id = ?", (content_id,)).fetchone()
+    note_label = {
+        "scripted": "ENGINEER'S NOTE (draft, yours to edit at Gate 1)",
+        "rejected": "ENGINEER'S NOTE (draft, not approved)",
+        "archived": "ENGINEER'S NOTE (draft, not approved)",
+    }.get(item_status["status"], "ENGINEER'S NOTE (approved by you)")
     sources = conn.execute(
         "SELECT url, publisher, claim FROM sources WHERE content_id = ? ORDER BY id", (content_id,)
     ).fetchall()
@@ -288,7 +421,7 @@ def _script_report(conn: sqlite3.Connection, content_id: int) -> str:
         "NARRATION:",
         textwrap.fill(script["body_text"], width=96, initial_indent="  ", subsequent_indent="  "),
         "",
-        f"ENGINEER'S NOTE (draft, yours to edit at Gate 1):  {script['engineer_note']}",
+        f"{note_label}:  {script['engineer_note']}",
         f"LOOP LINE:  {script['loop_line']}",
         "",
         "SHOTS:",

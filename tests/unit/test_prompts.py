@@ -55,3 +55,17 @@ def test_version_changes_when_the_template_changes(channel: ChannelConfig, tmp_p
 
     assert len(before) == len(after) == 10
     assert before != after
+
+
+def test_version_covers_included_templates(channel: ChannelConfig, tmp_path: Path) -> None:
+    root = tmp_path / "prompts"
+    shutil.copytree(FIXTURE_PROMPTS, root)
+    (root / "default" / "part.j2").write_text("Shared rule A.\n")
+    (root / "default" / "whole.j2").write_text('Main text.\n{% include "part.j2" %}')
+    before = render_prompt("whole", channel, prompts_root=root)
+
+    (root / "default" / "part.j2").write_text("Shared rule B.\n")  # only the included file
+    after = render_prompt("whole", channel, prompts_root=root)
+
+    assert "Shared rule A." in before.text and "Shared rule B." in after.text
+    assert before.version != after.version

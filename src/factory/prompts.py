@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import jinja2
+from jinja2 import meta
 
 from factory.config import REPO_ROOT, ChannelConfig
 from factory.errors import ConfigError
@@ -56,15 +57,26 @@ def render_prompt(
     except jinja2.UndefinedError as exc:
         raise ConfigError(f"prompt template '{name}.j2': {exc.message}") from exc
     path = Path(template.filename or "")
-    return RenderedPrompt(text=text, template_path=path, version=template_version(path))
+    return RenderedPrompt(text=text, template_path=path, version=_version(env, f"{name}.j2"))
 
 
-def template_version(path: Path) -> str:
-    """First 10 hex chars of the SHA-256 of the template file.
+def _version(env: jinja2.Environment, name: str) -> str:
+    """First 10 hex chars of a SHA-256 over the template *and every template it includes*.
 
-    Unlike a git hash, it works before a commit and changes with every edit (D-057).
+    Unlike a git hash, it works before a commit and changes with every edit (D-057); covering
+    includes matters because shared rules live in included files (e.g. script_rules.j2).
     """
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:10]
+    digest = hashlib.sha256()
+    todo, seen = [name], set()
+    while todo:
+        current = todo.pop(0)
+        if current in seen:
+            continue
+        seen.add(current)
+        source, _, _ = env.loader.get_source(env, current)
+        digest.update(current.encode() + b"\0" + source.encode())
+        todo += [ref for ref in meta.find_referenced_templates(env.parse(source)) if ref]
+    return digest.hexdigest()[:10]
 
 
 def _channel_dir(channel: ChannelConfig, prompts_root: Path) -> Path:

@@ -57,7 +57,7 @@ The narrator speaks at about 160 words per minute. The script stage enforces the
 | 2–8 s | Setup | Why this object matters to *you* |
 | 8–30 s | Explanation | 2–3 beats, one idea each |
 | 30–36 s | Engineer's Note | One sentence of insight from the owner |
-| 36–40 s | Loop line | The ending sentence flows back into the hook |
+| 36–40 s | Loop line | A complete sentence (no trailing "...") that flows back into the hook (D-062) |
 
 **Deep Dive (~120 s):** hook (0–3 s) → setup (3–15 s) → 4–6 explanation beats → a "most people don't know" fact → Engineer's Note (10–15 s) → recap in one sentence → loop line.
 

@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import sqlite3
+from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 import httpx
@@ -148,6 +149,10 @@ def _rule_problems(draft: Any) -> list[str]:
     for name in ("working_title", "hook", "body", "engineer_note_draft", "loop_line"):
         if not getattr(draft, name).strip():
             problems.append(f"{name} must not be empty")
+    loop = draft.loop_line.strip()
+    # The owner rejected a trailing "because..." at Gate 1 as an incomplete sentence (D-062).
+    if loop and (loop.endswith(("...", "…")) or loop[-1] not in ".?!"):
+        problems.append("loop_line must be a complete sentence ending in . ? or ! (no '...')")
     words = word_count(draft.narration())
     if not draft.min_words <= words <= draft.max_words:
         problems.append(
@@ -199,16 +204,21 @@ def script_schema(
         hook_type=(Literal[hooks], ...),
         beat_order=(Literal[beats], ...),
     )
-    video_format = getattr(channel.formats, fmt)
+    model.min_words, model.max_words = word_range(channel, fmt)
     wpm = channel.voice.target_wpm
-    model.min_words = round(video_format.min_s * wpm / 60)
-    model.max_words = round(video_format.max_s * wpm / 60)
     model.min_diagrams = MIN_DIAGRAMS[fmt]
     model.wpm = wpm
     model.reference_url = reference_url
     model.allowed_hooks = hooks
     model.allowed_beats = beats
     return model
+
+
+def word_range(channel: ChannelConfig, fmt: str) -> tuple[int, int]:
+    """Allowed narration words for a format: its seconds x the narrator's words per minute."""
+    video_format = getattr(channel.formats, fmt)
+    wpm = channel.voice.target_wpm
+    return round(video_format.min_s * wpm / 60), round(video_format.max_s * wpm / 60)
 
 
 def word_count(text: str) -> int:
@@ -268,7 +278,47 @@ def _script_one_safely(
         result.processed += 1
 
 
-def _script_one(ctx: AppContext, row: sqlite3.Row, llm: GeminiClient, http: httpx.Client) -> int:
+@dataclass(frozen=True)
+class Feedback:
+    """What the owner asked to change at Gate 1, plus the narration they reviewed."""
+
+    text: str
+    previous: str
+
+
+def rescript(
+    ctx: AppContext,
+    content_id: int,
+    feedback: str,
+    *,
+    llm: GeminiClient | None = None,
+    http: httpx.Client | None = None,
+) -> int:
+    """Write the next script version of a `scripted` item using the owner's feedback (Gate 1
+    redo). Returns the new script id; the previous version stays as history."""
+    row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
+    current = ctx.conn.execute(
+        "SELECT body_text FROM scripts WHERE content_id = ? AND is_current = 1", (content_id,)
+    ).fetchone()
+    if row is None or row["status"] != "scripted" or current is None:
+        raise FactoryError(f"content #{content_id} is not a scripted item")
+    llm = llm or _gemini(ctx)
+    own_http = http is None
+    http = http or _http_client(ctx)
+    try:
+        return _script_one(ctx, row, llm, http, Feedback(feedback, current["body_text"]))
+    finally:
+        if own_http:
+            http.close()
+
+
+def _script_one(
+    ctx: AppContext,
+    row: sqlite3.Row,
+    llm: GeminiClient,
+    http: httpx.Client,
+    feedback: Feedback | None = None,
+) -> int:
     channel, conn = ctx.channel, ctx.conn
     reference = page_summary(
         http, row["object_name"], before_call=lambda: check_and_record(conn, channel, "wikimedia")
@@ -280,7 +330,7 @@ def _script_one(ctx: AppContext, row: sqlite3.Row, llm: GeminiClient, http: http
         previous=previous,
         reference_url=reference.url if reference else None,
     )
-    system, user = _prompts(ctx, row, schema, reference)
+    system, user = _prompts(ctx, row, schema, reference, feedback)
     draft = llm.generate_json(
         system=system.text, prompt=user.text, schema=schema, max_reasks=MAX_REASKS
     )
@@ -324,7 +374,11 @@ def _previous_variety(
 
 
 def _prompts(
-    ctx: AppContext, row: sqlite3.Row, schema: type[ScriptDraftBase], reference: WikiSummary | None
+    ctx: AppContext,
+    row: sqlite3.Row,
+    schema: type[ScriptDraftBase],
+    reference: WikiSummary | None,
+    feedback: Feedback | None,
 ) -> tuple[Any, Any]:
     channel = ctx.channel
     video_format = getattr(channel.formats, row["format"])
@@ -348,6 +402,7 @@ def _prompts(
         max_clips=MAX_CLIPS,
         min_diagrams=schema.min_diagrams,
         reference=reference,
+        feedback=feedback,
     )
     return system, user
 
@@ -409,6 +464,7 @@ def _save(
                 prompt_version,
             ),
         ).lastrowid
+        conn.execute("DELETE FROM sources WHERE content_id = ?", (content_id,))
         conn.executemany(
             """
             INSERT INTO sources (content_id, url, title, publisher, claim, accessed_at)
