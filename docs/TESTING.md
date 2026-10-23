@@ -31,6 +31,7 @@
 | discover | Trend ratio math; 404 article is skipped; Trends CSV parser handles the real export fixture; re-import adds no duplicates | One real Wikimedia call; one YouTube `search.list` (watch `api_usage`); one real Trends CSV import |
 | ideate | Blocklist rejects; score threshold filters; weekly plan respects the variety rules | One real Gemini call → 5 ideas stored |
 | script | Schema validation; at least 2 sources required; similarity block over 0.80; word count within format bounds | One real script for "alternator"; owner reads it |
+| subtitles | Alignment (punctuation, split contractions, missing words); ≤4 words / ≤760 px per line, ≤2 lines; ASS style values and one cyan word per event; preview burns (slow) | Integration: real Kokoro, word starts within 0.15 s of speech onsets; owner watches `subs_preview.mp4` |
 | generate | Flow sheet lists every `flow_clip` shot; inbox ingest detects missing or extra shots; voice duration ≈ estimate ±20% | Paste one prompt into Flow; drop the clip; status → `generated` |
 | assemble | ffprobe checks: resolution, fps, duration bounds, audio present, loudness −14 ±1 LUFS; TikTok render has no music track | Watch both renders on the phone |
 | review | Approve / reject / redo transitions; reason is required for reject and redo | Telegram buttons on a dry-run item |

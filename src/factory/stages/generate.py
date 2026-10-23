@@ -3,8 +3,8 @@
 Pass 1, script_approved -> awaiting_clips: write flow_sheet.md (one ready prompt per Flow clip),
 create the Flow inbox folder and render voice.wav.
 Pass 2, awaiting_clips -> generated: once every shot_NN.mp4 is in the inbox and plays, copy the
-clips into the asset folder and record them. Subtitles (1.7) and stills/diagrams (1.8) will add
-their steps here; until then "generated" means clips + voice.
+clips into the asset folder and record them. Pass 1 also writes the subtitles (subs.ass,
+1.7) with the voice; "generated" needs clips + voice + subtitles. Stills/diagrams (1.8) come later.
 """
 
 from __future__ import annotations
@@ -177,6 +177,10 @@ def _collect(ctx: AppContext, row: sqlite3.Row) -> bool:
         log.warning(
             "#%s: ignoring unexpected files in the inbox: %s", content_id, ", ".join(extras)
         )
+    folder = asset_dir(ctx, content_id)
+    for needed in ("voice.wav", voice.SUBS_FILE):
+        if not (folder / needed).is_file():
+            problems.append(f"{needed} missing: run `factory voice render {content_id}`")
     if problems:
         log.info(
             "#%s waiting for clips: %s",

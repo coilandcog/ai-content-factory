@@ -77,10 +77,19 @@ class Schedule(StrictModel):
     learn: ClockTime
 
 
+class Tools(StrictModel):
+    """System programs. Full paths, because several FFmpeg builds can be installed and only some
+    can burn subtitles (D-065)."""
+
+    ffmpeg: Text
+    ffprobe: Text
+
+
 class Settings(StrictModel):
     paths: Paths
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"]
     schedule: Schedule
+    tools: Tools
 
 
 # --- config/channels/<slug>.yaml --------------------------------------------------------

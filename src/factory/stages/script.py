@@ -124,7 +124,7 @@ class ScriptDraftBase(BaseModel):
     min_words: ClassVar[int] = 0
     max_words: ClassVar[int] = 10_000
     min_diagrams: ClassVar[int] = 0
-    wpm: ClassVar[int] = 160
+    wpm: ClassVar[int] = 142  # overwritten from voice.target_wpm by script_schema()
     reference_url: ClassVar[str | None] = None
     allowed_hooks: ClassVar[tuple[str, ...]] = HOOK_TYPES
     allowed_beats: ClassVar[tuple[str, ...]] = tuple(BEAT_ORDERS)

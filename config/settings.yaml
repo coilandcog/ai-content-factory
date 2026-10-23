@@ -18,3 +18,7 @@ schedule:                      # used by Windows Task Scheduler setup in Phase 2
   nightly_run: "01:00"
   backup: "02:30"
   learn: "06:00"
+
+tools:                         # Ubuntu's FFmpeg: has libass (subtitles), libx264 and aac (D-065)
+  ffmpeg: /usr/bin/ffmpeg      # Homebrew's FFmpeg comes first on PATH but cannot burn subtitles
+  ffprobe: /usr/bin/ffprobe

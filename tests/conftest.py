@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from factory.config import CONFIG_DIR
+from factory.config import CONFIG_DIR, load_settings
+from factory.media import ffmpeg
 
 
 @pytest.fixture
@@ -30,3 +31,10 @@ def reset_factory_logging() -> Iterator[None]:
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
         handler.close()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def configured_ffmpeg() -> None:
+    """Use the FFmpeg named in settings.yaml (the one that can burn subtitles), as the CLI does."""
+    tools = load_settings().tools
+    ffmpeg.use_tools(tools.ffmpeg, tools.ffprobe)

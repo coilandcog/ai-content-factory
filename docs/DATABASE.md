@@ -115,7 +115,7 @@ The YAML is the source of truth for settings. This row exists so foreign keys wo
 | engineer_note | TEXT | Owner-approved insight |
 | loop_line | TEXT | |
 | word_count | INTEGER | |
-| est_duration_s | REAL | `word_count / 160 * 60` |
+| est_duration_s | REAL | `word_count / voice.target_wpm * 60` (142 wpm for Coil & Cog, D-066) |
 | shot_list_json | TEXT | List of `{n, beat, kind: flow_clip\|still\|diagram, description, duration_s, prompt_vars}` |
 | similarity_max | REAL | Highest similarity to the last 30 scripts |
 | llm_provider / llm_model | TEXT | |

@@ -110,7 +110,7 @@ def test_approve_warns_when_the_note_breaks_the_word_range(ctx: AppContext) -> N
 
     approval = review.approve(ctx, content_id, "As an engineer, " + "really " * 40 + "neat.")
 
-    assert approval.warning is not None and "target 80-133" in approval.warning
+    assert approval.warning is not None and "target 71-118" in approval.warning
     assert status(ctx, content_id)["status"] == "script_approved"  # the owner decides
 
 

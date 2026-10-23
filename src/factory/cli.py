@@ -39,6 +39,7 @@ from factory.db import (
 from factory.errors import ConfigError, FactoryError
 from factory.integrations.kokoro_tts import KokoroTTS
 from factory.logging_setup import Redactor, set_log_context, setup_logging
+from factory.media import ffmpeg, subtitles
 from factory.media.brand import build_brand_assets
 from factory.stages import generate as generate_stage
 from factory.stages import review as review_stage
@@ -106,6 +107,7 @@ def _start(config_dir: Path) -> tuple[Settings, EnvSettings, Redactor]:
         settings.schedule.timezone,
         (secret.get_secret_value() for secret in env.secrets),
     )
+    ffmpeg.use_tools(settings.tools.ffmpeg, settings.tools.ffprobe)
     if env.dry_run:
         typer.echo("[DRY RUN] no uploads or public posts", err=True)
     return settings, env, redact
@@ -509,6 +511,14 @@ def config_check(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
     except ConfigError as exc:
         typer.echo(f"ERROR {exc}", err=True)
         problems += 1
+    if settings is not None:
+        ffmpeg.use_tools(settings.tools.ffmpeg, settings.tools.ffprobe)
+        tool_problems = ffmpeg.check_tools()
+        for problem in tool_problems:
+            typer.echo(f"ERROR tools: {problem}", err=True)
+        if not tool_problems:
+            typer.echo(f"OK  tools: {settings.tools.ffmpeg} (subtitles, H.264, AAC)")
+        problems += len(tool_problems)
     try:
         env = load_env(config_dir.parent)
         typer.echo(
@@ -625,11 +635,35 @@ def voice_audition(
 
 @voice_app.command("render")
 def voice_render(content_id: int, config_dir: ConfigDirOption = CONFIG_DIR) -> None:
-    """Render an item's current script as voice.wav with the voice set in the channel YAML."""
+    """Render an item's current script as voice.wav plus subs.ass (word-highlight subtitles)."""
     with _tracked_run("voice render", config_dir) as run:
         ctx = _context(run, config_dir)
         result = voice_stage.render(ctx, content_id, KokoroTTS().synthesize)
         typer.echo(_voice_line(result, config_dir.parent))
+        typer.echo(f"wrote {result.path.with_name(voice_stage.SUBS_FILE).relative_to(ctx.root)}")
+        run.tally.processed = 1
+
+
+@voice_app.command("preview")
+def voice_preview(content_id: int, config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Make subs_preview.mp4 (voice + burned-in subtitles, 540x960) to check on a phone."""
+    with _tracked_run("voice preview", config_dir) as run:
+        ctx = _context(run, config_dir)
+        folder = voice_stage.asset_dir(ctx, content_id)
+        voice_wav, subs = folder / "voice.wav", folder / voice_stage.SUBS_FILE
+        if not voice_wav.is_file() or not subs.is_file():
+            raise FactoryError(
+                f"content #{content_id} has no voice.wav/subs.ass: run `factory voice render "
+                f"{content_id}`"
+            )
+        out = subtitles.render_preview(
+            voice_wav,
+            subs,
+            voice_stage.fonts_dir(ctx),
+            folder / "subs_preview.mp4",
+            ctx.channel.brand.palette.bg,
+        )
+        typer.echo(f"wrote {out.relative_to(ctx.root)}")
         run.tally.processed = 1
 
 

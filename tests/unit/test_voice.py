@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import math
-from array import array
+import json
+import shutil
 from pathlib import Path
 
 import pytest
+from fakes.fake_tts import make_fake_tts
 
-from factory.config import EnvSettings, load_channel, load_settings
+from factory.config import REPO_ROOT, EnvSettings, load_channel, load_settings
 from factory.context import AppContext
 from factory.db import add_content, connect, migrate, upsert_channel
 from factory.errors import FactoryError
-from factory.integrations.kokoro_tts import SAMPLE_RATE
+from factory.integrations.kokoro_tts import Speech
 from factory.media.audio import measure_loudness
 from factory.media.ffmpeg import probe
 from factory.stages import voice
@@ -18,16 +19,7 @@ from factory.stages import voice
 pytestmark = pytest.mark.slow  # runs ffmpeg
 
 
-def fake_tts(text: str, voice_id: str, speed: float) -> bytes:
-    """A quiet 220 Hz tone (about -30 LUFS), 2.5 s long: normalisation has real work to do."""
-    samples = array(
-        "f",
-        (
-            0.02 * math.sin(2 * math.pi * 220 * i / SAMPLE_RATE)
-            for i in range(int(2.5 * SAMPLE_RATE))
-        ),
-    )
-    return samples.tobytes()  # x86 is little-endian, matching "f32le"
+fake_tts = make_fake_tts(seconds=2.5, amplitude=0.02)
 
 
 @pytest.fixture
@@ -37,6 +29,8 @@ def ctx(tmp_path: Path) -> AppContext:
     channel = load_channel("coil-and-cog")
     upsert_channel(conn, channel)
     env = EnvSettings(dry_run=True, factory_channel="coil-and-cog")
+    # outputs go under tmp_path; subtitles need the real font files there too
+    shutil.copytree(REPO_ROOT / "assets_static" / "fonts", tmp_path / "assets_static" / "fonts")
     yield AppContext(load_settings(), env, channel, conn, tmp_path)  # outputs go under tmp_path
     conn.close()
 
@@ -80,7 +74,7 @@ def test_render_writes_voice_wav_and_one_asset_row(ctx: AppContext) -> None:
     content_id = add_script(ctx)
     spoken: list[tuple[str, str, float]] = []
 
-    def recording_tts(text: str, voice_id: str, speed: float) -> bytes:
+    def recording_tts(text: str, voice_id: str, speed: float) -> Speech:
         spoken.append((text, voice_id, speed))
         return fake_tts(text, voice_id, speed)
 
@@ -90,9 +84,14 @@ def test_render_writes_voice_wav_and_one_asset_row(ctx: AppContext) -> None:
     path = ctx.root / "data" / "assets" / "coil-and-cog" / f"{content_id:06d}" / "voice.wav"
     assert path.is_file()
     assert spoken[0] == ("Hello there.", "am_michael", 1.0)  # voice and speed from the YAML
-    rows = ctx.conn.execute("SELECT * FROM assets WHERE content_id = ?", (content_id,)).fetchall()
-    assert len(rows) == 1
-    row = rows[0]
+    rows = ctx.conn.execute(
+        "SELECT * FROM assets WHERE content_id = ? ORDER BY kind", (content_id,)
+    ).fetchall()
+    assert [r["kind"] for r in rows] == ["subtitles", "voiceover"]  # one each, even after re-run
+    assert (path.parent / "subs.ass").is_file()
+    words = json.loads((path.parent / "voice_words.json").read_text())
+    assert [w["text"] for w in words] == ["Hello", "there."]
+    row = rows[1]
     assert (row["kind"], row["generator"], row["model"], row["license"]) == (
         "voiceover",
         "kokoro",

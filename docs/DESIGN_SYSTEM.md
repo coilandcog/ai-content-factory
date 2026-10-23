@@ -17,7 +17,7 @@
 
 - **Tone:** calm, confident and curious. One small witty line per video. Speak directly to the viewer ("you").
 - **Banned words:** insane, mind-blowing, crazy, you won't believe, SHOCKING, and all-caps hype generally.
-- **Narrator:** AI voice, **Kokoro-82M**, male, neutral American English, warm, mid-to-low pitch, about 160 wpm. **Chosen voice: `am_michael`** (owner's pick after the task 1.4 listening test against `am_adam` and `am_onyx`, D-060). It must stay the same from now on, so viewers recognise the channel by ear.
+- **Narrator:** AI voice, **Kokoro-82M**, male, neutral American English, warm, mid-to-low pitch, about 142 wpm (measured at speed 1.0; D-066). **Chosen voice: `am_michael`** (owner's pick after the task 1.4 listening test against `am_adam` and `am_onyx`, D-060). It must stay the same from now on, so viewers recognise the channel by ear.
 - **Never:** clone or imitate a real person's voice.
 - **Fallback (decision D-040):** if YouTube Partner Program review rejects the channel for inauthentic content, the owner records the Engineer's Note in their own voice.
 
@@ -60,10 +60,11 @@ These are free Google Fonts under the Open Font License, so commercial use is OK
 
 - **Format:** ASS subtitle file (a format that supports styling and per-word timing), burned into the video.
 - **Style:** Montserrat ExtraBold 78 px, text `#F5F7FA`, 6 px outline in `#0E1116`, no shadow.
-- **Word highlight:** the current word turns cyan `#00D1FF`. Timing comes from faster-whisper word timestamps aligned to the approved script text.
-- **Layout:** at most 2 lines and about 4 words per line, centered, with the text block at most 820 px wide.
+- **Word highlight:** the current word turns cyan `#00D1FF` from the moment it starts until the next word starts. Timing comes from **Kokoro's own token timestamps** (it builds the audio from them, so they are exact for that audio), aligned to the approved script text (D-065). Word starts were measured within 0.06 s of the audio; Kokoro stretches a sentence's last word over part of the following pause, which only keeps that word cyan a little longer.
+- **Layout:** at most 2 lines and at most 4 words per line, centered, each line at most **760 px** wide (measured with the real font). A centered 820 px block would reach x = 950 and break the right-hand safe zone below, so 760 px is the limit (D-065). A sentence end or a pause over 0.6 s starts a new page; the last page stays 0.3 s after its last word.
 - **Position:** the text baseline sits about 30% from the bottom (y ≈ 1344 px).
-- **Spelling:** always from the approved script, never from the speech recognizer's guess.
+- **Spelling:** always from the approved script, never from the voice engine's tokens.
+- **Files:** `factory voice render <id>` (and `generate`) writes `voice.wav`, `voice_words.json` (each script word with start/end seconds) and `subs.ass`; `factory voice preview <id>` writes `subs_preview.mp4` (540×960, dark background, burned-in subtitles) for a phone check. Burning needs an FFmpeg with libass: settings.yaml `tools.ffmpeg` (D-065).
 
 ### 9:16 safe zones (keeping clear of TikTok and YouTube buttons)
 

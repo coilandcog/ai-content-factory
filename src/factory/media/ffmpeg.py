@@ -10,6 +10,43 @@ from typing import Any
 
 from factory.errors import FactoryError
 
+# Which binaries to run. The CLI sets them once at start-up from settings.yaml `tools`
+# (use_tools); plain names are the fallback for library use outside the CLI.
+_BINARIES = {"ffmpeg": "ffmpeg", "ffprobe": "ffprobe"}
+# What the pipeline needs from FFmpeg: libass to burn subtitles, H.264 video, AAC audio.
+REQUIRED_FILTERS = ("ass", "loudnorm", "alimiter")
+REQUIRED_ENCODERS = ("libx264", "aac")
+
+
+def use_tools(ffmpeg: str, ffprobe: str) -> None:
+    """Point every FFmpeg/ffprobe call at these binaries (from settings.yaml `tools`)."""
+    _BINARIES["ffmpeg"], _BINARIES["ffprobe"] = ffmpeg, ffprobe
+
+
+def check_tools() -> list[str]:
+    """Problems with the configured FFmpeg (missing binary, filter or encoder); [] = all good."""
+    try:
+        filters = _run_text([_BINARIES["ffmpeg"], "-hide_banner", "-filters"])
+        encoders = _run_text([_BINARIES["ffmpeg"], "-hide_banner", "-encoders"])
+        _run_text([_BINARIES["ffprobe"], "-version"])
+    except (OSError, subprocess.CalledProcessError) as exc:
+        return [f"cannot run {exc.filename or 'ffmpeg/ffprobe'}: {exc}"]
+    problems = [
+        f"{_BINARIES['ffmpeg']} has no '{name}' filter"
+        for name in REQUIRED_FILTERS
+        if f" {name} " not in filters
+    ]
+    problems += [
+        f"{_BINARIES['ffmpeg']} has no '{name}' encoder"
+        for name in REQUIRED_ENCODERS
+        if f" {name} " not in encoders
+    ]
+    return problems
+
+
+def _run_text(cmd: list[str]) -> str:
+    return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
+
 
 def encode_rgb_frames(
     frames: Iterable[bytes],
@@ -29,7 +66,7 @@ def encode_rgb_frames(
     # Beginner note: two inputs. Input 0 is our raw pixels from stdin ("-i -"); input 1 is
     # FFmpeg's built-in silent audio generator (anullsrc). -t cuts the output to duration_s.
     cmd = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        _BINARIES["ffmpeg"], "-hide_banner", "-loglevel", "error", "-y",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps),
         "-i", "-",
         "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
@@ -59,7 +96,7 @@ def run_ffmpeg(args: list[str], *, input_bytes: bytes | None = None) -> str:
 
     `input_bytes` is fed to stdin, for inputs given as "-i -".
     """
-    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-y", *args]
+    cmd = [_BINARIES["ffmpeg"], "-hide_banner", "-nostats", "-y", *args]
     try:
         result = subprocess.run(cmd, input=input_bytes, capture_output=True, check=True)
     except FileNotFoundError as exc:
@@ -73,8 +110,8 @@ def run_ffmpeg(args: list[str], *, input_bytes: bytes | None = None) -> str:
 def probe(path: Path) -> dict[str, Any]:
     """Return ffprobe's JSON description (format + streams) of a media file."""
     cmd = [
-        "ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams",
-        str(path),
+        _BINARIES["ffprobe"], "-v", "error", "-print_format", "json",
+        "-show_format", "-show_streams", str(path),
     ]  # fmt: skip
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)

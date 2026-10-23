@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-import math
 import shutil
 import subprocess
-from array import array
 from pathlib import Path
 
 import pytest
+from fakes.fake_tts import make_fake_tts
 from typer.testing import CliRunner
 
 from factory.cli import app
@@ -15,7 +14,6 @@ from factory.config import REPO_ROOT, EnvSettings, load_channel, load_settings
 from factory.context import AppContext
 from factory.db import add_content, connect, migrate, set_status, upsert_channel
 from factory.errors import BudgetExceededError
-from factory.integrations.kokoro_tts import SAMPLE_RATE
 from factory.stages import generate
 
 pytestmark = pytest.mark.slow  # runs ffmpeg
@@ -36,11 +34,7 @@ SHOTS = [
 CLIPS = [1, 2, 4, 5]
 
 
-def fake_tts(text: str, voice_id: str, speed: float) -> bytes:
-    n = int(1.5 * SAMPLE_RATE)
-    return array(
-        "f", (0.1 * math.sin(2 * math.pi * 220 * i / SAMPLE_RATE) for i in range(n))
-    ).tobytes()
+fake_tts = make_fake_tts(seconds=1.5, amplitude=0.1)
 
 
 def make_clip(path: Path, size: str = "108x192", seconds: float = 3.5) -> None:
@@ -61,6 +55,8 @@ def ctx(tmp_path: Path) -> AppContext:
     channel = load_channel("coil-and-cog")
     upsert_channel(conn, channel)
     env = EnvSettings(dry_run=True, factory_channel="coil-and-cog")
+    # outputs go under tmp_path; subtitles need the real font files there too
+    shutil.copytree(REPO_ROOT / "assets_static" / "fonts", tmp_path / "assets_static" / "fonts")
     yield AppContext(load_settings(), env, channel, conn, tmp_path)
     conn.close()
 

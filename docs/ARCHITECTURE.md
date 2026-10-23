@@ -67,7 +67,8 @@ Helper commands:
 - `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
 - `factory flow-log --credits N`: logs Flow credits you spent (refused above `budgets_per_day.flow_credits`).
 - `factory voice audition [--voices a,b,c] [--text ...|--content-id N]`: the same text read by several Kokoro voices into `data/audition/voice_<id>.wav`, to choose `voice.voice_id`.
-- `factory voice render <content_id>`: the current script as `voice.wav` (48 kHz, −14 LUFS) in the item's asset folder, plus an `assets` row. The generate stage (task 1.6) will call the same code.
+- `factory voice render <content_id>`: the current script as `voice.wav` (48 kHz, −14 LUFS), `voice_words.json` and word-highlight `subs.ass` in the item's asset folder, plus `assets` rows (`voiceover`, `subtitles`). The generate stage calls the same code.
+- `factory voice preview <content_id>`: `subs_preview.mp4` (540×960, voice + burned-in subtitles) to check the subtitles on a phone.
 - `factory brand build`: rebuilds `assets_static/logo/` (logo, avatar, stings) from the channel's `display_name` and `brand.palette`.
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
 - `factory retry <content_id>`
@@ -144,7 +145,12 @@ schedule:                      # used by the Task Scheduler setup (task 2.11)
   nightly_run: "01:00"
   backup: "02:30"
   learn: "06:00"
+tools:                         # full paths: only some FFmpeg builds can burn subtitles (D-065)
+  ffmpeg: /usr/bin/ffmpeg
+  ffprobe: /usr/bin/ffprobe
 ```
+
+`factory config check` also verifies that `tools.ffmpeg` has the `ass`, `loudnorm` and `alimiter` filters and the `libx264` and `aac` encoders.
 
 `config/channels/coil-and-cog.yaml` (the shape is authoritative):
 
@@ -185,7 +191,7 @@ voice:
   engine: kokoro
   voice_id: am_michael         # chosen in task 1.4 (D-060)
   speed: 1.0
-  target_wpm: 160
+  target_wpm: 142             # measured am_michael rate at speed 1.0 (D-066)
 
 brand:
   palette: {bg: "#0E1116", electric: "#00D1FF", heat: "#FF8A00", fluid: "#3A7BFF", text: "#F5F7FA"}
@@ -260,8 +266,8 @@ From any non-terminal status, an item can move to `failed`. `factory retry` retu
 | LLM | `google-genai` (Gemini); Ollama HTTP | Free tier; local fallback |
 | Embeddings | sentence-transformers `all-MiniLM-L6-v2` (Apache 2.0) | Local similarity check, no quota |
 | TTS | `kokoro` (Apache 2.0) + `espeak-ng` | Good quality on CPU, commercial use OK |
-| Word timing | `faster-whisper` (MIT), model `small.en`, int8 on CPU | Accurate word timestamps |
-| Video | FFmpeg (system) + MoviePy | Standard, free |
+| Word timing | Kokoro's token timestamps, aligned to the script with `difflib` (D-065). `faster-whisper` (MIT, `small.en`, int8 on CPU) is the documented fallback for audio Kokoro didn't make (e.g. an owner-recorded Engineer's Note, D-040) | Exact for Kokoro audio by construction; no extra model or recognition errors |
+| Video | FFmpeg (system; the binary is set in settings.yaml `tools`, Ubuntu's build with libass) + MoviePy | Standard, free; libass burns the ASS subtitles |
 | Images | Pillow | Diagrams, logo, thumbnails |
 | Google APIs | `google-api-python-client`, `google-auth-oauthlib` | Official clients |
 | Telegram | `python-telegram-bot` | Mature; long polling, so no public server needed |
@@ -326,7 +332,7 @@ ai-content-factory/
 │       ├── ffmpeg.py             # thin wrappers around ffmpeg/ffprobe
 │       ├── brand.py              # logo, avatar and sting built from the channel YAML
 │       ├── audio.py              # loudness: normalise to −14 LUFS / 48 kHz, measure
-│       ├── subtitles.py          # ASS generation with word highlight
+│       ├── subtitles.py          # word alignment, ASS generation with word highlight, preview
 │       ├── diagrams.py           # Pillow overlay layers
 │       ├── stills.py             # Ken Burns / parallax animation
 │       ├── thumbnails.py

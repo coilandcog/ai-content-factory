@@ -106,7 +106,7 @@ def test_idea_becomes_scripted_with_script_sources_and_variety_fields(ctx: AppCo
         "SELECT * FROM scripts WHERE content_id = ?", (content_id,)
     ).fetchone()
     assert (script["version"], script["is_current"]) == (1, 1)
-    assert 80 <= script["word_count"] <= 133
+    assert 71 <= script["word_count"] <= 118
     assert script["body_text"].startswith("Why doesn't your car battery")
     assert script["body_text"].endswith("why your battery stays alive.")
     assert "+" in script["prompt_version"]
@@ -132,7 +132,7 @@ def test_prompt_contains_reference_rules_and_blocklist(ctx: AppContext) -> None:
     [call] = sdk.calls
     assert EXTRACT in call["contents"]
     assert f"list {WIKI_URL} as the first source" in call["contents"]
-    assert "between 80 and 133 words" in call["contents"]
+    assert "between 71 and 118 words" in call["contents"]
     assert "defeating safety or emissions devices" in call["config"].system_instruction
 
 

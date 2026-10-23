@@ -39,15 +39,15 @@ These are enforced by `niche.blocklist` in the YAML and checked at the ideate an
 
 | Format | Series title pattern | Length | Aspect | Platforms | Job |
 |---|---|---|---|---|---|
-| **Short** | "{Object} in 40 seconds" | 30–50 s (~80–130 words) | 9:16 | YouTube Shorts, TikTok | Reach and followers |
-| **Deep Dive** | "Cutaway: {Object}" | 65–150 s (~175–400 words) | 9:16 | TikTok (earns money, since it's over 1 min), YouTube Shorts | First income on TikTok |
+| **Short** | "{Object} in 40 seconds" | 30–50 s (~71–118 words) | 9:16 | YouTube Shorts, TikTok | Reach and followers |
+| **Deep Dive** | "Cutaway: {Object}" | 65–150 s (~154–355 words) | 9:16 | TikTok (earns money, since it's over 1 min), YouTube Shorts | First income on TikTok |
 | **Episode** (Phase 2) | "Coil & Cog: {Theme}" | 5–10 min | 16:9 | YouTube long-form | Watch hours (YPP) |
 
 Why: on YouTube, any vertical or square video of 3 minutes or less is a Short, and Shorts don't count toward watch hours. Only Episodes (over 3 min) build watch hours. TikTok only pays for videos over 1 minute.
 
 ## 5. Script structure
 
-The narrator speaks at about 160 words per minute. The script stage enforces the word range from the channel YAML: `min_s × target_wpm / 60` to `max_s × target_wpm / 60` words (Short 80–133, Deep Dive 173–400), and asks the model for the middle of that range.
+The narrator speaks at about 142 words per minute (`voice.target_wpm`, measured on Kokoro `am_michael`, D-066). The script stage enforces the word range from the channel YAML: `min_s × target_wpm / 60` to `max_s × target_wpm / 60` words (Short 71–118, Deep Dive 154–355), and asks the model for the middle of that range.
 
 **Short (~40 s)**
 
