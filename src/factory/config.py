@@ -5,11 +5,13 @@ Every model forbids unknown keys, so a typo in the YAML is an error instead of b
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
+from dotenv import dotenv_values
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -17,6 +19,7 @@ from pydantic import (
     Field,
     NonNegativeInt,
     PositiveInt,
+    SecretStr,
     ValidationError,
     model_validator,
 )
@@ -218,6 +221,56 @@ class ChannelConfig(StrictModel):
             if not getattr(self.formats, fmt).enabled:
                 raise ValueError(f"cadence.weekly_plan.{day} uses '{fmt}', which is not enabled")
         return self
+
+
+# --- .env and environment variables ------------------------------------------------------
+
+# Any variable whose name contains one of these is treated as a secret (SECURITY_COMPLIANCE §1).
+SECRET_NAME_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
+_MIN_SECRET_LENGTH = 8  # shorter values ("true", "1") would mask ordinary words in logs
+
+
+class EnvSettings(StrictModel):
+    """Runtime switches from .env / the environment. Secret values are kept only for redaction."""
+
+    dry_run: bool
+    factory_channel: KebabSlug
+    # SecretStr prints as '**********', and repr=False keeps the field out of repr() entirely.
+    secrets: tuple[SecretStr, ...] = Field(default=(), repr=False)
+
+
+def load_env(root: Path = REPO_ROOT) -> EnvSettings:
+    """Read <root>/.env plus real environment variables (which win) into EnvSettings.
+
+    The file is parsed in Python, never sourced by a shell, so values can't leak in shell errors.
+    """
+    file_values = dotenv_values(root / ".env") if (root / ".env").exists() else {}
+    merged = {k: v for k, v in file_values.items() if v is not None} | dict(os.environ)
+    secrets = tuple(
+        SecretStr(value)
+        for name, value in merged.items()
+        if any(marker in name.upper() for marker in SECRET_NAME_MARKERS)
+        and len(value) >= _MIN_SECRET_LENGTH
+    )
+    try:
+        return EnvSettings(
+            dry_run=_parse_dry_run(merged.get("DRY_RUN")),
+            factory_channel=merged.get("FACTORY_CHANNEL", "coil-and-cog"),
+            secrets=secrets,
+        )
+    except ValidationError as exc:
+        lines = [f"  {_location(err['loc'])}: {_message(err['msg'])}" for err in exc.errors()]
+        raise ConfigError(".env / environment\n" + "\n".join(lines)) from exc
+
+
+def _parse_dry_run(raw: str | None) -> bool:
+    # Missing means true: the safe default is "don't publish anything".
+    if raw is None:
+        return True
+    value = raw.strip().lower()
+    if value not in ("true", "false"):
+        raise ConfigError(f"DRY_RUN must be 'true' or 'false', got '{raw}'")
+    return value == "true"
 
 
 # --- loading -----------------------------------------------------------------------------

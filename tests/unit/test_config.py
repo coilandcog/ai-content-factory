@@ -9,18 +9,10 @@ import yaml
 from typer.testing import CliRunner
 
 from factory.cli import app
-from factory.config import CONFIG_DIR, load_channel, load_settings
+from factory.config import load_channel, load_settings
 from factory.errors import ConfigError
 
-SLUG = "coil-and-cog"
-
-
-@pytest.fixture
-def config_dir(tmp_path: Path) -> Path:
-    """A throwaway copy of the real config/ folder, so tests can break it safely."""
-    target = tmp_path / "config"
-    shutil.copytree(CONFIG_DIR, target)
-    return target
+SLUG = "coil-and-cog"  # config_dir fixture: tests/conftest.py
 
 
 def edit_channel(config_dir: Path, change: dict[str, Any]) -> None:

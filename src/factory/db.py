@@ -62,7 +62,7 @@ def migrate(conn: sqlite3.Connection, migrations_dir: Path = MIGRATIONS_DIR) -> 
 
     The number of the last applied file is stored in SQLite's built-in `user_version`.
     """
-    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    current = schema_version(conn)
     applied: list[str] = []
     for number, path in _migration_files(migrations_dir):
         if number <= current:
@@ -89,6 +89,44 @@ def _migration_files(migrations_dir: Path) -> list[tuple[int, Path]]:
             raise FactoryError(f"two migrations share number {number:03d}")
         files[number] = path
     return sorted(files.items())
+
+
+def schema_version(conn: sqlite3.Connection) -> int:
+    """Number of the last applied migration; 0 means `factory db init` never ran."""
+    return conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+def start_run(
+    conn: sqlite3.Connection, command: str, channel_slug: str | None, dry_run: bool
+) -> int:
+    """Insert a 'running' row in runs and return its id (also the run_id in log lines)."""
+    with conn:
+        cur = conn.execute(
+            "INSERT INTO runs (command, channel_slug, dry_run) VALUES (?, ?, ?)",
+            (command, channel_slug, int(dry_run)),
+        )
+    return cur.lastrowid
+
+
+def finish_run(
+    conn: sqlite3.Connection,
+    run_id: int,
+    status: str,
+    *,
+    error: str | None = None,
+    items_processed: int = 0,
+    items_failed: int = 0,
+) -> None:
+    """Close a run row with its final status: ok, partial or failed."""
+    with conn:
+        conn.execute(
+            f"""
+            UPDATE runs SET status = ?, error = ?, items_processed = ?, items_failed = ?,
+                            finished_at = {_NOW_UTC}
+            WHERE id = ?
+            """,
+            (status, error, items_processed, items_failed, run_id),
+        )
 
 
 def upsert_channel(conn: sqlite3.Connection, channel: ChannelConfig) -> int:

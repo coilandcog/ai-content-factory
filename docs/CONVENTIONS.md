@@ -33,10 +33,11 @@
 ## 3. Logging
 
 - The standard-library `logging` module, configured in `logging_setup.py`.
-- **Two outputs:** a readable console line, and JSON lines in `data/logs/factory-YYYY-MM-DD.jsonl`.
+- **Two outputs:** a readable console line (`HH:MM:SS LEVEL message`), and JSON lines in `data/logs/factory-YYYY-MM-DD.jsonl`. The file date is the local date in `settings.schedule.timezone` (one night's run = one file); `ts` inside is UTC (`…Z`).
+- **How to log:** `log = logging.getLogger("factory.<module>")`; pass `extra={"event": "script_saved", "content_id": 42}`. `run_id`, `stage` and `channel` are filled in automatically from the current run.
 - **Required fields:** `ts`, `level`, `run_id`, `stage`, `channel`, `content_id` (if any), `event`, `msg`.
 - **Levels:** `DEBUG` for details, `INFO` for each item processed and status change, `WARNING` for skips or fallbacks, `ERROR` when an item failed.
-- Never log secrets; the redaction filter is mandatory. Never log full LLM prompts at `INFO`; use `DEBUG`.
+- Never log secrets; the redaction filter is mandatory. It masks, as `***`, every value of an environment or `.env` variable whose name contains `KEY`, `TOKEN`, `SECRET` or `PASSWORD` (values of 8+ characters), in messages, arguments and tracebacks. Never log full LLM prompts at `INFO`; use `DEBUG`.
 
 ## 4. Error handling
 

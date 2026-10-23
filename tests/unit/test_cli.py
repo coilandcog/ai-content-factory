@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from typer.testing import CliRunner
 
 from factory.cli import app
@@ -18,8 +20,10 @@ def test_help_lists_every_stage() -> None:
         assert stage in result.output
 
 
-def test_stub_names_its_roadmap_task_and_fails() -> None:
-    result = runner.invoke(app, ["script"])
+def test_stub_names_its_roadmap_task_and_fails(config_dir: Path) -> None:
+    runner.invoke(app, ["db", "init", "--config-dir", str(config_dir)])
+
+    result = runner.invoke(app, ["script", "--config-dir", str(config_dir)])
 
     assert result.exit_code == 1
     assert "ROADMAP task 1.3" in result.output

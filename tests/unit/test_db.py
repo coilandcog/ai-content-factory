@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import sqlite3
 from pathlib import Path
 
@@ -8,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from factory.cli import app
-from factory.config import CONFIG_DIR, load_channel
+from factory.config import load_channel
 from factory.db import connect, migrate, set_status, upsert_channel
 from factory.errors import StatusTransitionError
 
@@ -194,9 +193,7 @@ def test_database_guards(conn: sqlite3.Connection, channel_id: int) -> None:
 # --- CLI ----------------------------------------------------------------------------------
 
 
-def test_db_init_is_safe_to_rerun(tmp_path: Path) -> None:
-    config_dir = tmp_path / "config"
-    shutil.copytree(CONFIG_DIR, config_dir)
+def test_db_init_is_safe_to_rerun(config_dir: Path) -> None:
     runner = CliRunner()
 
     first = runner.invoke(app, ["db", "init", "--config-dir", str(config_dir)])
@@ -206,6 +203,6 @@ def test_db_init_is_safe_to_rerun(tmp_path: Path) -> None:
     assert "Migrations applied: 001_init.sql" in first.output
     assert second.exit_code == 0
     assert "Migrations: up to date" in second.output
-    db = connect(tmp_path / "data" / "factory.db")
+    db = connect(config_dir.parent / "data" / "factory.db")
     assert db.execute("SELECT slug FROM channels").fetchall()[0]["slug"] == "coil-and-cog"
     db.close()

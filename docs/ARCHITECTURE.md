@@ -109,7 +109,8 @@ Helper commands:
 - **Retries.** Only `RetryableError` (network errors, HTTP 429, 5xx) is retried: 3 attempts with exponential backoff waits of 2 s, 4 s and 8 s. After that the item's status becomes `failed` (the previous status is kept in `status_before_failure`) and a Telegram alert is sent.
 - **Budgets.** `budgets_per_day` in the channel YAML. Each external call records its usage in `api_usage`. A stage raises `BudgetExceededError` and stops **before** going over budget.
 - **`DRY_RUN=true`** (the default) does everything except external writes: no uploads and no public posts. Telegram messages are still sent and are marked "[DRY RUN]".
-- **Run log.** Every command invocation creates a `runs` row and writes JSON-lines logs.
+- **Run log.** Every command invocation creates a `runs` row (`running` → `ok` / `failed` with the error text, secrets masked) and writes JSON-lines logs; the row id is the `run_id` in every log line. Two exceptions: `factory config check` writes only a log line (it must work while the config, and so the database location, is broken), and `factory db init` writes its row after the migrations, because the `runs` table doesn't exist before. Other commands stop with "run `factory db init` first" if there's no database.
+- **`DRY_RUN`** comes from `.env` or the environment. Missing means `true`; anything other than `true`/`false` is a `ConfigError`, never a silent `false`.
 
 ## 7. Multi-niche config model
 
@@ -246,6 +247,7 @@ From any non-terminal status, an item can move to `failed`. `factory retry` retu
 | Python | 3.12 via `uv` | Libraries support it; `uv` manages versions and packages per project |
 | CLI | Typer | Simple, typed CLI commands |
 | Config and validation | PyYAML + Pydantic v2 | Readable YAML with strict validation |
+| `.env` loading | python-dotenv | Parses `.env` in Python (never sourced by a shell, so values can't leak in shell errors); real environment variables override it |
 | Database | SQLite (`sqlite3` standard library) + plain SQL migrations | No server; reliable; Postgres later |
 | HTTP | httpx | Modern, timeouts by default |
 | Retries | tenacity | Declarative backoff |
