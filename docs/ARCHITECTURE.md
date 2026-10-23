@@ -115,6 +115,31 @@ Helper commands:
 
 Everything niche-specific is configuration. Code reads `config/settings.yaml` (global) plus one `config/channels/<slug>.yaml` per channel. Both are validated with Pydantic, a library that checks data against declared types. A new niche or channel means a new YAML file, a new set of prompt overrides (optional), new accounts, and `secrets/<slug>/` tokens. **No code changes.**
 
+`uv run factory config check` validates both files and prints a summary, or one readable error line per problem (file, key, reason). The models in `src/factory/config.py` enforce these rules (D-053):
+- Unknown keys are errors, so typos are caught. Every key in the shapes below is required except `prompts_dir`.
+- The channel `slug` must match its file name; `timezone` must be a real time zone; times are `HH:MM`; colors are `#RRGGBB`; each format has `min_s < max_s`; `weekly_plan` may only use enabled formats.
+- **Policy guards:** `gates.final` only accepts `required` (Gate 2 is never removed) and `platforms.*.ai_disclosure` only accepts `true`. Loosening either needs a code change and a new decision, not a YAML edit.
+
+`config/settings.yaml` (global; paths are relative to the repo root):
+
+```yaml
+paths:
+  data_dir: data
+  db_path: data/factory.db
+  logs_dir: data/logs
+  inbox_dir: data/inbox
+  assets_dir: data/assets
+  assets_static_dir: assets_static
+  secrets_dir: secrets
+  prompts_dir: prompts
+log_level: INFO                # DEBUG | INFO | WARNING | ERROR
+schedule:                      # used by the Task Scheduler setup (task 2.11)
+  timezone: Europe/Berlin
+  nightly_run: "01:00"
+  backup: "02:30"
+  learn: "06:00"
+```
+
 `config/channels/coil-and-cog.yaml` (the shape is authoritative):
 
 ```yaml

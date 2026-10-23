@@ -5,6 +5,8 @@ description = "Coil & Cog AI Content Factory: a CLI pipeline for faceless 'how m
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "pydantic>=2.14.1",
+    "pyyaml>=6.0.3",
     "typer>=0.27.3",
 ]
 

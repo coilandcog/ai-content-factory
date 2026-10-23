@@ -1,0 +1,20 @@
+# Global settings for every channel. Paths are relative to the repo root.
+# Validated by factory.config.Settings — run `uv run factory config check` after editing.
+
+paths:
+  data_dir: data
+  db_path: data/factory.db
+  logs_dir: data/logs
+  inbox_dir: data/inbox
+  assets_dir: data/assets
+  assets_static_dir: assets_static
+  secrets_dir: secrets
+  prompts_dir: prompts
+
+log_level: INFO                # DEBUG | INFO | WARNING | ERROR
+
+schedule:                      # used by Windows Task Scheduler setup in Phase 2 (task 2.11)
+  timezone: Europe/Berlin
+  nightly_run: "01:00"
+  backup: "02:30"
+  learn: "06:00"
