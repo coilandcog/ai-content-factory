@@ -108,7 +108,7 @@ Helper commands:
 ## 6. Failure handling and cost control
 
 - **Idempotent stages.** Each stage selects items by status and writes outputs to deterministic paths. Re-running a stage skips finished work.
-- **Retries.** Only `RetryableError` (network errors, HTTP 429, 5xx) is retried: 3 attempts with exponential backoff waits of 2 s, 4 s and 8 s. After that the item's status becomes `failed` (the previous status is kept in `status_before_failure`) and a Telegram alert is sent.
+- **Retries.** Only `RetryableError` (network errors, HTTP 429, 5xx) is retried: 1 try plus 3 retries (4 attempts in total), with exponential backoff waits of 2 s, 4 s and 8 s plus jitter. Client SDKs' own retries stay off, so every attempt passes through the budget check. After that the item's status becomes `failed` (the previous status is kept in `status_before_failure`) and a Telegram alert is sent.
 - **Budgets.** `budgets_per_day` in the channel YAML. Each external call records its usage in `api_usage`. A stage raises `BudgetExceededError` and stops **before** going over budget.
 - **`DRY_RUN=true`** (the default) does everything except external writes: no uploads and no public posts. Telegram messages are still sent and are marked "[DRY RUN]".
 - **Run log.** Every command invocation creates a `runs` row (`running` → `ok` / `failed` with the error text, secrets masked) and writes JSON-lines logs; the row id is the `run_id` in every log line. Two exceptions: `factory config check` writes only a log line (it must work while the config, and so the database location, is broken), and `factory db init` writes its row after the migrations, because the `runs` table doesn't exist before. Other commands stop with "run `factory db init` first" if there's no database.
@@ -296,6 +296,7 @@ ai-content-factory/
 │   ├── errors.py                 # FactoryError hierarchy
 │   ├── logging_setup.py          # JSON-lines + console logging, secret redaction
 │   ├── budgets.py                # api_usage tracking and budget checks
+│   ├── prompts.py                # Jinja2 prompt loader: channel override, then prompts/default
 │   ├── stages/
 │   │   ├── discover.py
 │   │   ├── ideate.py

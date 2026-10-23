@@ -5,10 +5,13 @@ description = "Coil & Cog AI Content Factory: a CLI pipeline for faceless 'how m
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "google-genai>=2.33.0",
+    "jinja2>=3.1.6",
     "pillow>=13.0.0",
     "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
     "pyyaml>=6.0.3",
+    "tenacity>=9.1.4",
     "typer>=0.27.3",
 ]
 
@@ -34,6 +37,7 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]  # lets tests import helpers as `from fakes.fake_gemini import ...`
 markers = [
     "slow: media tests that run ffmpeg on fixture clips",
     "integration: calls a real external API; run manually",

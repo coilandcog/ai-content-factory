@@ -9,7 +9,7 @@ Each section is a **contract**: what we call, how we authenticate, the limits, a
 - Each integration is one module in `src/factory/integrations/`, with a small class whose methods return Pydantic models, not raw JSON.
 - Every outbound call goes through `budgets.check_and_record(service, units)` **before** it's made.
 - Timeouts are 30 s by default and 300 s for uploads.
-- **Retry policy:** only `RetryableError` is retried (connection errors, timeouts, HTTP 429, HTTP 5xx). That's 3 attempts with backoff waits of 2 s, 4 s and 8 s (plus a little jitter, meaning a small random extra delay). Other 4xx errors are raised as `IntegrationError` immediately.
+- **Retry policy:** only `RetryableError` is retried (connection errors, timeouts, HTTP 429, HTTP 5xx). That's 1 try plus 3 retries (4 attempts in total), with backoff waits of 2 s, 4 s and 8 s (plus a little jitter, meaning a small random extra delay). An SDK's built-in retry stays off, so only ours runs and every attempt is budget-checked. Other 4xx errors are raised as `IntegrationError` immediately.
 - **`DRY_RUN=true`:** write operations (uploads, posts) are skipped and return a fake ID prefixed `dryrun-`. Reads still happen.
 - Secrets come only from `.env` and `secrets/<slug>/`.
 - Unit tests use the fakes in `tests/fakes/`. Real calls only happen in tests marked `integration`.
@@ -25,9 +25,10 @@ Each section is a **contract**: what we call, how we authenticate, the limits, a
 | Model | `llm.model: gemini-3.5-flash-lite` in the channel YAML (D-051). `gemini-2.5-flash` and `gemini-2.5-flash-lite` return 404 "no longer available to new users" | ✔ 2026-10-23 (test call HTTP 200) |
 | Free-tier limits | Per **project and per model** (not per key); RPD resets at midnight Pacific (09:00 Berlin). Read in AI Studio → Rate Limit on 2026-10-23 (see table below). Google changes them often: re-check when 429s appear | ✔ 2026-10-23 |
 | Our volume | About 10 calls per content, 50–60 per day maximum → `budgets_per_day.gemini_calls: 60` | — |
+| Client | `factory.integrations.gemini.GeminiClient(api_key, model, before_call=...)`; `generate_json(system=, prompt=, schema=)` returns the validated Pydantic object. `before_call` runs before **every** attempt (stages pass `budgets.check_and_record(..., "gemini")`, so each retry counts). Timeout 30 s. The key comes from `GEMINI_API_KEY` via `load_env()` (a `SecretStr`). Prompts are logged only at DEBUG | ✔ 2026-10-23 (task 1.2) |
 | Request | System prompt (from a Jinja2 template) plus a user prompt; `response_mime_type="application/json"` with a JSON schema for structured output | ✔ |
 | Response | JSON validated against a Pydantic model (`IdeaBatch`, `ScriptDraft`, `PostMetadata`). On a validation error, one automatic re-ask with the error message, then fail | — |
-| Errors | 429 or 5xx → retry; quota exhausted for the day → `BudgetExceededError` → switch to the Ollama fallback for **metadata only** (scripts wait for the next day) | — |
+| Errors | 429, 5xx or network error → retry (§0); other 4xx → `IntegrationError`; empty or blocked answer → `IntegrationError` with the block or finish reason; quota exhausted for the day → `BudgetExceededError` → switch to the Ollama fallback for **metadata only** (scripts wait for the next day) | — |
 | Privacy | Free-tier inputs may be used by Google to improve products. Send only public topic material, never secrets or personal data | ✔ (pricing page: "Used to improve our products: Yes") |
 
 **Free-tier limits for project `coil-and-cog` (AI Studio, 2026-10-23):**

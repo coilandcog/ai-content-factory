@@ -231,11 +231,13 @@ _MIN_SECRET_LENGTH = 8  # shorter values ("true", "1") would mask ordinary words
 
 
 class EnvSettings(StrictModel):
-    """Runtime switches from .env / the environment. Secret values are kept only for redaction."""
+    """Runtime switches and API keys from .env / the environment. Keys are SecretStr, which
+    prints as '**********'; `secrets` holds every secret value for the log redaction filter."""
 
     dry_run: bool
     factory_channel: KebabSlug
-    # SecretStr prints as '**********', and repr=False keeps the field out of repr() entirely.
+    gemini_api_key: SecretStr | None = None  # from GEMINI_API_KEY
+    # repr=False keeps this field out of repr() entirely.
     secrets: tuple[SecretStr, ...] = Field(default=(), repr=False)
 
 
@@ -256,6 +258,7 @@ def load_env(root: Path = REPO_ROOT) -> EnvSettings:
         return EnvSettings(
             dry_run=_parse_dry_run(merged.get("DRY_RUN")),
             factory_channel=merged.get("FACTORY_CHANNEL", "coil-and-cog"),
+            gemini_api_key=merged.get("GEMINI_API_KEY") or None,
             secrets=secrets,
         )
     except ValidationError as exc:

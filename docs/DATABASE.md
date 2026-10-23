@@ -119,7 +119,7 @@ The YAML is the source of truth for settings. This row exists so foreign keys wo
 | shot_list_json | TEXT | List of `{n, beat, kind: flow_clip\|still\|diagram, description, duration_s, prompt_vars}` |
 | similarity_max | REAL | Highest similarity to the last 30 scripts |
 | llm_provider / llm_model | TEXT | |
-| prompt_version | TEXT | Git short hash or template version |
+| prompt_version | TEXT | First 10 hex chars of the template file's SHA-256 (D-057) |
 | is_current | INTEGER | 0/1; only one current version per content |
 | created_at | TEXT | |
 

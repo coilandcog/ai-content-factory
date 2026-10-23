@@ -47,7 +47,7 @@
 FactoryError                  # base class
 ├── ConfigError               # bad YAML/.env → stop immediately
 ├── IntegrationError          # external API refused (non-retryable 4xx)
-│   └── RetryableError        # network, timeout, 429, 5xx → retried 3× (2s/4s/8s)
+│   └── RetryableError        # network, timeout, 429, 5xx → 3 retries after 2s/4s/8s (4 attempts)
 ├── BudgetExceededError       # daily budget would be exceeded → stop the stage, alert
 ├── PolicyBlockedError        # blocklist hit, similarity too high, missing disclosure → item rejected/archived
 ├── StatusTransitionError     # a status move DATABASE.md §4 doesn't allow → always a bug
@@ -68,7 +68,8 @@ FactoryError                  # base class
 ## 6. Prompts as code
 
 - Prompts live in `prompts/default/*.j2`; channels can override them in `prompts/<slug>/`.
-- Every LLM call records `prompt_version` (the template's git short hash).
+- Every LLM call records `prompt_version`: the first 10 hex characters of the SHA-256 of the template file (`factory.prompts.template_version`). It works before a commit and changes with every edit (D-057).
+- Load templates with `factory.prompts.render_prompt(name, channel, **vars)`: it uses `prompts/<channel prompts_dir>/<name>.j2` if present, else `prompts/default/<name>.j2`. A variable the template uses but the caller didn't pass is an error.
 - Changes to prompts get their own commit and a short note on the expected effect.
 
 ## 7. Git
