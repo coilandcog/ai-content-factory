@@ -36,9 +36,11 @@ from factory.db import (
     upsert_channel,
 )
 from factory.errors import ConfigError, FactoryError
+from factory.integrations.kokoro_tts import KokoroTTS
 from factory.logging_setup import Redactor, set_log_context, setup_logging
 from factory.media.brand import build_brand_assets
 from factory.stages import script as script_stage
+from factory.stages import voice as voice_stage
 
 log = logging.getLogger("factory.cli")
 
@@ -53,6 +55,8 @@ db_app = typer.Typer(help="Create and update the SQLite database.", no_args_is_h
 app.add_typer(db_app, name="db")
 brand_app = typer.Typer(help="Build logo, avatar and sting files.", no_args_is_help=True)
 app.add_typer(brand_app, name="brand")
+voice_app = typer.Typer(help="Voice audition and voiceover (Kokoro).", no_args_is_help=True)
+app.add_typer(voice_app, name="voice")
 
 ConfigDirOption = Annotated[Path, typer.Option(help="Folder holding settings.yaml and channels/.")]
 
@@ -414,6 +418,57 @@ def brand_build(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
         written = build_brand_assets(channel, static_dir / "fonts", static_dir / "logo")
         for path in written:
             typer.echo(f"wrote {path.relative_to(config_dir.parent)}")
+
+
+# --- voice ----------------------------------------------------------------------------------
+
+
+@voice_app.command("audition")
+def voice_audition(
+    voices: Annotated[str, typer.Option(help="Comma-separated Kokoro voice ids.")] = ",".join(
+        voice_stage.AUDITION_VOICES
+    ),
+    text: Annotated[str | None, typer.Option(help="Text to read instead of the sample.")] = None,
+    content_id: Annotated[
+        int | None, typer.Option(help="Read this item's current script instead.")
+    ] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Render the same text with several voices into data/audition/ to compare them (OQ-7)."""
+    with _tracked_run("voice audition", config_dir) as run:
+        ctx = _context(run, config_dir)
+        if content_id is not None:
+            row = ctx.conn.execute(
+                "SELECT body_text FROM scripts WHERE content_id = ? AND is_current = 1",
+                (content_id,),
+            ).fetchone()
+            if row is None:
+                raise FactoryError(f"content #{content_id} has no script yet")
+            text = row["body_text"]
+        ids = tuple(v.strip() for v in voices.split(",") if v.strip())
+        files = voice_stage.audition(
+            ctx, KokoroTTS().synthesize, voices=ids, text=text or voice_stage.AUDITION_TEXT
+        )
+        for f in files:
+            typer.echo(_voice_line(f, config_dir.parent))
+        run.tally.processed = len(files)
+
+
+@voice_app.command("render")
+def voice_render(content_id: int, config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Render an item's current script as voice.wav with the voice set in the channel YAML."""
+    with _tracked_run("voice render", config_dir) as run:
+        ctx = _context(run, config_dir)
+        result = voice_stage.render(ctx, content_id, KokoroTTS().synthesize)
+        typer.echo(_voice_line(result, config_dir.parent))
+        run.tally.processed = 1
+
+
+def _voice_line(f: voice_stage.VoiceFile, root: Path) -> str:
+    return (
+        f"wrote {f.path.relative_to(root)}  ({f.voice_id}, {f.duration_s:.1f} s, "
+        f"{f.loudness.integrated_lufs:.1f} LUFS, peak {f.loudness.true_peak_dbtp:.1f} dBTP)"
+    )
 
 
 # --- database -------------------------------------------------------------------------------

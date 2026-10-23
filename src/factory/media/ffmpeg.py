@@ -54,6 +54,22 @@ def encode_rgb_frames(
         raise FactoryError(f"ffmpeg failed for {out_path.name}: {stderr.strip()[-500:]}")
 
 
+def run_ffmpeg(args: list[str], *, input_bytes: bytes | None = None) -> str:
+    """Run `ffmpeg <args>` (quiet, overwrite) and return its stderr, where filters print reports.
+
+    `input_bytes` is fed to stdin, for inputs given as "-i -".
+    """
+    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-y", *args]
+    try:
+        result = subprocess.run(cmd, input=input_bytes, capture_output=True, check=True)
+    except FileNotFoundError as exc:
+        raise FactoryError("ffmpeg is not installed or not on PATH") from exc
+    except subprocess.CalledProcessError as exc:
+        tail = exc.stderr.decode(errors="replace").strip()[-500:]
+        raise FactoryError(f"ffmpeg failed: {tail}") from exc
+    return result.stderr.decode(errors="replace")
+
+
 def probe(path: Path) -> dict[str, Any]:
     """Return ffprobe's JSON description (format + streams) of a media file."""
     cmd = [

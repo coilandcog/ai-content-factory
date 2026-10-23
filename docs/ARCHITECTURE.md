@@ -66,6 +66,8 @@ Helper commands:
 - `factory db init|migrate|backup`
 - `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
 - `factory flow-log --credits N`: logs Flow credits you spent.
+- `factory voice audition [--voices a,b,c] [--text ...|--content-id N]`: the same text read by several Kokoro voices into `data/audition/voice_<id>.wav`, to choose `voice.voice_id`.
+- `factory voice render <content_id>`: the current script as `voice.wav` (48 kHz, −14 LUFS) in the item's asset folder, plus an `assets` row. The generate stage (task 1.6) will call the same code.
 - `factory brand build`: rebuilds `assets_static/logo/` (logo, avatar, stings) from the channel's `display_name` and `brand.palette`.
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
 - `factory retry <content_id>`
@@ -180,7 +182,7 @@ cadence:
 
 voice:
   engine: kokoro
-  voice_id: am_michael
+  voice_id: am_michael         # chosen in task 1.4 (D-060)
   speed: 1.0
   target_wpm: 160
 
@@ -302,6 +304,7 @@ ai-content-factory/
 │   │   ├── discover.py
 │   │   ├── ideate.py
 │   │   ├── script.py
+│   │   ├── voice.py              # voice audition + voice.wav (used by generate)
 │   │   ├── generate.py
 │   │   ├── assemble.py
 │   │   ├── review.py
@@ -321,6 +324,7 @@ ai-content-factory/
 │   └── media/
 │       ├── ffmpeg.py             # thin wrappers around ffmpeg/ffprobe
 │       ├── brand.py              # logo, avatar and sting built from the channel YAML
+│       ├── audio.py              # loudness: normalise to −14 LUFS / 48 kHz, measure
 │       ├── subtitles.py          # ASS generation with word highlight
 │       ├── diagrams.py           # Pillow overlay layers
 │       ├── stills.py             # Ken Burns / parallax animation

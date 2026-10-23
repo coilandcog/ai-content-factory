@@ -86,7 +86,7 @@ There is one user, **the owner**:
 | OQ-4 | Whether the YouTube Analytics API exposes "stayed to watch" for Shorts; otherwise read it manually in Studio | Claude | ROADMAP task 2.5 |
 | OQ-5 | Claim `@coilandcog` on YouTube and TikTok; trademark search result for "Coil & Cog" | Owner | ROADMAP task 0.2 |
 | OQ-6 | Access to Google's official Trends API | Claude | Phase 3 |
-| OQ-7 | Final Kokoro narrator voice (`am_michael` vs `am_adam` vs `am_onyx`) after a listening test | Owner | ROADMAP task 1.4 |
+| OQ-7 | ~~Final Kokoro narrator voice (`am_michael` vs `am_adam` vs `am_onyx`) after a listening test~~ **Resolved 2026-10-23:** `am_michael` (D-060) | Owner | ROADMAP task 1.4 |
 | OQ-8 | Instagram/Facebook publishing API requirements | Claude | Phase 4 |
 | OQ-9 | Exact current prices of paid upgrades | Claude | When an upgrade trigger fires |
 | OQ-10 | ~~Re-read the Flow-specific terms of service for commercial use of outputs~~ **Resolved 2026-10-23:** commercial use allowed, Google claims no ownership (D-052) | Claude | ROADMAP task 0.5 |

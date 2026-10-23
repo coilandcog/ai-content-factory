@@ -71,7 +71,7 @@ cadence:
 
 voice:
   engine: kokoro
-  voice_id: am_michael         # final choice after the audition in task 1.4 (OQ-7)
+  voice_id: am_michael         # chosen by the owner after the task 1.4 audition (D-060)
   speed: 1.0
   target_wpm: 160
 

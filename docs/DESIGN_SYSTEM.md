@@ -17,7 +17,7 @@
 
 - **Tone:** calm, confident and curious. One small witty line per video. Speak directly to the viewer ("you").
 - **Banned words:** insane, mind-blowing, crazy, you won't believe, SHOCKING, and all-caps hype generally.
-- **Narrator:** AI voice, **Kokoro-82M**, male, neutral American English, warm, mid-to-low pitch, about 160 wpm. Candidate voice IDs: `am_michael` (default), `am_adam`, `am_onyx`. The final choice is made after a listening test (ROADMAP task 1.4) and must stay the same afterwards.
+- **Narrator:** AI voice, **Kokoro-82M**, male, neutral American English, warm, mid-to-low pitch, about 160 wpm. **Chosen voice: `am_michael`** (owner's pick after the task 1.4 listening test against `am_adam` and `am_onyx`, D-060). It must stay the same from now on, so viewers recognise the channel by ear.
 - **Never:** clone or imitate a real person's voice.
 - **Fallback (decision D-040):** if YouTube Partner Program review rejects the channel for inauthentic content, the owner records the Engineer's Note in their own voice.
 

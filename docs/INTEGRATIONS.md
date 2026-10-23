@@ -149,10 +149,10 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 
 | Engine | Contract |
 |---|---|
-| **Kokoro-82M** (`kokoro` + `misaki[en]`; system package `espeak-ng`) | `KPipeline(lang_code="a")`, `voice=<voice.voice_id>`, `speed=<voice.speed>` → 24 kHz audio → resampled to 48 kHz WAV `voice.wav`. License Apache 2.0 ✔ |
+| **Kokoro-82M** (`kokoro` 0.9.4 + `misaki[en]`, which bundles espeak-ng via `espeakng-loader`, so no system package is needed; spaCy model `en-core-web-sm` pinned in `pyproject.toml`, because misaki otherwise tries to install it with pip at first run) | `integrations/kokoro_tts.KokoroTTS().synthesize(text, voice_id, speed)` → `KPipeline(lang_code=voice_id[0], repo_id="hexgrad/Kokoro-82M")` → mono float32 at 24 kHz → `media/audio.normalize_to_wav` → 48 kHz 16-bit WAV. The model (~330 MB) downloads once into `~/.cache/huggingface`. PyTorch comes from the **CPU-only index** (`[tool.uv.sources]`) and uses half the logical cores (4 threads on the owner's PC: ~0.65× real time; 8 threads were 2× slower). PyTorch is imported only when speech is made. License Apache 2.0 ✔ |
 | **faster-whisper** | `WhisperModel("small.en", device="cpu", compute_type="int8")`, `transcribe(voice.wav, word_timestamps=True)`. Words are aligned to the approved script text with `difflib`, so spelling always comes from the script |
 | **sentence-transformers** | `all-MiniLM-L6-v2`, cosine similarity (a 0–1 measure of how alike two texts are in meaning) of a new script vs the last `similarity_window` scripts |
-| **FFmpeg / ffprobe** | System binary (installed). Called through `media/ffmpeg.py` with argument lists, never via the shell. Loudness filter `loudnorm=I=-14:TP=-1:LRA=11` |
+| **FFmpeg / ffprobe** | System binary (installed). Called through `media/ffmpeg.py` with argument lists, never via the shell. Voice loudness (`media/audio.py`): measure with `loudnorm` (EBU R128), then `volume` gain + `alimiter` at −1.5 dBFS on 192 kHz-upsampled audio, re-measure and correct the gain (≤3 passes, stop within 0.3 LU). Result: −14 ±0.5 LUFS, true peak ≈ −1.5 dBTP. Plain two-pass `loudnorm` (linear) stopped at −15.7 LUFS on speech, because peaks hit the −1 dBTP ceiling first |
 
 ## 10. Google Drive backup
 
