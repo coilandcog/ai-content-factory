@@ -85,7 +85,8 @@ def test_metadata_has_creative_parts_and_exact_code_parts(ctx: AppContext) -> No
     assert data["youtube"]["title"].startswith("Alternator in 40 seconds")
     lines = data["youtube"]["description"].splitlines()
     assert lines[0].startswith("See how a spinning rotor")  # summary first
-    assert lines[2] == "Sources:" and SOURCES[0] in lines[3] and SOURCES[1] in lines[4]
+    assert not any("http" in line for line in lines)  # no source links in public text (D-077)
+    assert [s["url"] for s in data["sources"]][:2] == SOURCES[:2]  # kept for fact-checking
     assert not any("AI-generated" in line for line in lines)  # no disclosure line (D-075)
     assert lines[-1] == "#HowItWorks #Engineering #Cars"
     assert data["youtube"]["contains_synthetic_media"] is True
@@ -152,7 +153,7 @@ def label_off(d: dict) -> None:
     [
         (synthetic_off, "contains_synthetic_media must be true"),
         (long_title, "title has 71 characters"),
-        (one_source, "lists 1 source(s)"),
+        (one_source, "records 1 source(s)"),
         (label_off, "ai_generated_label must be true"),
     ],
 )
@@ -191,7 +192,7 @@ def test_approve_needs_the_checklist(ctx: AppContext) -> None:
 def test_approve_refuses_incomplete_metadata(ctx: AppContext) -> None:
     content_id = assembled_item(ctx)
     data = metadata.load(ctx, content_id)
-    data["youtube"]["description"] = "no sources"
+    data["sources"] = []
     metadata.write(ctx, content_id, data)
 
     with pytest.raises(FactoryError, match="metadata.json is not complete"):

@@ -301,7 +301,7 @@ data/assets/<channel_slug>/<content_id 6 digits>/
 └── metadata.json            # see below
 ```
 
-**`metadata.json`** (task 1.11, D-071): `youtube` {`title` (≤70 chars), `description` (summary, "Sources:" list of ≥2 checked sources, music attribution if required, 3 hashtags), `hashtags`, `category_id`, `contains_synthetic_media: true`, `made_for_kids: false`, `render`}; `tiktok` {`caption` (hook + 3–5 hashtags), `hashtags`, `ai_generated_label: true`, `add_tiktok_sound: true`, `render`}; `sources`; `music`; `cover`; `generated_by` {`model`, `prompt_version`}. Gemini writes only title, summary, caption and hashtags; code writes the rest.
+**`metadata.json`** (task 1.11, D-071): `youtube` {`title` (≤70 chars), `description` (summary, music attribution if required, 3 hashtags; no source links, D-077), `hashtags`, `category_id`, `contains_synthetic_media: true`, `made_for_kids: false`, `render`}; `tiktok` {`caption` (hook + 3–5 hashtags), `hashtags`, `ai_generated_label: true`, `add_tiktok_sound: true`, `render`}; `sources`; `music`; `cover`; `generated_by` {`model`, `prompt_version`}. Gemini writes only title, summary, caption and hashtags; code writes the rest.
 
 **Owner's Flow inbox naming:** save each downloaded clip as `data/inbox/flow/<content_id>/shot_NN.mp4`, matching the shot numbers in `flow_sheet.md`. The generate stage copies the clips into `clips/`, records them in `assets`, and only then moves the item to `generated`.
 

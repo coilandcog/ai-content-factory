@@ -245,14 +245,14 @@ def similarity(score: float | None, threshold: float) -> tuple[bool | None, str]
 
 
 def metadata(problems: list[str] | None, error: str | None) -> tuple[bool, str]:
-    """metadata.json exists and is complete: 2+ sources, AI flags, title, hashtags."""
+    """metadata.json exists and is complete: title, hashtags, 2+ recorded sources, AI flags."""
     if problems is None:
         return False, "metadata.json missing" + (
             f" (could not be created: {error})" if error else ""
         )
     if problems:
         return False, "; ".join(problems)
-    return True, "title, description with sources, hashtags, AI flags complete"
+    return True, "title, description, hashtags, sources, AI flags complete"
 
 
 def preview_size(preview: Path) -> tuple[bool, str]:

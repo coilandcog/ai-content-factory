@@ -64,7 +64,7 @@ Our safeguards, all of which apply to every video:
 - [ ] `beat_order` and `hook_type` differ from the previous video.
 - [ ] Similarity to the last 30 scripts is below 0.80.
 - [ ] At least 2 of our own diagram moments (Short) or at least 4 (Deep Dive).
-- [ ] At least 2 sources stored; Deep Dive descriptions list them.
+- [ ] At least 2 sources stored (kept for fact-checking; not listed in descriptions, D-077).
 - [ ] The topic isn't on the blocklist (`CONTENT_STRATEGY.md` §3).
 - [ ] No real people, faces, brand logos or identifiable real locations.
 - [ ] No content copied from other creators. Trend signals are used for **topic inspiration only**; we never reuse their footage, scripts, voice or music.

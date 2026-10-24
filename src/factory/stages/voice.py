@@ -32,8 +32,8 @@ AUDITION_TEXT = (
     "Why doesn't your car battery go flat while you drive? Because a belt from the engine spins "
     "a small generator called the alternator. Inside, a spinning magnet sweeps past copper coils "
     "and pushes current through them. A set of diodes turns that current into one-way flow the "
-    "battery can store. As an engineer, what surprises me is how much power such a small part "
-    "makes from a rubber belt."
+    "battery can store. Here's the surprising part: how much power such a small part makes "
+    "from a rubber belt."
 )
 
 

@@ -66,7 +66,7 @@ The narrator speaks at about 142 words per minute (`voice.target_wpm`, measured 
 
 **Deep Dive (~120 s):** hook (0–3 s) → setup (3–15 s) → 4–6 explanation beats → a "most people don't know" fact → Engineer's Note (10–15 s) → recap in one sentence → loop line.
 
-**Engineer's Note** (required in every script): one insight, opinion or real-world anecdote from the owner, for example "As an engineer, what surprises me is…". The AI drafts a suggestion; the owner edits or replaces it at Gate 1. This is the main protection against the inauthentic-content policy.
+**Engineer's Note** (required in every script): one insight or real-world observation from the owner, said in the narrator's normal voice, for example "Here's the surprising part: a few amps in the rotor control over 100 amps of output." No "As an engineer" and no first-person claims of expertise; it should sound like a curious friend, not a lecture (D-077). The AI drafts a suggestion; the owner edits or replaces it at Gate 1. This is the main protection against the inauthentic-content policy.
 
 ## 6. Hook formulas (`hook_type` values)
 
@@ -130,7 +130,7 @@ The owner can override any label. The ideation prompt receives the top *patterns
 ### YouTube
 - Shorts and Deep Dives are uploaded as Shorts (9:16, 3 minutes or less). Episodes are 16:9 and longer than 3 minutes.
 - Title: 70 characters or fewer, with the object name early; no clickbait that the video doesn't deliver.
-- Description: 1–2 sentences of summary, a "Sources:" list (at least 2), the music credit if the track needs one, then 3 hashtags. No AI disclosure line in the text (D-075): the platform AI labels disclose it.
+- Description: 1–2 sentences of summary, the music credit if the track needs one, then 3 hashtags. No source links (D-077): the checked sources stay in the database, at Gate 1 and in `metadata.json` for fact-checking. No AI disclosure line in the text (D-075): the platform AI labels disclose it.
 - `containsSyntheticMedia = true` and `selfDeclaredMadeForKids = false`. Category: Science & Technology (ID 28).
 - Music: YouTube Audio Library only.
 

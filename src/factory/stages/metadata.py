@@ -1,9 +1,10 @@
 """metadata.json: titles, captions, description, hashtags and platform flags (ROADMAP 1.11, D-071).
 
 Gemini writes only the creative parts (title, summary, caption, hashtags) under schema rules.
-Everything that must be exactly right is assembled by code: the sources list, the music
-attribution and the AI platform flags (CONTENT_STRATEGY.md §4 and §11). The description has no
-AI disclosure line; the platform AI labels do that job (D-075).
+Everything that must be exactly right is assembled by code: the music attribution and the AI
+platform flags (CONTENT_STRATEGY.md §4 and §11). The description has no AI disclosure line (the
+platform AI labels do that job, D-075) and no source links (D-077); the checked sources stay in
+metadata.json and the database for fact-checking.
 """
 
 from __future__ import annotations
@@ -121,8 +122,7 @@ def build(
 ) -> dict[str, Any]:
     """The full metadata: Gemini's creative parts plus everything code must get exactly right."""
     channel = ctx.channel
-    description = [draft.youtube_summary, "", "Sources:"]
-    description += [f"- {s['title'] or s['publisher']}: {s['url']}" for s in sources]
+    description = [draft.youtube_summary]
     if music is not None and music["attribution_text"]:
         description += ["", music["attribution_text"]]
     description += ["", " ".join(draft.youtube_hashtags)]
@@ -191,10 +191,9 @@ def validate(data: dict[str, Any]) -> list[str]:
         return [f"missing field: {exc}"]
     except ValidationError as exc:
         problems += [f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors()]
-    description = data["youtube"]["description"]
-    listed = [s for s in data.get("sources", []) if s.get("url") and s["url"] in description]
-    if len(listed) < MIN_SOURCES:
-        problems.append(f"the description lists {len(listed)} source(s); needs {MIN_SOURCES}")
+    recorded = [s for s in data.get("sources", []) if s.get("url")]
+    if len(recorded) < MIN_SOURCES:  # kept for fact-checking, not shown in the description
+        problems.append(f"metadata.json records {len(recorded)} source(s); needs {MIN_SOURCES}")
     if data["youtube"].get("contains_synthetic_media") is not True:
         problems.append("contains_synthetic_media must be true")
     if data["tiktok"].get("ai_generated_label") is not True:
