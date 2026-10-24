@@ -74,11 +74,10 @@ Our safeguards, all of which apply to every video:
 
 | Platform | Rule (official) | Our implementation |
 |---|---|---|
-| YouTube | Disclosure is required for AI content that *"seems realistic"* ([Help](https://support.google.com/youtube/answer/14328491)) | **Always** `status.containsSyntheticMedia=true` (API field ✔), plus the description line |
+| YouTube | Disclosure is required for AI content that *"seems realistic"* ([Help](https://support.google.com/youtube/answer/14328491)) | **Always** `status.containsSyntheticMedia=true` (API field ✔); in Phase 1 the owner switches on "altered or synthetic content" when uploading |
 | TikTok | *"We also require creators to label all AI-generated content that contains realistic images, audio, and video"* ([Support](https://support.tiktok.com/en/using-tiktok/creating-videos/ai-generated-content)) | **Always** switch on the AI-generated label when posting; Gate 2 checklist item |
-| All | Transparency | Description line: "Visuals AI-generated; script researched and reviewed by a human engineer." |
 
-We disclose on **every** video, even where it may not be strictly required, because it costs nothing and removes all ambiguity.
+We switch on the platform AI label on **every** video, even where it may not be strictly required, because it costs nothing and removes all ambiguity. Since D-075 there is no extra disclosure line in the description; the platform labels are the disclosure. The human contribution shows in the video itself (the spoken Engineer's Note).
 
 ## 5. Copyright and licensing rules
 

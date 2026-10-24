@@ -234,14 +234,14 @@ def variety(
 
 
 def metadata(problems: list[str] | None, error: str | None) -> tuple[bool, str]:
-    """metadata.json exists and is complete: disclosure line, 2+ sources, title, hashtags."""
+    """metadata.json exists and is complete: 2+ sources, AI flags, title, hashtags."""
     if problems is None:
         return False, "metadata.json missing" + (
             f" (could not be created: {error})" if error else ""
         )
     if problems:
         return False, "; ".join(problems)
-    return True, "title, description with sources and disclosure line, hashtags complete"
+    return True, "title, description with sources, hashtags, AI flags complete"
 
 
 def preview_size(preview: Path) -> tuple[bool, str]:

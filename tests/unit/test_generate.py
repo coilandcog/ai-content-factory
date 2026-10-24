@@ -67,7 +67,7 @@ def ctx(tmp_path: Path) -> AppContext:
 
 def approved_item(ctx: AppContext) -> int:
     content_id = add_content(
-        ctx.conn, ctx.channel, object_name="alternator", fmt="short", pillar="machines"
+        ctx.conn, ctx.channel, object_name="alternator", fmt="short", pillar="vehicles"
     )
     with ctx.conn:
         ctx.conn.execute(
@@ -109,10 +109,11 @@ def test_approved_script_gets_flow_sheet_inbox_and_voice(ctx: AppContext) -> Non
     assert "4 × Veo 3.1 - Fast, **80 credits**" in sheet
     assert "you have 50 of 50 left today" in sheet
     assert "make 2 clip(s) today and the rest on the next day(s)" in sheet
-    assert "The alternator rests on the pedestal" in sheet
+    assert "close-up of the alternator rotating slowly on a matte dark pedestal" in sheet
     assert "Save as: `shot_01.mp4`" in sheet and "Save as: `shot_03.mp4`" not in sheet  # diagram
-    assert "glowing cyan energy (#00D1FF) flows through the stator coils" in sheet
-    assert "9:16 vertical frame" in sheet and "No text, no logos" in sheet
+    assert "glowing cyan energy surges through the stator coils" in sheet
+    assert "of the alternator, vertical 9:16, with three smooth camera angles" in sheet
+    assert "No logos, no text" in sheet and "no extra or distorted components" in sheet
     assert "\\\\wsl$\\" in sheet and "\\data\\inbox\\flow\\000001" in sheet
     prompts = json.loads((folder / "flow_prompts.json").read_text())
     assert "pedestal" in prompts["1"] and "pedestal" not in prompts["5"]  # in situ: no studio set
@@ -121,7 +122,7 @@ def test_approved_script_gets_flow_sheet_inbox_and_voice(ctx: AppContext) -> Non
     assert (folder / "voice.wav").is_file()
     assert len(assets(ctx, "flow_sheet")) == 1 and len(assets(ctx, "voiceover")) == 1
     assert "You don't have to make them" in sheet and "Save as: `still_06.png`" in sheet
-    assert "Still frame of the alternator: Hero view" in prompts["6"]
+    assert "product image of the alternator, vertical 9:16.\nHero view" in prompts["6"]
 
 
 def test_script_without_diagram_labels_is_refused_before_any_flow_work(ctx: AppContext) -> None:
@@ -173,7 +174,7 @@ def test_complete_clip_set_is_collected(ctx: AppContext) -> None:
     )
     assert (first["width"], first["height"]) == (108, 192)
     assert first["path"].endswith(f"{content_id:06d}/clips/shot_01.mp4")
-    assert "rests on the pedestal" in first["prompt"]
+    assert "on a matte dark pedestal" in first["prompt"]
     assert (inbox / "shot_01.mp4").is_file()  # the original download stays in the inbox
     folder = ctx.root / "data" / "assets" / "coil-and-cog" / f"{content_id:06d}"
     [still] = assets(ctx, "still")

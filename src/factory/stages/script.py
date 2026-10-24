@@ -30,7 +30,7 @@ log = logging.getLogger("factory.script")
 
 HOOK_TYPES = (
     "why_question",
-    "hidden_everyday",
+    "hidden_inside",
     "surprising_number",
     "myth_bust",
     "what_if",

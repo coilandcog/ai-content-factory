@@ -9,52 +9,49 @@ timezone: Europe/Berlin
 
 niche:
   name: "How Machines Work"
-  promise: "See what moves inside the things you use every day."
-  audience: "Curious viewers 18-44 in US/UK/DE; secondary: car & DIY hobbyists"
+  promise: "See what moves inside the machines that move the world."
+  audience: "Curious viewers 18-44 in US/UK/DE; secondary: car, aviation and engineering enthusiasts"
   pillars:
-    - id: machines
-      description: "Cars, household and industrial machines"
-    - id: everyday_things
-      description: "Ordinary objects with hidden mechanisms"
+    - id: vehicles
+      description: "Cars, trucks, motorbikes and trains"
+    - id: air_and_sea
+      description: "Aircraft, helicopters, ships, submarines and rockets"
+    - id: industry_and_energy
+      description: "Heavy machines, cranes, factories and power generation"
   seed_topics:                 # CONTENT_STRATEGY.md §3
-    # machines
+    # vehicles
     - alternator
     - turbocharger
     - cvt gearbox
     - differential
-    - clutch
-    - starter motor
-    - spark plug
-    - fuel injector
-    - disc brake               # how it works, not how to repair it
-    - catalytic converter      # how it works, not removal
-    - electric motor
-    - transformer
+    - disc brakes and abs     # how it works, not how to repair it
+    - electric car motor
+    - diesel-electric locomotive
+    - train pantograph
+    - maglev train
+    # air_and_sea
     - jet engine
+    - helicopter rotor
+    - aircraft landing gear
+    - variable-pitch propeller
+    - ship diesel engine
+    - azimuth thruster
+    - ship stabilizers
+    - submarine ballast tanks
+    - rocket engine
+    # industry_and_energy
+    - tunnel boring machine
+    - excavator hydraulics
+    - tower crane
     - hydraulic press
+    - wind turbine
+    - hydroelectric turbine
+    - steam turbine
+    - transformer
     - elevator safety brake
-    - escalator
-    - wind-turbine gearbox
-    - heat pump
-    - refrigerator compressor
-    - hard drive
-    # everyday_things
-    - zipper
-    - ballpoint pen
-    - pin-tumbler lock         # mechanism only, never how to pick it
-    - microwave magnetron
-    - induction cooktop
-    - toilet flush valve
-    - smoke detector
-    - quartz watch
-    - vacuum-cleaner cyclone
-    - washing-machine drum
-    - inkjet printer
-    - mechanical keyboard switch
-    - retractable tape measure
-    - umbrella frame
   blocklist:
     - "weapons or firearm mechanisms"
+    - "military aircraft, warships and weapon systems"
     - "step-by-step dangerous repairs (mains electricity, airbags, fuel systems, brakes)"
     - "defeating safety or emissions devices"
     - "real brand logos or endorsements"
@@ -78,7 +75,6 @@ voice:
 brand:
   palette: {bg: "#0E1116", electric: "#00D1FF", heat: "#FF8A00", fluid: "#3A7BFF", text: "#F5F7FA"}
   fonts: {subtitle: "Montserrat-ExtraBold", label: "Inter-SemiBold"}
-  disclosure_line: "Visuals AI-generated; script researched and reviewed by a human engineer."
 
 platforms:
   youtube: {enabled: true, handle: "@coilandcog", publish_mode: api_scheduled, category_id: 28, ai_disclosure: true}

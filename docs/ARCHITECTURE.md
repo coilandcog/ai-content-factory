@@ -59,7 +59,7 @@ flowchart LR
 | **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams | → `awaiting_clips` (sheet + voice + subtitles issued) → `generated` (all clips in the inbox, then animated stills and diagram cards made) | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
 | **assemble** | `factory assemble [--force]` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `preview_720p.mp4`, `music.txt`, `cover.jpg`, `qa_report.json`; `metadata.json` (task 1.11) | QA pass → `assembled`; QA failure → stays `generated` with the reasons in `status_reason` (renders are kept, so a re-run only re-checks) | FFmpeg only (D-068) | Not needed |
 | **review (Gate 2)** | `factory review --gate final` | `assembled` | `reviews` row | → `approved` / `rejected` / back to `generated` | Terminal, later Telegram | — |
-| **publish** | `factory publish` | `approved` | `posts` rows | → `scheduled` → `published` | YouTube Data API (scheduled private → public); TikTok Content Posting API (inbox draft) | Not needed |
+| **publish** | `factory publish` (Phase 1: `factory publish --manual`, D-072) | `approved` | `posts` rows | → `scheduled` → `published`; a manual post goes `approved` → `published` | Phase 1: you upload by hand, the factory records it. Phase 2: YouTube Data API (scheduled private → public); TikTok Content Posting API (inbox draft) | Not needed |
 | **learn** | `factory learn` | `published` posts | `metrics`, `performance_labels`, weekly report | → `analyzed` (after 28-day metrics) | YouTube Analytics API; TikTok Display API; weekly TikTok CSV | Not needed |
 
 Helper commands:
@@ -71,6 +71,7 @@ Helper commands:
 - `factory voice preview <content_id>`: `subs_preview.mp4` (540×960, voice + burned-in subtitles) to check the subtitles on a phone.
 - `factory music add <file> --title ... [--artist ... --attribution ... --license-url ... --mood ...]` / `factory music list`: the YouTube Audio Library tracks used in YouTube renders (copied into `assets_static/music/youtube_audio_library/`, recorded in `music_tracks`, picked least-used first).
 - `factory brand build`: rebuilds `assets_static/logo/` (logo, avatar, stings) from the channel's `display_name` and `brand.palette`.
+- `factory publish --manual --id N`: prints the upload kit (render paths, YouTube title and description, TikTok caption, the AI-label steps). `factory publish --manual --id N --platform youtube|tiktok --url <link> --ai-label-on` records the live post in `posts`; the first one moves the item to `published` (D-072).
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
 - `factory retry <content_id>`
 - `factory status [<content_id>]`
@@ -81,7 +82,7 @@ Helper commands:
 | Gate | When | What the owner sees | Buttons |
 |---|---|---|---|
 | **Gate 1: Script** | Before any Flow credits are spent | Title, hook, full script, Engineer's Note draft, shot list, sources, score | Approve / Reject (with reason) / Redo |
-| **Gate 2: Final** | After assembly and automated QA | 720p preview MP4, cover, title, captions, hashtags, disclosure checklist | Approve / Reject (with reason) / Redo |
+| **Gate 2: Final** | After assembly and automated QA | 720p preview MP4, cover, title, captions, hashtags, checklist (incl. the platform AI labels) | Approve / Reject (with reason) / Redo |
 
 - Reject reasons are stored in `reviews.reason` and fed to the learn stage.
 - **Gate 1 in the terminal (task 1.5):** `factory review --gate script` walks through every `scripted` item: it shows the script, then asks approve / reject / redo / skip / quit. **Approve** opens the Engineer's Note in `$EDITOR` (pre-filled with the AI draft); an unchanged draft needs an explicit "keep it" confirmation. The note replaces the draft inside `scripts.body_text`, word count and duration are recalculated, and a word-range miss is a warning, not a block. **Reject** and **redo** need a reason. **Redo** immediately writes the next script version with Gemini (the feedback and the previous narration go into the prompt) and shows it for review; the previous version stays as history, and if generation fails it stays current. Flags (`--id N --decision approve|reject|redo --reason ... --note ...|--keep-note`) do the same without the menu; the Telegram bot will call the same functions (D-061).
@@ -165,16 +166,19 @@ timezone: Europe/Berlin
 
 niche:
   name: "How Machines Work"
-  promise: "See what moves inside the things you use every day."
-  audience: "Curious viewers 18-44 in US/UK/DE; secondary: car & DIY hobbyists"
+  promise: "See what moves inside the machines that move the world."
+  audience: "Curious viewers 18-44 in US/UK/DE; secondary: car, aviation and engineering enthusiasts"
   pillars:
-    - id: machines
-      description: "Cars, household and industrial machines"
-    - id: everyday_things
-      description: "Ordinary objects with hidden mechanisms"
-  seed_topics: [alternator, turbocharger, cvt gearbox, zipper, microwave magnetron]  # full list in CONTENT_STRATEGY.md
+    - id: vehicles
+      description: "Cars, trucks, motorbikes and trains"
+    - id: air_and_sea
+      description: "Aircraft, helicopters, ships, submarines and rockets"
+    - id: industry_and_energy
+      description: "Heavy machines, cranes, factories and power generation"
+  seed_topics: [alternator, turbocharger, jet engine, ship diesel engine, tunnel boring machine]  # full list in CONTENT_STRATEGY.md
   blocklist:
     - "weapons or firearm mechanisms"
+    - "military aircraft, warships and weapon systems"
     - "step-by-step dangerous repairs (mains electricity, airbags, fuel systems, brakes)"
     - "defeating safety or emissions devices"
     - "real brand logos or endorsements"
@@ -198,7 +202,6 @@ voice:
 brand:
   palette: {bg: "#0E1116", electric: "#00D1FF", heat: "#FF8A00", fluid: "#3A7BFF", text: "#F5F7FA"}
   fonts: {subtitle: "Montserrat-ExtraBold", label: "Inter-SemiBold"}
-  disclosure_line: "Visuals AI-generated; script researched and reviewed by a human engineer."
 
 platforms:
   youtube: {enabled: true, handle: "@coilandcog", publish_mode: api_scheduled, category_id: 28, ai_disclosure: true}
@@ -245,6 +248,7 @@ stateDiagram-v2
     assembled --> generated : Gate 2 redo
     assembled --> rejected : Gate 2 reject
     approved --> scheduled : publish
+    approved --> published : manual post recorded
     scheduled --> published : publish time reached / TikTok posted
     published --> analyzed : 28-day metrics collected
     analyzed --> [*]

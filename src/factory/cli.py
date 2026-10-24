@@ -45,6 +45,7 @@ from factory.media.brand import build_brand_assets
 from factory.stages import assemble as assemble_stage
 from factory.stages import generate as generate_stage
 from factory.stages import metadata as metadata_stage
+from factory.stages import publish as publish_stage
 from factory.stages import review as review_stage
 from factory.stages import script as script_stage
 from factory.stages import voice as voice_stage
@@ -79,7 +80,7 @@ STAGES: dict[str, tuple[str, str]] = {
     "generate": ("Build the Flow prompt sheet, voiceover, subtitles and stills.", "1.6"),
     "assemble": ("Edit clips, voice and subtitles into YouTube and TikTok renders.", "1.9"),
     "review": ("Gate 1 (script) and Gate 2 (final) human approval.", "1.5"),
-    "publish": ("Schedule approved videos on YouTube and send TikTok drafts.", "1.12"),
+    "publish": ("Publish approved videos (--manual: record your own uploads).", "1.12"),
     "learn": ("Collect analytics and label winners and losers.", "2.5"),
 }
 
@@ -383,7 +384,7 @@ def _edit_metadata(ctx: AppContext, content_id: int) -> None:
     except json.JSONDecodeError as exc:
         typer.echo(f"Not saved: the file is not valid JSON ({exc}).", err=True)
         return
-    problems = metadata_stage.validate(data, ctx.channel.brand.disclosure_line)
+    problems = metadata_stage.validate(data)
     if problems:
         typer.echo("Not saved: " + "; ".join(problems), err=True)
         return
@@ -479,12 +480,50 @@ def assemble(
         )
 
 
+def publish(
+    manual: Annotated[
+        bool, typer.Option(help="You upload by hand; the factory prints the kit and records it.")
+    ] = False,
+    content_id: Annotated[int | None, typer.Option("--id", help="The approved item.")] = None,
+    platform: Annotated[
+        str | None, typer.Option(help="youtube | tiktok: record the post you made there.")
+    ] = None,
+    url: Annotated[str | None, typer.Option(help="Link to the live video.")] = None,
+    ai_label_on: Annotated[
+        bool, typer.Option(help="I switched on the AI label on that platform.")
+    ] = False,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Without --platform: print the upload kit. With --platform and --url: record the live post
+    (the first one moves the item to `published`). ROADMAP 1.12, D-072."""
+    with _tracked_run("publish", config_dir) as run:
+        if not manual:
+            raise FactoryError("only `--manual` is built yet (API publishing: ROADMAP task 2.3)")
+        if content_id is None:
+            raise FactoryError("--manual needs --id (approved items: `factory status`)")
+        ctx = _context(run, config_dir)
+        if platform is None:
+            typer.echo(publish_stage.upload_kit(ctx, content_id))
+            return
+        if url is None:
+            raise FactoryError("--platform needs --url (the link to the live video)")
+        post = publish_stage.record_manual_post(
+            ctx, content_id, platform, url, ai_label_on=ai_label_on
+        )
+        run.tally.processed = int(post.created)
+        if post.created:
+            typer.echo(f"#{content_id} recorded on {platform}: {post.url} ({post.content_status})")
+        else:
+            typer.echo(f"#{content_id} on {platform} was already recorded: {post.url}")
+
+
 # Stages that are built; the rest stay stubs. Registered in pipeline order for --help.
 IMPLEMENTED: dict[str, Callable[..., None]] = {
     "script": script,
     "generate": generate,
     "assemble": assemble,
     "review": review,
+    "publish": publish,
 }
 
 for _name, (_help, _task) in STAGES.items():
@@ -504,7 +543,7 @@ def _context(run: _Run, config_dir: Path) -> AppContext:
 def new(
     object_name: Annotated[str, typer.Option("--object", help="What the video explains.")],
     fmt: Annotated[str, typer.Option("--format", help="short | deep_dive (enabled formats).")],
-    pillar: Annotated[str, typer.Option(help="One of the channel's pillars, e.g. machines.")],
+    pillar: Annotated[str, typer.Option(help="One of the channel's pillars, e.g. vehicles.")],
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
     """Create a content item by hand, with status 'idea' (ROADMAP 1.1)."""

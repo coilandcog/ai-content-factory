@@ -23,7 +23,7 @@ def test_help_lists_every_stage() -> None:
 def test_stub_names_its_roadmap_task_and_fails(config_dir: Path) -> None:
     runner.invoke(app, ["db", "init", "--config-dir", str(config_dir)])
 
-    result = runner.invoke(app, ["publish", "--config-dir", str(config_dir)])
+    result = runner.invoke(app, ["learn", "--config-dir", str(config_dir)])
 
     assert result.exit_code == 1
-    assert "ROADMAP task 1.12" in result.output
+    assert "ROADMAP task 2.5" in result.output

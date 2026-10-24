@@ -22,7 +22,7 @@ TRANSITIONS: dict[str, frozenset[str]] = {
     "awaiting_clips": frozenset({"generated"}),
     "generated": frozenset({"assembled"}),
     "assembled": frozenset({"approved", "generated", "rejected"}),  # generated = Gate 2 redo
-    "approved": frozenset({"scheduled"}),
+    "approved": frozenset({"scheduled", "published"}),  # published = manual post (D-072)
     "scheduled": frozenset({"published"}),
     "published": frozenset({"analyzed"}),
     "analyzed": frozenset(),
@@ -145,6 +145,25 @@ def upsert_channel(conn: sqlite3.Connection, channel: ChannelConfig) -> int:
             RETURNING id
             """,
             (channel.slug, channel.display_name, channel.niche.name, channel.status),
+        ).fetchall()
+    return rows[0]["id"]
+
+
+def upsert_platform_account(
+    conn: sqlite3.Connection, channel_id: int, platform: str, handle: str, publish_mode: str
+) -> int:
+    """Insert or update a channel's account row on one platform (from the YAML); return its id."""
+    with conn:
+        rows = conn.execute(
+            """
+            INSERT INTO platform_accounts (channel_id, platform, handle, publish_mode)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (channel_id, platform) DO UPDATE SET
+                handle = excluded.handle,
+                publish_mode = excluded.publish_mode
+            RETURNING id
+            """,
+            (channel_id, platform, handle, publish_mode),
         ).fetchall()
     return rows[0]["id"]
 

@@ -157,7 +157,6 @@ class Fonts(StrictModel):
 class Brand(StrictModel):
     palette: Palette
     fonts: Fonts
-    disclosure_line: Text
 
 
 # ai_disclosure only accepts true: we always label AI content (D-039).

@@ -62,6 +62,8 @@ The YAML is the source of truth for settings. This row exists so foreign keys wo
 | enabled | INTEGER | 0/1 |
 | UNIQUE(channel_id, platform) | | |
 
+Rows are created or updated from the channel YAML (`platforms.*`) when the first post on that platform is recorded (`db.upsert_platform_account`).
+
 ### `trend_signals`
 | Column | Type | Notes |
 |---|---|---|
@@ -82,7 +84,7 @@ The YAML is the source of truth for settings. This row exists so foreign keys wo
 | id | INTEGER PK | Also the asset folder name, zero-padded to 6 digits (`000042`) |
 | channel_id | INTEGER FK | |
 | format | TEXT | `short` \| `deep_dive` \| `episode` |
-| pillar | TEXT | `machines` \| `everyday_things` (from the YAML pillars) |
+| pillar | TEXT | One of the channel YAML's pillar ids, e.g. `vehicles` \| `air_and_sea` \| `industry_and_energy` (items made before D-073 keep `machines` / `everyday_things`) |
 | object_name | TEXT | e.g. `alternator` |
 | working_title | TEXT | |
 | angle | TEXT | One sentence: what's new or interesting |
@@ -198,6 +200,8 @@ At least 2 sources are required before Gate 1.
 | dry_run | INTEGER | 1 if created in DRY_RUN mode (never real) |
 | UNIQUE(content_id, platform) | | |
 
+A manual post (`factory publish --manual`, D-072) is stored as `status = published`, `privacy = public`, `dry_run = 0` (the owner posted it, so it is real even while `DRY_RUN=true`), with the video id taken from the link. YouTube rows keep the title and full description; TikTok rows keep the caption (`title` is empty).
+
 ### `metrics`
 | Column | Type | Notes |
 |---|---|---|
@@ -259,7 +263,7 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | `awaiting_clips` | Flow sheet issued; waiting for the owner's clips in `data/inbox/flow/<id>/` | generate | `generated` |
 | `generated` | Clips, voice, subtitles, stills and diagrams all present. Built up task by task: since task 1.6 it means every Flow clip (checked: readable, portrait, ≥3 s) plus `voice.wav`; subtitles (1.7) and stills/diagrams (1.8) join when built | generate | `assembled` |
 | `assembled` | Renders done and automated QA passed | assemble | `approved`, `generated` (redo), `rejected` |
-| `approved` | Owner approved the final video | review | `scheduled` |
+| `approved` | Owner approved the final video | review | `scheduled`, `published` (manual post, D-072) |
 | `scheduled` | YouTube scheduled and/or TikTok draft sent | publish | `published` |
 | `published` | Live on at least one platform | publish | `analyzed` |
 | `analyzed` | 28-day metrics stored and labeled | learn | (end) |
@@ -297,7 +301,7 @@ data/assets/<channel_slug>/<content_id 6 digits>/
 └── metadata.json            # see below
 ```
 
-**`metadata.json`** (task 1.11, D-071): `youtube` {`title` (≤70 chars), `description` (summary, "Sources:" list of ≥2 checked sources, the YAML disclosure line, music attribution if required, 3 hashtags), `hashtags`, `category_id`, `contains_synthetic_media: true`, `made_for_kids: false`, `render`}; `tiktok` {`caption` (hook + 3–5 hashtags), `hashtags`, `ai_generated_label: true`, `add_tiktok_sound: true`, `render`}; `sources`; `disclosure_line`; `music`; `cover`; `generated_by` {`model`, `prompt_version`}. Gemini writes only title, summary, caption and hashtags; code writes the rest.
+**`metadata.json`** (task 1.11, D-071): `youtube` {`title` (≤70 chars), `description` (summary, "Sources:" list of ≥2 checked sources, music attribution if required, 3 hashtags), `hashtags`, `category_id`, `contains_synthetic_media: true`, `made_for_kids: false`, `render`}; `tiktok` {`caption` (hook + 3–5 hashtags), `hashtags`, `ai_generated_label: true`, `add_tiktok_sound: true`, `render`}; `sources`; `music`; `cover`; `generated_by` {`model`, `prompt_version`}. Gemini writes only title, summary, caption and hashtags; code writes the rest.
 
 **Owner's Flow inbox naming:** save each downloaded clip as `data/inbox/flow/<content_id>/shot_NN.mp4`, matching the shot numbers in `flow_sheet.md`. The generate stage copies the clips into `clips/`, records them in `assets`, and only then moves the item to `generated`.
 

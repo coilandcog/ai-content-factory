@@ -37,7 +37,7 @@
 | generate | Flow sheet lists every `flow_clip` shot; inbox ingest detects missing or extra shots; voice duration ≈ estimate ±20% | Paste one prompt into Flow; drop the clip; status → `generated` |
 | assemble | ffprobe checks: resolution, fps, duration bounds, audio present, loudness −14 ±1 LUFS; TikTok render has no music track | Watch both renders on the phone |
 | review | Approve / reject / redo transitions; reason is required for reject and redo | Telegram buttons on a dry-run item |
-| publish | Builds the correct YouTube body (`containsSyntheticMedia=true`, `publishAt`, `selfDeclaredMadeForKids=false`); DRY_RUN returns a `dryrun-` ID | Unlisted real upload; TikTok draft appears in the inbox |
+| publish | Manual (1.12): link parsing, refusals (not approved, AI label not confirmed, wrong or conflicting link), status moves, second platform, re-run with the same link. API (2.3+): builds the correct YouTube body (`containsSyntheticMedia=true`, `publishAt`, `selfDeclaredMadeForKids=false`); DRY_RUN returns a `dryrun-` ID | 1.12: find the live video from a second browser. 2.2+: unlisted real upload; TikTok draft appears in the inbox |
 | learn | Label rules (winner/average/loser) from sample numbers; CSV import parser | One real Analytics pull for an unlisted video |
 
 ## 4. Quality checklist (every video must pass)
@@ -51,7 +51,7 @@
 - [x] `subs.ass` exists, its events run from the first to the last spoken word, at most 4 words per line and 2 lines.
 - [x] No subtitle or label outside the safe zones (`DESIGN_SYSTEM.md` §6): subtitle lines ≤ 760 px with the real font and the baseline ≥ 480 px above the bottom; diagram cards inside x 90–920, y 220–1100.
 - [x] At least 2 (Short) or 4 (Deep Dive) diagram files.
-- [x] `metadata.json` exists and is complete: the description contains the disclosure line and at least 2 sources (every format), the title is ≤ 70 characters, 3 YouTube / 3–5 TikTok hashtags, AI flags on. If it couldn't be created (e.g. Gemini unavailable), the failure says why.
+- [x] `metadata.json` exists and is complete: the description lists at least 2 sources (every format), the title is ≤ 70 characters, 3 YouTube / 3–5 TikTok hashtags, AI flags on. If it couldn't be created (e.g. Gemini unavailable), the failure says why.
 - [x] YouTube render's music track is from `music_tracks` with `source = youtube_audio_library`; TikTok render has **no** music (silent under the logo sting, where nothing else plays).
 - [x] `beat_order` and `hook_type` differ from the previous content. Similarity below 0.80: *"not checked yet" until task 1.13.*
 - [x] Preview file is under 45 MB.

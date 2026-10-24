@@ -129,7 +129,7 @@ def _qa_inputs(
 def _metadata_problems(ctx: AppContext, content_id: int) -> list[str] | None:
     if not (asset_dir(ctx, content_id) / metadata.METADATA_FILE).is_file():
         return None
-    return metadata.validate(metadata.load(ctx, content_id), ctx.channel.brand.disclosure_line)
+    return metadata.validate(metadata.load(ctx, content_id))
 
 
 def _pick_cover(ctx: AppContext, content_id: int, folder: Path) -> Path:

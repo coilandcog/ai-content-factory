@@ -33,14 +33,14 @@ def test_add_content_stores_an_idea(conn: sqlite3.Connection) -> None:
         load_channel("coil-and-cog"),
         object_name="  CVT  Gearbox ",
         fmt="short",
-        pillar="machines",
+        pillar="vehicles",
     )
 
     row = conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
     assert (row["object_name"], row["format"], row["pillar"]) == (
         "cvt gearbox",
         "short",
-        "machines",
+        "vehicles",
     )
     assert row["status"] == "idea"
 
@@ -57,7 +57,7 @@ def test_add_content_stores_an_idea(conn: sqlite3.Connection) -> None:
 def test_bad_input_is_refused_and_nothing_is_stored(
     conn: sqlite3.Connection, kwargs: dict[str, str], message: str
 ) -> None:
-    args = {"object_name": "alternator", "fmt": "short", "pillar": "machines"} | kwargs
+    args = {"object_name": "alternator", "fmt": "short", "pillar": "vehicles"} | kwargs
 
     with pytest.raises(FactoryError, match=message):
         add_content(conn, load_channel("coil-and-cog"), **args)
@@ -69,7 +69,7 @@ def test_new_and_status_commands(config_dir: Path) -> None:
     runner.invoke(app, ["db", "init", *opts])
 
     created = runner.invoke(
-        app, ["new", "--object", "alternator", "--format", "short", "--pillar", "machines", *opts]
+        app, ["new", "--object", "alternator", "--format", "short", "--pillar", "vehicles", *opts]
     )
     shown = runner.invoke(app, ["status", "1", *opts])
     missing = runner.invoke(app, ["status", "99", *opts])
@@ -77,7 +77,7 @@ def test_new_and_status_commands(config_dir: Path) -> None:
     assert created.exit_code == 0, created.output
     assert "Created content #1: status idea" in created.output
     assert shown.exit_code == 0
-    assert "object: alternator | format: short | pillar: machines" in shown.output
+    assert "object: alternator | format: short | pillar: vehicles" in shown.output
     assert "status: idea" in shown.output
     assert missing.exit_code == 1
     assert "content #99 does not exist" in missing.output
@@ -88,7 +88,7 @@ def test_status_shows_failure_details(config_dir: Path) -> None:
     runner.invoke(app, ["db", "init", *opts])
     runner.invoke(
         app,
-        ["new", "--object", "zipper", "--format", "short", "--pillar", "everyday_things", *opts],
+        ["new", "--object", "jet engine", "--format", "short", "--pillar", "air_and_sea", *opts],
     )
     db = connect(config_dir.parent / "data" / "factory.db")
     set_status(db, 1, "failed", reason="Gemini 503 after 3 retries")

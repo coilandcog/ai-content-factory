@@ -33,7 +33,7 @@ We build a "walking skeleton" first: the thinnest path from topic to video (1.1â
 
 | ID | Task | Acceptance criteria | How I test it myself |
 |---|---|---|---|
-| 1.1 | `factory new --object alternator --format short --pillar machines` creates a content row as an `idea` | The row exists with the chosen format and pillar | `factory status <id>` shows `idea` |
+| 1.1 | `factory new --object alternator --format short --pillar vehicles` creates a content row as an `idea` | The row exists with the chosen format and pillar | `factory status <id>` shows `idea` |
 | 1.2 | Gemini client plus Jinja2 prompt loader (with channel overrides) plus fake client | Unit tests pass with the fake; one integration call returns valid JSON | `uv run pytest -m integration -k gemini` |
 | 1.3 | `factory script`: `ScriptDraft` schema (hook, body, Engineer's Note draft, loop line, shot list, at least 2 sources); blocklist check; word count within format bounds | The idea becomes `scripted`; sources are stored; an off-limits topic is rejected | Run it for "alternator" and read the script in `factory status <id> --show script` |
 | 1.4 | Kokoro voiceover plus a **voice audition**: render the same paragraph with `am_michael`, `am_adam` and `am_onyx` (closes OQ-7) | `voice.wav` is 48 kHz at âˆ’14 LUFS; you choose the voice in the YAML | Listen to the 3 samples on your phone and pick one |
@@ -43,7 +43,7 @@ We build a "walking skeleton" first: the thinnest path from topic to video (1.1â
 | 1.8 | Stills animation (Ken Burns/parallax) and diagram overlays (Pillow PNG layers) from the shot list | Every `still` and `diagram` shot produces a file; labels stay inside the safe zones | Open the frames and check that the labels are readable |
 | 1.9 | `factory assemble`: clips + stills + diagrams + voice + subtitles + sting; YouTube render with an Audio Library track (ducked); TikTok render without music; 720p preview | Both renders are created; the TikTok render has no music | Watch both on your phone with sound and without |
 | 1.10 | Automated QA (`media/qa.py`) plus automatic cover-frame pick | A failing check keeps the status `generated` with a reason; a pass sets `assembled` | Break something (e.g. delete `subs.ass`), run, and see the failure reason |
-| 1.11 | Metadata (titles, captions, description with sources, disclosure line, hashtags) plus Gate 2 in the terminal | `metadata.json` is complete; approving sets `approved` | Read `metadata.json`; approve |
+| 1.11 | Metadata (titles, captions, description with sources, hashtags; AI flags) plus Gate 2 in the terminal | `metadata.json` is complete; approving sets `approved` | Read `metadata.json`; approve |
 | 1.12 | **First real video end-to-end**; manual upload to YouTube (AI label on) and TikTok (sound added, AI label on); `factory publish --manual` records the posts | Video is live on both platforms; `posts` rows exist | Find the video on both apps from a second account or browser |
 | 1.13 | Similarity check with local embeddings | A near-duplicate script is blocked (over 0.80) in a test | Ask for "alternator" again and see it blocked |
 | 1.14 | `factory discover`: Wikimedia pageviews for the seed topics plus YouTube `search.list` signals (API key) | `trend_signals` filled; `api_usage` updated; quota stays within budget | `factory status --signals` shows the top 10 topics with trend ratios |

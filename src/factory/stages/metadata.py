@@ -1,8 +1,9 @@
 """metadata.json: titles, captions, description, hashtags and platform flags (ROADMAP 1.11, D-071).
 
 Gemini writes only the creative parts (title, summary, caption, hashtags) under schema rules.
-Everything that must be exactly right is assembled by code: the sources list, the disclosure
-line, the music attribution and the platform flags (CONTENT_STRATEGY.md §4 and §11).
+Everything that must be exactly right is assembled by code: the sources list, the music
+attribution and the AI platform flags (CONTENT_STRATEGY.md §4 and §11). The description has no
+AI disclosure line; the platform AI labels do that job (D-075).
 """
 
 from __future__ import annotations
@@ -122,7 +123,6 @@ def build(
     channel = ctx.channel
     description = [draft.youtube_summary, "", "Sources:"]
     description += [f"- {s['title'] or s['publisher']}: {s['url']}" for s in sources]
-    description += ["", channel.brand.disclosure_line]
     if music is not None and music["attribution_text"]:
         description += ["", music["attribution_text"]]
     description += ["", " ".join(draft.youtube_hashtags)]
@@ -149,7 +149,6 @@ def build(
         "sources": [
             {"url": s["url"], "title": s["title"], "publisher": s["publisher"]} for s in sources
         ],  # fmt: skip
-        "disclosure_line": channel.brand.disclosure_line,
         "music": None
         if music is None
         else {
@@ -177,7 +176,7 @@ def write(ctx: AppContext, content_id: int, data: dict[str, Any]) -> Path:
     return path
 
 
-def validate(data: dict[str, Any], disclosure_line: str) -> list[str]:
+def validate(data: dict[str, Any]) -> list[str]:
     """Problems with a (possibly hand-edited) metadata.json; [] = complete and within the rules."""
     problems: list[str] = []
     try:
@@ -193,8 +192,6 @@ def validate(data: dict[str, Any], disclosure_line: str) -> list[str]:
     except ValidationError as exc:
         problems += [f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors()]
     description = data["youtube"]["description"]
-    if disclosure_line not in description:
-        problems.append("the YouTube description lacks the disclosure line")
     listed = [s for s in data.get("sources", []) if s.get("url") and s["url"] in description]
     if len(listed) < MIN_SOURCES:
         problems.append(f"the description lists {len(listed)} source(s); needs {MIN_SOURCES}")

@@ -37,7 +37,7 @@ def ctx(tmp_path: Path) -> AppContext:
 
 def add_script(ctx: AppContext) -> int:
     content_id = add_content(
-        ctx.conn, ctx.channel, object_name="alternator", fmt="short", pillar="machines"
+        ctx.conn, ctx.channel, object_name="alternator", fmt="short", pillar="vehicles"
     )
     with ctx.conn:
         ctx.conn.execute(
@@ -105,7 +105,7 @@ def test_render_writes_voice_wav_and_one_asset_row(ctx: AppContext) -> None:
 
 def test_render_needs_a_script(ctx: AppContext) -> None:
     content_id = add_content(
-        ctx.conn, ctx.channel, object_name="zipper", fmt="short", pillar="everyday_things"
+        ctx.conn, ctx.channel, object_name="jet engine", fmt="short", pillar="air_and_sea"
     )
 
     with pytest.raises(FactoryError, match="has no script yet"):

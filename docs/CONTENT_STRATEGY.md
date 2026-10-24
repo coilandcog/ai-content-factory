@@ -8,28 +8,33 @@
 |---|---|
 | Channel | **Coil & Cog** (`@coilandcog`), slug `coil-and-cog` |
 | Niche | How Machines Work |
-| Promise | "See what moves inside the things you use every day." |
+| Promise | "See what moves inside the machines that move the world." |
 | Language / region | English, aimed at US, UK and DE viewers |
-| Pillars | `machines`: cars, household and industrial machines. `everyday_things`: ordinary objects with hidden mechanisms. |
+| Pillars | `vehicles`: cars, trucks, motorbikes and trains. `air_and_sea`: aircraft, helicopters, ships, submarines and rockets. `industry_and_energy`: heavy machines, cranes, factories and power generation (D-073). |
 | Planned second niche | Telecom ("Inside Tech and Telecom"), a separate channel profile in Phase 4 |
 
 ## 2. Audience
 
 - **Primary:** curious general viewers aged 18–44, mostly men, in the US, UK and DE. They watch for satisfaction ("so *that's* how it works") and quick learning.
-- **Secondary:** car and DIY hobbyists who want accurate mechanics.
+- **Secondary:** car, aviation and engineering enthusiasts who want accurate mechanics.
 - **What they reward:** a clear visual reveal, one surprising fact, no fluff, accuracy.
 - **What makes them leave:** slow intros, hype, wrong facts, repeated templates.
 
 ## 3. Content pillars and seed topics
 
-**`machines`:** alternator, turbocharger, CVT gearbox, differential, clutch, starter motor, spark plug, fuel injector, disc brake (how it works, *not* how to repair it), catalytic converter (how it works, *not* removal), electric motor, transformer, jet engine, hydraulic press, elevator safety brake, escalator, wind-turbine gearbox, heat pump, refrigerator compressor, hard drive.
+**`vehicles`:** alternator, turbocharger, CVT gearbox, differential, disc brakes and ABS (how they work, *not* how to repair them), electric car motor, diesel-electric locomotive, train pantograph, maglev train.
 
-**`everyday_things`:** zipper, ballpoint pen, pin-tumbler lock (mechanism only, never how to pick it), microwave magnetron, induction cooktop, toilet flush valve, smoke detector, quartz watch, vacuum-cleaner cyclone, washing-machine drum, inkjet printer, mechanical keyboard switch, retractable tape measure, umbrella frame.
+**`air_and_sea`:** jet engine, helicopter rotor (swashplate), aircraft landing gear, variable-pitch propeller, ship diesel engine, azimuth thruster, ship stabilizers, submarine ballast tanks, rocket engine.
+
+**`industry_and_energy`:** tunnel boring machine, excavator hydraulics, tower crane, hydraulic press, wind turbine, hydroelectric turbine, steam turbine, transformer, elevator safety brake.
+
+Small household objects (zippers, pens, locks and similar) are out of scope: the channel is about big, real machinery (D-073).
 
 ### Blocklist (never make)
 
 These are enforced by `niche.blocklist` in the YAML and checked at the ideate and script stages:
 - Weapons and firearm mechanisms.
+- Military aircraft, warships and weapon systems.
 - Step-by-step dangerous repairs (mains electricity, airbags, fuel systems, brakes).
 - Defeating safety or emissions devices.
 - Real brand logos or endorsements.
@@ -69,12 +74,12 @@ No two consecutive videos may use the same `hook_type`.
 
 | `hook_type` | Formula | Example |
 |---|---|---|
-| `why_question` | "Why does/doesn't {everyday thing} {surprising behavior}?" | "Why doesn't your car battery die while you drive?" |
-| `hidden_everyday` | "You use this every day, but you've never seen inside it." | "You zip this 1,000 times a year. Here's what actually locks it." |
+| `why_question` | "Why does/doesn't {machine} {surprising behavior}?" | "Why doesn't your car battery die while you drive?" |
+| `hidden_inside` | "You've seen this a thousand times, but never inside it." | "You've flown behind one of these. Here's what actually happens inside." |
 | `surprising_number` | "{Big or small number} + {object}" | "This part spins 18,000 times a minute under your hood." |
-| `myth_bust` | "Most people think {X}. Actually {Y}." | "Your microwave doesn't heat from the inside out." |
+| `myth_bust` | "Most people think {X}. Actually {Y}." | "A jet engine doesn't push against the air behind it." |
 | `what_if` | "What happens if {part} fails or stops?" | "What happens if your alternator stops spinning?" |
-| `reveal` | "Inside this {object} is a {surprising thing}." | "Inside this pen is a tiny precision ball bearing." |
+| `reveal` | "Inside this {object} is a {surprising thing}." | "Inside this wind turbine is a gearbox the size of a car." |
 
 ## 7. Visual beat orders (`beat_order` values)
 
@@ -82,7 +87,7 @@ The 4 beats are **Studio**, **Cutaway**, **Flow** and **In situ**. They form a m
 
 | `beat_order` | Sequence | Best with |
 |---|---|---|
-| `classic` | Studio → Cutaway → Flow → In situ | `reveal`, `hidden_everyday` |
+| `classic` | Studio → Cutaway → Flow → In situ | `reveal`, `hidden_inside` |
 | `context_first` | In situ → Studio → Cutaway → Flow | `why_question`, `what_if` |
 | `action_first` | Flow → Cutaway → Studio → In situ | `surprising_number` |
 | `cold_open` | Cutaway → Flow → In situ → Studio (hero outro) | `myth_bust` |
@@ -102,7 +107,7 @@ The LLM scores each idea from 0 to 100. Ideas with a score of at least `scoring.
 | Criterion | Weight | 0 = | max = |
 |---|---|---|---|
 | Hook strength | 25 | No natural question | Instant "wait, what?" |
-| Everyday relevance | 20 | Niche industrial curiosity | Viewer touches it daily |
+| Familiarity | 20 | Obscure machine nobody has seen | Viewer has seen, driven or ridden it |
 | Visual potential | 20 | Hard to show (abstract, tiny, static) | Dramatic cutaway and energy flow |
 | Trend signal | 15 | No signal | Rising Wikipedia pageviews, YouTube search activity or Google Trends interest |
 | Evergreen demand | 10 | One-off | Searched all year |
@@ -125,7 +130,7 @@ The owner can override any label. The ideation prompt receives the top *patterns
 ### YouTube
 - Shorts and Deep Dives are uploaded as Shorts (9:16, 3 minutes or less). Episodes are 16:9 and longer than 3 minutes.
 - Title: 70 characters or fewer, with the object name early; no clickbait that the video doesn't deliver.
-- Description: 1–2 sentences of summary, a "Sources:" list (at least 2), and the disclosure line "Visuals AI-generated; script researched and reviewed by a human engineer.", followed by 3 hashtags.
+- Description: 1–2 sentences of summary, a "Sources:" list (at least 2), the music credit if the track needs one, then 3 hashtags. No AI disclosure line in the text (D-075): the platform AI labels disclose it.
 - `containsSyntheticMedia = true` and `selfDeclaredMadeForKids = false`. Category: Science & Technology (ID 28).
 - Music: YouTube Audio Library only.
 

@@ -18,7 +18,6 @@ from factory.integrations.gemini import GeminiClient
 from factory.stages import metadata, review
 from factory.stages.voice import asset_dir
 
-DISCLOSURE = "Visuals AI-generated; script researched and reviewed by a human engineer."
 SOURCES = ["https://en.wikipedia.org/wiki/Alternator", "https://example.edu/alternators"]
 
 
@@ -48,7 +47,7 @@ def ctx(tmp_path: Path) -> AppContext:
 def assembled_item(ctx: AppContext, *, with_metadata: bool = True) -> int:
     """An item walked through the real status path to `assembled`, with stand-in render files."""
     content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="short",
-                             pillar="machines")  # fmt: skip
+                             pillar="vehicles")  # fmt: skip
     with ctx.conn:
         ctx.conn.execute(
             "INSERT INTO scripts (content_id, version, body_text, shot_list_json) "
@@ -87,13 +86,13 @@ def test_metadata_has_creative_parts_and_exact_code_parts(ctx: AppContext) -> No
     lines = data["youtube"]["description"].splitlines()
     assert lines[0].startswith("See how a spinning rotor")  # summary first
     assert lines[2] == "Sources:" and SOURCES[0] in lines[3] and SOURCES[1] in lines[4]
-    assert DISCLOSURE in lines  # disclosure line from the YAML, written by code
+    assert not any("AI-generated" in line for line in lines)  # no disclosure line (D-075)
     assert lines[-1] == "#HowItWorks #Engineering #Cars"
     assert data["youtube"]["contains_synthetic_media"] is True
     assert data["youtube"]["category_id"] == 28 and data["youtube"]["made_for_kids"] is False
     assert data["tiktok"]["caption"].endswith("#HowItWorks #Engineering #CarTok #Alternator")
     assert data["tiktok"]["ai_generated_label"] is True and data["tiktok"]["add_tiktok_sound"]
-    assert metadata.validate(data, DISCLOSURE) == []
+    assert metadata.validate(data) == []
     kinds = [r[0] for r in ctx.conn.execute("SELECT kind FROM assets WHERE kind = 'metadata'")]
     assert kinds == ["metadata"]
 
@@ -132,8 +131,8 @@ def test_rule_breaks_are_reasked_and_existing_metadata_is_kept(ctx: AppContext) 
     assert "title has" in client._sdk.calls[1]["contents"]
 
 
-def drop_disclosure(d: dict) -> None:
-    d["youtube"]["description"] = d["youtube"]["description"].replace(DISCLOSURE, "")
+def synthetic_off(d: dict) -> None:
+    d["youtube"]["contains_synthetic_media"] = False
 
 
 def long_title(d: dict) -> None:
@@ -151,7 +150,7 @@ def label_off(d: dict) -> None:
 @pytest.mark.parametrize(
     ("change", "problem"),
     [
-        (drop_disclosure, "lacks the disclosure line"),
+        (synthetic_off, "contains_synthetic_media must be true"),
         (long_title, "title has 71 characters"),
         (one_source, "lists 1 source(s)"),
         (label_off, "ai_generated_label must be true"),
@@ -163,7 +162,7 @@ def test_validate_catches_broken_metadata(
     data = metadata.load(ctx, assembled_item(ctx))
     change(data)
 
-    assert any(problem in p for p in metadata.validate(data, DISCLOSURE))
+    assert any(problem in p for p in metadata.validate(data))
 
 
 def test_metadata_schema_converts_to_a_gemini_schema() -> None:
@@ -192,7 +191,7 @@ def test_approve_needs_the_checklist(ctx: AppContext) -> None:
 def test_approve_refuses_incomplete_metadata(ctx: AppContext) -> None:
     content_id = assembled_item(ctx)
     data = metadata.load(ctx, content_id)
-    data["youtube"]["description"] = "no sources, no disclosure"
+    data["youtube"]["description"] = "no sources"
     metadata.write(ctx, content_id, data)
 
     with pytest.raises(FactoryError, match="metadata.json is not complete"):
@@ -228,7 +227,7 @@ def test_redo_sends_back_to_generated_and_removes_renders(ctx: AppContext) -> No
 
 def test_only_assembled_items_reach_gate_2(ctx: AppContext) -> None:
     content_id = add_content(ctx.conn, ctx.channel, object_name="zipper", fmt="short",
-                             pillar="everyday_things")  # fmt: skip
+                             pillar="air_and_sea")  # fmt: skip
 
     with pytest.raises(FactoryError, match="not waiting for Gate 2"):
         review.approve_final(ctx, content_id, checklist_ok=True)

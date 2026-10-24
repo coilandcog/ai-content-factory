@@ -49,7 +49,7 @@ def llm(*outcomes: object) -> tuple[GeminiClient, FakeGenaiClient]:
 
 def scripted_item(ctx: AppContext) -> int:
     content_id = add_content(
-        ctx.conn, ctx.channel, object_name="alternator", fmt="short", pillar="machines"
+        ctx.conn, ctx.channel, object_name="alternator", fmt="short", pillar="vehicles"
     )
     client, _ = llm(fixture_reply("script_short_alternator"))
     script_stage.run(ctx, llm=client, http=http())
@@ -179,7 +179,7 @@ def test_failed_redo_keeps_version_1_current(ctx: AppContext) -> None:
 
 def test_only_scripted_items_can_be_reviewed(ctx: AppContext) -> None:
     content_id = add_content(
-        ctx.conn, ctx.channel, object_name="zipper", fmt="short", pillar="everyday_things"
+        ctx.conn, ctx.channel, object_name="jet engine", fmt="short", pillar="air_and_sea"
     )
 
     with pytest.raises(FactoryError, match="is 'idea', not waiting for Gate 1"):

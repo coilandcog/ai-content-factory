@@ -151,7 +151,7 @@ def approve_final(ctx: AppContext, content_id: int, *, checklist_ok: bool) -> No
     _item_in(ctx, content_id, "assembled", "Gate 2")
     if not checklist_ok:
         raise FactoryError("Gate 2 approval needs the checklist confirmed (watch the preview)")
-    problems = metadata.validate(metadata.load(ctx, content_id), ctx.channel.brand.disclosure_line)
+    problems = metadata.validate(metadata.load(ctx, content_id))
     if problems:
         raise FactoryError("metadata.json is not complete: " + "; ".join(problems))
     with ctx.conn:

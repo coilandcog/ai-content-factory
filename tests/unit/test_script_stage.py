@@ -80,7 +80,7 @@ def http_for(handler: Callable) -> httpx.Client:
 
 
 def new_idea(ctx: AppContext, name: str = "alternator") -> int:
-    return add_content(ctx.conn, ctx.channel, object_name=name, fmt="short", pillar="machines")
+    return add_content(ctx.conn, ctx.channel, object_name=name, fmt="short", pillar="vehicles")
 
 
 def content(ctx: AppContext, content_id: int) -> sqlite3.Row:
@@ -252,7 +252,7 @@ def test_show_script_prints_every_part(config_dir: Path) -> None:
     opts = ["--config-dir", str(config_dir)]
     runner.invoke(app, ["db", "init", *opts])
     runner.invoke(
-        app, ["new", "--object", "alternator", "--format", "short", "--pillar", "machines", *opts]
+        app, ["new", "--object", "alternator", "--format", "short", "--pillar", "vehicles", *opts]
     )
     conn = connect(config_dir.parent / "data" / "factory.db")
     env = EnvSettings(

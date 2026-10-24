@@ -127,6 +127,7 @@ def _shot_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> 
         object=row["object_name"],
         description=shot["description"],
         aspect=aspect,
+        clip_seconds=FLOW_CLIP_SECONDS,
         **variables,
     )
     return rendered.text.strip()
@@ -168,12 +169,12 @@ def _sheet_text(
         clips_today=max(budget - used, 0) // FLOW_CREDITS_PER_CLIP,
         credits_budget=budget,
         clip_seconds=FLOW_CLIP_SECONDS,
-        inbox_windows=_windows_path(inbox),
+        inbox_windows=windows_path(inbox),
         stills=[{**s, "prompt": still_prompts[s["n"]]} for s in _shots(script, "still")],
     ).text
 
 
-def _windows_path(path: Path) -> str:
+def windows_path(path: Path) -> str:
     r"""How Windows Explorer reaches a WSL folder: \\wsl$\<distro>\home\..."""
     distro = os.environ.get("WSL_DISTRO_NAME", "Ubuntu")
     return f"\\\\wsl$\\{distro}" + str(path.resolve()).replace("/", "\\")

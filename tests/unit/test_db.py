@@ -112,6 +112,19 @@ def test_happy_path_reaches_analyzed(conn: sqlite3.Connection, channel_id: int) 
     assert status_of(conn, content_id)["status"] == "analyzed"
 
 
+def test_manual_post_goes_from_approved_straight_to_published(
+    conn: sqlite3.Connection, channel_id: int
+) -> None:
+    content_id = add_content(conn, channel_id)
+    for status in ("scripted", "script_approved", "awaiting_clips", "generated", "assembled"):
+        set_status(conn, content_id, status)
+    set_status(conn, content_id, "approved")
+
+    set_status(conn, content_id, "published")  # D-072: no "scheduled" step for manual posts
+
+    assert status_of(conn, content_id)["status"] == "published"
+
+
 @pytest.mark.parametrize("bad_target", ["approved", "published", "done", "idea"])
 def test_illegal_move_is_refused(
     conn: sqlite3.Connection, channel_id: int, bad_target: str

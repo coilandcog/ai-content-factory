@@ -93,7 +93,7 @@ def ctx(tmp_path: Path) -> AppContext:
 def generated_item(ctx: AppContext) -> int:
     """An item taken through script approval and both generate passes, with test clips."""
     content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="short",
-                             pillar="machines")  # fmt: skip
+                             pillar="vehicles")  # fmt: skip
     with ctx.conn:
         ctx.conn.execute(
             "INSERT INTO scripts (content_id, version, body_text, est_duration_s, shot_list_json) "

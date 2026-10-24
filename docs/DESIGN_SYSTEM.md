@@ -101,54 +101,58 @@ These are our own work and a major part of the "original value" each video adds.
 
 ## 10. AI generation prompt templates
 
-These templates live in `prompts/default/` as Jinja2 files (a text-template format where `{{ variable }}` gets filled in). A channel can override them in `prompts/<slug>/`. They're rendered by the generate stage into a **Flow prompt sheet** (`flow_sheet.md`) that the owner copies into Google Flow. Since task 1.6 they are real files (`style_block.j2`, `flow_shot_<beat>.j2`, `flow_sheet.j2`); colors come from `brand.palette`, not hard-coded hex values, and each beat template ends with a `Scene:` line holding the shot's description from the script.
+These templates live in `prompts/default/` as Jinja2 files (a text-template format where `{{ variable }}` gets filled in). A channel can override them in `prompts/<slug>/`. They're rendered by the generate stage into a **Flow prompt sheet** (`flow_sheet.md`) that the owner copies into Google Flow. Since task 1.6 they are real files (`style_block.j2`, `flow_shot_<beat>.j2`, `flow_sheet.j2`); colours are named in plain words (cyan, amber; D-074), so a channel with a different palette overrides the templates in `prompts/<slug>/`, and each beat template ends with the shot's description from the script.
 
-### 10.1 Shared style block (`style_block.j2`), added to every visual prompt
+Since D-074 every clip prompt reads like a short **commercial brief** (the style of the owner's alternator benchmark): "Create a premium 8-second … video of the {object}, vertical 9:16, with three smooth camera angles. Open on … then … Finish with …", followed by the shot's description from the script and the shared closing block. Every clip asks for **motion and 2–3 camera angles** (parts rotating, casing splitting, energy surging; wide → orbit → close-up), and only the studio shot uses the pedestal, so clips don't repeat each other once they are cut together. Lighting is described with colour **names** (cyan, amber), not hex codes, because video models follow plain words better.
+
+### 10.1 Shared closing block (`style_block.j2`), added to the end of every clip prompt
 
 ```
-Photorealistic cinematic product visualization, {{ aspect }} vertical frame.
-Deep graphite studio background (#0E1116), matte graphite pedestal.
-Dramatic cyan (#00D1FF) rim light from the left, warm amber (#FF8A00) rim light from the right.
-Shallow depth of field, crisp metal and copper detail, subtle film grain, slow smooth camera motion.
-No text, no logos, no brand names, no people, no hands, no faces.
-Sound: realistic mechanical sounds of the object only; no music, no voices, no narration.
+Realistic materials, polished commercial lighting with a cool cyan rim light from the left and a warm amber rim light from the right, smooth camera movement, sharp product detail, photorealistic.
+No logos, no text, no brand names, no people, no hands, no faces, no extra or distorted components.
+Sound: realistic mechanical sounds of the machine only; no music, no voices, no narration.
 ```
 
 ### 10.2 Beat templates (`flow_shot_<beat>.j2`)
 
+Each ends with `{{ description }}.` (the script's shot description) and the closing block. `clip_seconds` is Flow's clip length (8).
+
 **Studio**
 ```
-{{ style_block }}
-The {{ object }} rests on the pedestal. Slow 20-degree orbit around it, ending on a three-quarter hero angle.
-Highlight {{ hero_feature }}.
+Create a premium {{ clip_seconds }}-second product video of the {{ object }}, vertical {{ aspect }}, with three smooth camera angles.
+Open on a close-up of the {{ object }} rotating slowly on a matte dark pedestal against a deep graphite studio background, with crisp metallic highlights sliding across {{ hero_feature }}.
+Then a low angle orbits around the {{ object }}, and the shot finishes on a three-quarter hero angle with a close detail of {{ hero_feature }}.
 ```
 
 **Cutaway**
 ```
-{{ style_block }}
-The outer casing of the {{ object }} separates along a clean cutaway plane, revealing {{ internals }}.
-Camera pushes in slowly toward {{ focus_part }}. Cut surfaces are smooth brushed metal.
+Create a premium {{ clip_seconds }}-second technical cutaway video of the {{ object }}, vertical {{ aspect }}, with three smooth camera angles.
+Start close on the {{ object }} as its outer casing splits apart along a clean cut plane, revealing {{ internals }}.
+Then the camera orbits the opened {{ object }} while {{ focus_part }} moves as it does in operation, and the shot finishes on a macro close-up of {{ focus_part }} in motion. Cut surfaces are clean brushed metal.
 ```
 
 **Flow**
 ```
-{{ style_block }}
-Inside the cutaway {{ object }}, glowing {{ energy_color_name }} energy ({{ energy_hex }}) flows through {{ path }},
-showing {{ process }}. The motion is smooth and readable, not chaotic.
+Create a premium {{ clip_seconds }}-second technical animation of the {{ object }} running, vertical {{ aspect }}, with two or three smooth camera angles.
+Start on a clean cutaway of the {{ object }} with its parts in motion against a dark studio background, then glowing {{ energy_color_name }} energy surges through {{ path }}, showing {{ process }}.
+Finish with the camera circling close around the moving parts as the energy pulses. The motion is clear and readable, not chaotic.
 ```
 
 **In situ**
 ```
-{{ style_block | replace("Deep graphite studio background (#0E1116), matte graphite pedestal.", "") }}
-The {{ object }} is installed in {{ context }}, lit by moody cyan and amber accent lights.
-Slow push-in from a wide view to the part. Realistic but clean environment, no visible brands.
+Create a premium {{ clip_seconds }}-second video of the {{ object }} running in its real setting, vertical {{ aspect }}, with three smooth camera angles.
+Open on a wide view of the setting, then move in to the {{ object }} installed in {{ context }}, working, with its moving parts in motion, lit by moody cyan and amber accent lights.
+Finish on a close detail of the {{ object }} in operation. Realistic, clean environment with no visible brands.
 ```
 
 ### 10.3 Still-image template (`still_image.j2`), used for animated stills
 
 ```
-{{ style_block }}
-Still frame: {{ description }}. Composition leaves the area {{ safe_area_hint }} clear for labels.
+Create a premium photorealistic product image of the {{ object }}, vertical {{ aspect }}.
+{{ description }}.
+Deep graphite studio background, realistic materials, polished commercial lighting with a cool cyan rim light from the left and a warm amber rim light from the right, sharp product detail.
+Composition leaves the {{ safe_area_hint }} clear for labels and subtitles.
+No logos, no text, no brand names, no people, no hands, no faces, no extra or distorted components.
 ```
 
 **Stills are optional for the owner (D-067):** the Flow sheet lists a ready prompt per `still` shot. If `still_NN.png` (or .jpg/.webp) is in the Flow inbox it is used; otherwise the factory takes the sharpest of 8 frames from a clip of the same beat (else the nearest shot). Each still becomes `stills/still_NN_anim.mp4`: a 1080×1920, 30 fps Ken Burns move (zoom 1.00↔1.08 with a slight pan, eased, alternating per shot). Parallax would need a depth model and is not done.
@@ -156,8 +160,9 @@ Still frame: {{ description }}. Composition leaves the area {{ safe_area_hint }}
 ### 10.4 Episode opener (16:9) (`flow_episode_opener.j2`)
 
 ```
-{{ style_block | replace("vertical", "horizontal 16:9") }}
-Wide establishing shot of {{ theme_scene }}, slow dolly in, cinematic and calm.
+Create a premium 8-second cinematic video, horizontal 16:9.
+Open on a wide establishing shot of {{ theme_scene }}, then a slow dolly in, cinematic and calm.
+{{ style_block }}
 ```
 
 ### 10.5 Prompt rules
