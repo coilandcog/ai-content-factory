@@ -1,0 +1,16 @@
+Write metadata for this {{ item.format | replace("_", " ") }} about the {{ item.object_name }}.
+
+Working title: {{ item.working_title }}
+Narration (what the viewer hears):
+"""
+{{ script.body_text }}
+"""
+
+Fields:
+- youtube_title: at most {{ title_max }} characters; name the {{ item.object_name }} in the first few words;
+  a clear, honest promise. It may follow the series pattern "{{ series }}" if that reads well.
+- youtube_summary: 1-2 plain sentences saying what the viewer will understand. No hashtags.
+- youtube_hashtags: exactly 3 hashtags like #Engineering (one word each, letters and digits only).
+- tiktok_caption: one short hook line in the narrator's voice that makes people curious. No hashtags.
+- tiktok_hashtags: 3 to 5 hashtags like #HowItWorks (one word each).
+Sources, the AI disclosure line and music credits are added automatically; do not write them.

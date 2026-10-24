@@ -255,7 +255,7 @@ def run(
     if not ideas:
         log.info("no ideas to script", extra={"event": "script_nothing"})
         return result
-    llm = llm or _gemini(ctx)
+    llm = llm or gemini_client(ctx)
     own_http = http is None
     http = http or _http_client(ctx)
     try:
@@ -315,7 +315,7 @@ def rescript(
     ).fetchone()
     if row is None or row["status"] != "scripted" or current is None:
         raise FactoryError(f"content #{content_id} is not a scripted item")
-    llm = llm or _gemini(ctx)
+    llm = llm or gemini_client(ctx)
     own_http = http is None
     http = http or _http_client(ctx)
     try:
@@ -506,7 +506,7 @@ def _save(
 # --- clients ---------------------------------------------------------------------------------
 
 
-def _gemini(ctx: AppContext) -> GeminiClient:
+def gemini_client(ctx: AppContext) -> GeminiClient:
     if ctx.env.gemini_api_key is None:
         raise ConfigError("GEMINI_API_KEY is missing in .env")
     return GeminiClient(

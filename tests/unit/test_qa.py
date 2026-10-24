@@ -143,4 +143,5 @@ def test_a_check_that_crashes_counts_as_a_failure(tmp_path: Path) -> None:
     checks = {c.name: c for c in qa.run_checks(inputs)}
 
     assert checks["duration"].ok is False and "could not check" in checks["duration"].detail
-    assert checks["metadata"].ok is None and checks["similarity"].ok is None
+    assert checks["metadata"].ok is False and "metadata.json missing" in checks["metadata"].detail
+    assert checks["similarity"].ok is None

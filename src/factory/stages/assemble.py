@@ -20,12 +20,13 @@ from PIL import Image, ImageOps
 
 from factory.context import AppContext, StageResult
 from factory.db import note_reason, set_status
-from factory.errors import FactoryError
+from factory.errors import BudgetExceededError, FactoryError
+from factory.integrations.gemini import GeminiClient
 from factory.media import compose, qa, stills
 from factory.media.audio import measure_loudness, normalize_file
 from factory.media.ffmpeg import probe
 from factory.music import Track, pick_track
-from factory.stages import generate, voice
+from factory.stages import generate, metadata, voice
 from factory.stages.script import MIN_DIAGRAMS, previous_variety
 from factory.stages.voice import asset_dir
 
@@ -37,7 +38,13 @@ QA_REPORT = "qa_report.json"
 SILENT_LUFS = -60.0  # quieter than this counts as "no sound" (e.g. a clip with a silent track)
 
 
-def run(ctx: AppContext, *, limit: int | None = None, force: bool = False) -> StageResult:
+def run(
+    ctx: AppContext,
+    *,
+    limit: int | None = None,
+    force: bool = False,
+    llm: GeminiClient | None = None,
+) -> StageResult:
     """Render generated items (unless renders exist; `force` re-renders), pick the cover, then
     run QA: a pass moves the item to `assembled`, a failure keeps it `generated` with the reason.
 
@@ -51,7 +58,7 @@ def run(ctx: AppContext, *, limit: int | None = None, force: bool = False) -> St
     if any(force or not _rendered(ctx, row["id"]) for row in items):
         pick_track(ctx)  # stop before any work if the music library is empty
     for row in items:
-        generate.run_safely(ctx, row, result, lambda r: _assemble_and_check(ctx, r, force))
+        generate.run_safely(ctx, row, result, lambda r: _assemble_and_check(ctx, r, force, llm))
     return result
 
 
@@ -59,13 +66,22 @@ def _rendered(ctx: AppContext, content_id: int) -> bool:
     return all((asset_dir(ctx, content_id) / name).is_file() for name in RENDERS)
 
 
-def _assemble_and_check(ctx: AppContext, row: sqlite3.Row, force: bool) -> bool:
+def _assemble_and_check(
+    ctx: AppContext, row: sqlite3.Row, force: bool, llm: GeminiClient | None
+) -> bool:
     content_id = row["id"]
     if force or not _rendered(ctx, content_id):
         _assemble(ctx, row)
     folder = asset_dir(ctx, content_id)
     _pick_cover(ctx, content_id, folder)
-    checks = qa.run_checks(_qa_inputs(ctx, row, folder))
+    metadata_error = None
+    try:
+        metadata.ensure_metadata(ctx, content_id, llm=llm)
+    except BudgetExceededError:
+        raise
+    except FactoryError as exc:  # e.g. Gemini unavailable: a fixable QA failure, retried next run
+        metadata_error = str(exc)
+    checks = qa.run_checks(_qa_inputs(ctx, row, folder, metadata_error))
     qa.write_report(checks, folder / QA_REPORT)
     failed = qa.failures(checks)
     extra = {"content_id": content_id}
@@ -79,7 +95,9 @@ def _assemble_and_check(ctx: AppContext, row: sqlite3.Row, force: bool) -> bool:
     return True
 
 
-def _qa_inputs(ctx: AppContext, row: sqlite3.Row, folder: Path) -> qa.QaInputs:
+def _qa_inputs(
+    ctx: AppContext, row: sqlite3.Row, folder: Path, metadata_error: str | None
+) -> qa.QaInputs:
     script = generate.current_script(ctx, row["id"])
     shots = json.loads(script["shot_list_json"])
     video_format = getattr(ctx.channel.formats, row["format"])
@@ -103,7 +121,15 @@ def _qa_inputs(ctx: AppContext, row: sqlite3.Row, folder: Path) -> qa.QaInputs:
             (row["hook_type"], row["beat_order"]),
             previous_variety(ctx.conn, row["channel_id"], row["id"]),
         ),
+        metadata_problems=_metadata_problems(ctx, row["id"]),
+        metadata_error=metadata_error,
     )
+
+
+def _metadata_problems(ctx: AppContext, content_id: int) -> list[str] | None:
+    if not (asset_dir(ctx, content_id) / metadata.METADATA_FILE).is_file():
+        return None
+    return metadata.validate(metadata.load(ctx, content_id), ctx.channel.brand.disclosure_line)
 
 
 def _pick_cover(ctx: AppContext, content_id: int, folder: Path) -> Path:

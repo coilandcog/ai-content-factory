@@ -255,7 +255,7 @@ def test_cli_interactive_reject_and_redo(cli_db: Path, monkeypatch: pytest.Monke
     answer = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
     answer["hook_type"] = "what_if"
     client, _ = llm(reply(json.dumps(answer)))
-    monkeypatch.setattr(script_stage, "_gemini", lambda ctx: client)
+    monkeypatch.setattr(script_stage, "gemini_client", lambda ctx: client)
 
     result = run_cli(cli_db, input="d\nmention the regulator\nr\nduplicate topic\n")
 
@@ -263,10 +263,3 @@ def test_cli_interactive_reject_and_redo(cli_db: Path, monkeypatch: pytest.Monke
     assert "Script v2" in result.output  # the new version is shown before the next choice
     assert "#1 rejected." in result.output
     assert db_status(cli_db) == "rejected"
-
-
-def test_cli_gate_final_is_not_built_yet(cli_db: Path) -> None:
-    result = CliRunner().invoke(cli.app, ["review", "--gate", "final", "--config-dir", str(cli_db)])
-
-    assert result.exit_code == 1
-    assert "ROADMAP task 1.11" in result.output

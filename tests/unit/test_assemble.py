@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fakes.fake_gemini import FakeGenaiClient, fixture_reply
 from fakes.fake_tts import make_fake_tts
 from PIL import Image
 
@@ -14,6 +15,7 @@ from factory.config import REPO_ROOT, EnvSettings, load_channel, load_settings
 from factory.context import AppContext
 from factory.db import add_content, connect, migrate, set_status, upsert_channel
 from factory.errors import FactoryError
+from factory.integrations.gemini import GeminiClient
 from factory.media.audio import measure_loudness
 from factory.media.compose import MAX_SLOWDOWN, clip_fit, slots
 from factory.media.ffmpeg import probe, run_ffmpeg
@@ -98,6 +100,11 @@ def generated_item(ctx: AppContext) -> int:
             "VALUES (?, 1, 'The alternator charges your battery while you drive.', 4, ?)",
             (content_id, json.dumps(SHOTS)),
         )
+        for url in ("https://en.wikipedia.org/wiki/Alternator", "https://example.edu/alternators"):
+            ctx.conn.execute(
+                "INSERT INTO sources (content_id, url, title, publisher) VALUES (?, ?, 'T', 'P')",
+                (content_id, url),
+            )
     set_status(ctx.conn, content_id, "scripted")
     set_status(ctx.conn, content_id, "script_approved")
     tts = make_fake_tts(seconds=VOICE_S, amplitude=0.05)
@@ -108,6 +115,12 @@ def generated_item(ctx: AppContext) -> int:
     generate.run(ctx, tts=lambda: tts)
     assert ctx.conn.execute("SELECT status FROM contents").fetchone()[0] == "generated"
     return content_id
+
+
+def fake_llm() -> GeminiClient:
+    """Gemini stand-in that answers the metadata request with a canned, valid answer."""
+    return GeminiClient("fake", "gemini-3.5-flash-lite", sdk=FakeGenaiClient(
+        fixture_reply("metadata_alternator")), retry_wait_s=0)  # fmt: skip
 
 
 def add_music(ctx: AppContext, title: str = "Calm Gears") -> None:
@@ -128,7 +141,7 @@ def test_both_renders_and_preview_are_made_and_tiktok_has_no_music(ctx: AppConte
     content_id = generated_item(ctx)
     add_music(ctx)
 
-    result = assemble.run(ctx)
+    result = assemble.run(ctx, llm=fake_llm())
 
     assert (result.processed, result.failed) == (1, 0)
     folder = generate.asset_dir(ctx, content_id)
@@ -154,7 +167,9 @@ def test_both_renders_and_preview_are_made_and_tiktok_has_no_music(ctx: AppConte
     status = ctx.conn.execute("SELECT status FROM contents").fetchone()[0]
     assert status == "assembled"  # every QA check passed
     report = json.loads((folder / "qa_report.json").read_text())
-    assert {r["check"] for r in report if r["ok"] is not True} == {"metadata", "similarity"}
+    assert {r["check"] for r in report if r["ok"] is not True} == {"similarity"}
+    meta = json.loads((folder / "metadata.json").read_text())
+    assert meta["youtube"]["title"].startswith("Alternator in 40 seconds")
     cover = Image.open(folder / "cover.jpg")
     assert cover.size == (1080, 1920)
     [cover_row] = ctx.conn.execute("SELECT shot_n FROM assets WHERE kind = 'cover'").fetchall()
@@ -170,7 +185,7 @@ def test_broken_item_stays_generated_with_the_reason(ctx: AppContext) -> None:
     assemble._assemble(ctx, row)  # render only
     (generate.asset_dir(ctx, content_id) / "subs.ass").unlink()  # ROADMAP 1.10: break something
 
-    result = assemble.run(ctx)  # renders exist, so this runs QA only
+    result = assemble.run(ctx, llm=fake_llm())  # renders exist, so this runs QA only
 
     status, reason = ctx.conn.execute("SELECT status, status_reason FROM contents").fetchone()
     assert (result.processed, result.skipped, result.failed) == (0, 1, 0)

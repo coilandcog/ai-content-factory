@@ -44,6 +44,7 @@ from factory.media import ffmpeg, subtitles
 from factory.media.brand import build_brand_assets
 from factory.stages import assemble as assemble_stage
 from factory.stages import generate as generate_stage
+from factory.stages import metadata as metadata_stage
 from factory.stages import review as review_stage
 from factory.stages import script as script_stage
 from factory.stages import voice as voice_stage
@@ -200,7 +201,7 @@ NOTE_HELP = (
 
 
 def review(
-    gate: Annotated[str, typer.Option(help="'script' = Gate 1 (Gate 2 'final' is task 1.11).")],
+    gate: Annotated[str, typer.Option(help="'script' = Gate 1, 'final' = Gate 2.")],
     content_id: Annotated[int | None, typer.Option("--id", help="Review only this item.")] = None,
     decision: Annotated[
         str | None, typer.Option(help="approve | reject | redo, without the interactive menu.")
@@ -210,15 +211,20 @@ def review(
     keep_note: Annotated[
         bool, typer.Option(help="Approve with the AI draft note as it is.")
     ] = False,
+    checklist_ok: Annotated[
+        bool,
+        typer.Option(help="Gate 2 approve: I watched the preview; every checklist item holds."),
+    ] = False,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
-    """Gate 1: read each scripted item, then approve, reject or redo it (ROADMAP 1.5)."""
+    """Gate 1 (script) or Gate 2 (final video): approve, reject or redo each item (1.5, 1.11)."""
     with _tracked_run("review", config_dir) as run:
-        if gate == "final":
-            raise FactoryError("Gate 2 (--gate final) arrives with ROADMAP task 1.11")
-        if gate != "script":
+        if gate not in ("script", "final"):
             raise FactoryError(f"--gate must be 'script' or 'final', not '{gate}'")
         ctx = _context(run, config_dir)
+        if gate == "final":
+            run.tally.processed = _review_final(ctx, content_id, decision, reason, checklist_ok)
+            return
         if decision is not None:
             if content_id is None:
                 raise FactoryError("--decision needs --id")
@@ -262,6 +268,127 @@ def _decide(
         typer.echo(f"#{content_id}: new script version written (script {script_id}).")
     else:
         raise FactoryError(f"--decision must be approve, reject or redo, not '{decision}'")
+
+
+# --- Gate 2 ---------------------------------------------------------------------------------
+
+
+def _review_final(
+    ctx: AppContext,
+    content_id: int | None,
+    decision: str | None,
+    reason: str | None,
+    checklist_ok: bool,
+) -> int:
+    """Gate 2 with flags (one item) or the interactive menu; returns how many were decided."""
+    if decision is not None:
+        if content_id is None:
+            raise FactoryError("--decision needs --id")
+        metadata_stage.ensure_metadata(ctx, content_id)
+        if decision == "approve":
+            review_stage.approve_final(ctx, content_id, checklist_ok=checklist_ok)
+            typer.echo(f"#{content_id} approved: ready to publish.")
+        elif decision == "reject":
+            review_stage.reject_final(ctx, content_id, reason or "")
+            typer.echo(f"#{content_id} rejected.")
+        elif decision == "redo":
+            review_stage.redo_final(ctx, content_id, reason or "")
+            typer.echo(f"#{content_id} back to generated; fix it, then `factory assemble`.")
+        else:
+            raise FactoryError(f"--decision must be approve, reject or redo, not '{decision}'")
+        return 1
+    items = [content_id] if content_id else [r["id"] for r in review_stage.pending_final(ctx)]
+    if not items:
+        typer.echo("Nothing waiting for Gate 2.")
+    decided = 0
+    for item_id in items:
+        outcome = _review_final_interactively(ctx, item_id)
+        if outcome == "quit":
+            break
+        decided += outcome != "skip"
+    return decided
+
+
+def _review_final_interactively(ctx: AppContext, content_id: int) -> str:
+    metadata_stage.ensure_metadata(ctx, content_id)
+    while True:
+        typer.echo(_final_report(ctx, content_id))
+        choice = typer.prompt(
+            "\n[a]pprove  [e]dit metadata  [r]eject  re[d]o  [s]kip  [q]uit",
+            type=click.Choice(["a", "e", "r", "d", "s", "q"]),
+            show_choices=False,
+        )
+        if choice in ("s", "q"):
+            return {"s": "skip", "q": "quit"}[choice]
+        if choice == "e":
+            _edit_metadata(ctx, content_id)
+            continue
+        if choice == "r":
+            review_stage.reject_final(ctx, content_id, typer.prompt("Reason for rejecting"))
+            typer.echo(f"#{content_id} rejected.")
+            return "reject"
+        if choice == "d":
+            review_stage.redo_final(ctx, content_id, typer.prompt("What must be fixed"))
+            typer.echo(f"#{content_id} back to generated; fix it, then `factory assemble`.")
+            return "redo"
+        if not typer.confirm("Did you watch the preview, and does every checklist item hold?"):
+            continue
+        review_stage.approve_final(ctx, content_id, checklist_ok=True)
+        typer.echo(f"#{content_id} approved: ready to publish.")
+        return "approve"
+
+
+def _final_report(ctx: AppContext, content_id: int) -> str:
+    data = metadata_stage.load(ctx, content_id)
+    folder = voice_stage.asset_dir(ctx, content_id)
+    qa_path = folder / "qa_report.json"
+    qa_lines = []
+    if qa_path.is_file():
+        for check in json.loads(qa_path.read_text()):
+            mark = {True: "PASS", False: "FAIL", None: "----"}[check["ok"]]
+            qa_lines.append(f"  {mark} {check['check']}: {check['detail']}")
+    music = data.get("music") or {}
+    lines = [
+        _content_report(ctx.conn, content_id),
+        "",
+        f"YOUTUBE TITLE:  {data['youtube']['title']}",
+        "YOUTUBE DESCRIPTION:",
+        textwrap.indent(data["youtube"]["description"], "  "),
+        "",
+        f"TIKTOK CAPTION:  {data['tiktok']['caption']}",
+        f"MUSIC (YouTube only):  {music.get('title', '-')} by {music.get('artist') or '?'}",
+        "",
+        "AUTOMATED QA:",
+        *(qa_lines or ["  (no qa_report.json)"]),
+        "",
+        "WATCH BEFORE DECIDING (outside VS Code, it can't play the sound):",
+        f'  explorer.exe "$(wslpath -w {folder.relative_to(ctx.root)})"',
+        "  preview_720p.mp4 (both renders share the picture), cover.jpg",
+        "",
+        "CHECKLIST:",
+        *(f"  [ ] {item}" for item in review_stage.FINAL_CHECKLIST),
+    ]
+    return "\n".join(lines)
+
+
+def _edit_metadata(ctx: AppContext, content_id: int) -> None:
+    """Open metadata.json in $EDITOR; keep the edit only if it is valid JSON within the rules."""
+    text = json.dumps(metadata_stage.load(ctx, content_id), indent=2, ensure_ascii=False)
+    edited = click.edit(text, extension=".json")
+    if edited is None:
+        typer.echo("No changes.")
+        return
+    try:
+        data = json.loads(edited)
+    except json.JSONDecodeError as exc:
+        typer.echo(f"Not saved: the file is not valid JSON ({exc}).", err=True)
+        return
+    problems = metadata_stage.validate(data, ctx.channel.brand.disclosure_line)
+    if problems:
+        typer.echo("Not saved: " + "; ".join(problems), err=True)
+        return
+    metadata_stage.write(ctx, content_id, data)
+    typer.echo("metadata.json saved.")
 
 
 def _review_interactively(ctx: AppContext, content_id: int) -> str:

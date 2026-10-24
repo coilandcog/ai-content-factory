@@ -51,7 +51,7 @@
 - [x] `subs.ass` exists, its events run from the first to the last spoken word, at most 4 words per line and 2 lines.
 - [x] No subtitle or label outside the safe zones (`DESIGN_SYSTEM.md` §6): subtitle lines ≤ 760 px with the real font and the baseline ≥ 480 px above the bottom; diagram cards inside x 90–920, y 220–1100.
 - [x] At least 2 (Short) or 4 (Deep Dive) diagram files.
-- [ ] `metadata.json` contains the disclosure line; Deep Dive descriptions list at least 2 sources. *(Reported as "not checked yet" until task 1.11.)*
+- [x] `metadata.json` exists and is complete: the description contains the disclosure line and at least 2 sources (every format), the title is ≤ 70 characters, 3 YouTube / 3–5 TikTok hashtags, AI flags on. If it couldn't be created (e.g. Gemini unavailable), the failure says why.
 - [x] YouTube render's music track is from `music_tracks` with `source = youtube_audio_library`; TikTok render has **no** music (silent under the logo sting, where nothing else plays).
 - [x] `beat_order` and `hook_type` differ from the previous content. Similarity below 0.80: *"not checked yet" until task 1.13.*
 - [x] Preview file is under 45 MB.

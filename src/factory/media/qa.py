@@ -50,6 +50,9 @@ class QaInputs:
     variety: tuple[tuple[str | None, str | None], tuple[str | None, str | None]] = field(
         default=((None, None), (None, None))
     )  # ((hook_type, beat_order) of this item, of the previous item)
+    # metadata.json problems found by the stage ([] = complete); None = file missing
+    metadata_problems: list[str] | None = None
+    metadata_error: str | None = None  # why metadata.json could not be created, if it failed
 
 
 def run_checks(inputs: QaInputs) -> list[Check]:
@@ -77,7 +80,7 @@ def run_checks(inputs: QaInputs) -> list[Check]:
         except (FactoryError, OSError, ValueError, KeyError) as exc:
             ok, detail = False, f"could not check: {exc}"
         results.append(Check(name, ok, detail))
-    results.append(Check("metadata", None, "not checked yet: metadata.json comes in task 1.11"))
+    results.append(Check("metadata", *metadata(inputs.metadata_problems, inputs.metadata_error)))
     results.append(
         Check("similarity", None, "not checked yet: similarity check comes in task 1.13")
     )
@@ -228,6 +231,17 @@ def variety(
     if repeats:
         return False, f"same {' and '.join(repeats)} as the previous video"
     return True, f"hook {current[0]} / beats {current[1]} differ from the previous video"
+
+
+def metadata(problems: list[str] | None, error: str | None) -> tuple[bool, str]:
+    """metadata.json exists and is complete: disclosure line, 2+ sources, title, hashtags."""
+    if problems is None:
+        return False, "metadata.json missing" + (
+            f" (could not be created: {error})" if error else ""
+        )
+    if problems:
+        return False, "; ".join(problems)
+    return True, "title, description with sources and disclosure line, hashtags complete"
 
 
 def preview_size(preview: Path) -> tuple[bool, str]:
