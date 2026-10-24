@@ -119,7 +119,7 @@ Rows are created or updated from the channel YAML (`platforms.*`) when the first
 | word_count | INTEGER | |
 | est_duration_s | REAL | `word_count / voice.target_wpm * 60` (142 wpm for Coil & Cog, D-066) |
 | shot_list_json | TEXT | List of `{n, beat, kind: flow_clip\|still\|diagram, description, duration_s, prompt_vars}`; diagram shots also carry `labels` (1–4, ≤4 words) and `energy` (D-067) |
-| similarity_max | REAL | Highest similarity to the last 30 scripts |
+| similarity_max | REAL | Highest cosine similarity to the current scripts of the last `similarity_window` other items (rejected/archived skipped), stored by the script stage; `NULL` = written before task 1.13 (D-076) |
 | llm_provider / llm_model | TEXT | |
 | prompt_version | TEXT | First 10 hex chars of a SHA-256 over the template and its includes; system and user prompt joined with `+` (D-057) |
 | is_current | INTEGER | 0/1; only one current version per content |

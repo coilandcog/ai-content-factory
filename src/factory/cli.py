@@ -624,11 +624,13 @@ def _script_report(conn: sqlite3.Connection, content_id: int) -> str:
     sources = conn.execute(
         "SELECT url, publisher, claim FROM sources WHERE content_id = ? ORDER BY id", (content_id,)
     ).fetchall()
+    similar = script["similarity_max"]
     lines = [
         "",
         f"Script v{script['version']} | {script['word_count']} words | "
         f"~{script['est_duration_s']:.0f} s | {script['llm_model']} | "
-        f"prompt {script['prompt_version']}",
+        f"prompt {script['prompt_version']} | similarity "
+        + ("not checked" if similar is None else f"{similar:.2f}"),
         "",
         f"HOOK:  {script['hook']}",
         "",

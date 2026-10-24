@@ -25,6 +25,7 @@ from factory.errors import BudgetExceededError, ConfigError, FactoryError, Polic
 from factory.integrations.gemini import GeminiClient
 from factory.integrations.wikimedia import WikiSummary, page_summary
 from factory.prompts import render_prompt
+from factory.similarity import closest
 
 log = logging.getLogger("factory.script")
 
@@ -355,7 +356,15 @@ def _script_one(
             f"only {len(sources)} of {len(draft.sources)} sources could be opened: "
             + ", ".join(s.url for s in draft.sources)
         )
-    return _save(conn, row["id"], draft, sources, llm.model, f"{system.version}+{user.version}")
+    match = closest(conn, row["channel_id"], row["id"], draft.narration(),
+                    window=channel.scoring.similarity_window)  # fmt: skip
+    threshold = channel.scoring.similarity_block_threshold
+    if match.score > threshold:  # D-041/D-076: a near-repeat of a recent script is not made
+        raise PolicyBlockedError(
+            f"too similar to #{match.content_id} ({match.score:.2f} > {threshold:.2f})"
+        )
+    return _save(conn, row["id"], draft, sources, llm.model,
+                 f"{system.version}+{user.version}", match.score)  # fmt: skip
 
 
 def _eligible_ideas(ctx: AppContext, limit: int | None) -> list[sqlite3.Row]:
@@ -444,6 +453,7 @@ def _save(
     sources: list[SourceDraft],
     model: str,
     prompt_version: str,
+    similarity_max: float,
 ) -> int:
     narration = draft.narration()
     words = word_count(narration)
@@ -469,9 +479,9 @@ def _save(
         script_id = conn.execute(
             """
             INSERT INTO scripts (content_id, version, hook, body_text, engineer_note, loop_line,
-                word_count, est_duration_s, shot_list_json, llm_provider, llm_model,
-                prompt_version, is_current)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'gemini', ?, ?, 1)
+                word_count, est_duration_s, shot_list_json, similarity_max, llm_provider,
+                llm_model, prompt_version, is_current)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'gemini', ?, ?, 1)
             """,
             (
                 content_id,
@@ -483,6 +493,7 @@ def _save(
                 words,
                 round(words / draft.wpm * 60, 1),
                 json.dumps(shot_list, ensure_ascii=False),
+                similarity_max,
                 model,
                 prompt_version,
             ),

@@ -54,7 +54,7 @@ flowchart LR
 |---|---|---|---|---|---|---|
 | **discover** | `factory discover` | Channel `seed_topics`, `pillars` | Rows in `trend_signals` | — | Wikimedia Pageviews API; YouTube Data API `search.list` / `videos.list`; Google Trends CSV exported manually by the owner (`factory trends import`) | Not needed |
 | **ideate** | `factory ideate` | Signals, catalog history, winning patterns | `contents` rows with score breakdown | new → `idea` | Gemini API free tier; Ollama fallback | Claude API, about €3–8 |
-| **script** | `factory script` | `idea` contents with score ≥ threshold, or no score yet (created with `factory new`) | `scripts`, `sources`; Gate 1 request | `idea` → `scripted`; blocklisted topic → `archived` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
+| **script** | `factory script` | `idea` contents with score ≥ threshold, or no score yet (created with `factory new`) | `scripts`, `sources`; Gate 1 request | `idea` → `scripted`; blocklisted topic or similarity above the threshold → `archived` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
 | **review (Gate 1)** | `factory review --gate script` | `scripted` | `reviews` row | → `script_approved` / `rejected` / back to `scripted` | Terminal (Phase 1); Telegram bot (Phase 2) | — |
 | **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams | → `awaiting_clips` (sheet + voice + subtitles issued) → `generated` (all clips in the inbox, then animated stills and diagram cards made) | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
 | **assemble** | `factory assemble [--force]` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `preview_720p.mp4`, `music.txt`, `cover.jpg`, `qa_report.json`; `metadata.json` (task 1.11) | QA pass → `assembled`; QA failure → stays `generated` with the reasons in `status_reason` (renders are kept, so a re-run only re-checks) | FFmpeg only (D-068) | Not needed |
@@ -314,6 +314,7 @@ ai-content-factory/
 │   ├── prompts.py                # Jinja2 prompt loader: channel override, then prompts/default
 │   ├── context.py                # AppContext (config + db) passed to stages; StageResult counts
 │   ├── music.py                  # YouTube Audio Library tracks: add, list, pick least-used
+│   ├── similarity.py             # script similarity: local embeddings, closest recent script (D-076)
 │   ├── stages/
 │   │   ├── discover.py
 │   │   ├── ideate.py

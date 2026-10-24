@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import sqlite3
 from collections.abc import Callable
@@ -15,7 +16,7 @@ from factory.cli import app
 from factory.config import REPO_ROOT, EnvSettings, load_channel, load_settings
 from factory.context import AppContext
 from factory.db import add_content, connect, migrate, upsert_channel
-from factory.errors import BudgetExceededError, ConfigError
+from factory.errors import BudgetExceededError, ConfigError, PolicyBlockedError
 from factory.integrations.gemini import GeminiClient
 from factory.stages import script as stage
 
@@ -375,3 +376,96 @@ def test_diagram_labels_and_energy_are_stored_in_the_shot_list(ctx: AppContext) 
         "electric",
     )
     assert "labels" not in shots[0]  # flow clips carry prompt_vars instead
+
+
+# --- similarity check (ROADMAP 1.13, D-076) -----------------------------------------------------
+
+JET_ENGINE = (
+    "A jet engine sucks in air with a giant fan, squeezes it in a compressor, mixes it with fuel "
+    "and burns it. The hot gas rushes out and spins a turbine that drives the fan."
+)
+
+
+def fixture_narration() -> str:
+    answer = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    return " ".join([answer["hook"], answer["body"], answer["engineer_note_draft"],
+                     answer["loop_line"]])  # fmt: skip
+
+
+def earlier_item(ctx: AppContext, name: str, body: str, status: str = "published") -> int:
+    """An older item with a current script, put straight into the database."""
+    content_id = new_idea(ctx, name)
+    ctx.conn.execute("UPDATE contents SET status = ? WHERE id = ?", (status, content_id))
+    ctx.conn.execute(
+        "INSERT INTO scripts (content_id, version, body_text) VALUES (?, 1, ?)", (content_id, body)
+    )
+    ctx.conn.commit()
+    return content_id
+
+
+def test_near_duplicate_of_a_recent_script_is_archived(ctx: AppContext) -> None:
+    earlier = earlier_item(ctx, "alternator", fixture_narration())
+    content_id = new_idea(ctx)
+
+    result = run_stage(ctx, FakeGenaiClient(fixture_reply("script_short_alternator")))
+
+    row = content(ctx, content_id)
+    assert result.processed == 1
+    assert row["status"] == "archived"
+    assert row["status_reason"].startswith(f"blocked: too similar to #{earlier} (1.00 > 0.80)")
+    assert ctx.conn.execute(
+        "SELECT COUNT(*) FROM scripts WHERE content_id = ?", (content_id,)
+    ).fetchone()[0] == 0  # fmt: skip
+
+
+def test_a_different_machine_passes_and_its_score_is_stored(ctx: AppContext) -> None:
+    earlier_item(ctx, "jet engine", JET_ENGINE)
+    content_id = new_idea(ctx)
+
+    run_stage(ctx, FakeGenaiClient(fixture_reply("script_short_alternator")))
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    score = ctx.conn.execute(
+        "SELECT similarity_max FROM scripts WHERE content_id = ?", (content_id,)
+    ).fetchone()[0]
+    assert 0 < score < 0.5
+
+
+def test_rejected_and_archived_items_do_not_block(ctx: AppContext) -> None:
+    earlier_item(ctx, "alternator", fixture_narration(), status="rejected")
+    earlier_item(ctx, "alternator", fixture_narration(), status="archived")
+    content_id = new_idea(ctx)
+
+    run_stage(ctx, FakeGenaiClient(fixture_reply("script_short_alternator")))
+
+    assert content(ctx, content_id)["status"] == "scripted"
+
+
+def test_only_the_last_window_scripts_count(ctx: AppContext) -> None:
+    earlier_item(ctx, "alternator", fixture_narration())  # the oldest: outside a window of 1
+    earlier_item(ctx, "jet engine", JET_ENGINE)
+    scoring = ctx.channel.scoring.model_copy(update={"similarity_window": 1})
+    ctx = dataclasses.replace(ctx, channel=ctx.channel.model_copy(update={"scoring": scoring}))
+    content_id = new_idea(ctx)
+
+    run_stage(ctx, FakeGenaiClient(fixture_reply("script_short_alternator")))
+
+    assert content(ctx, content_id)["status"] == "scripted"
+
+
+def test_too_similar_redo_keeps_the_previous_version(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+    run_stage(ctx, FakeGenaiClient(fixture_reply("script_short_alternator")))
+    answer = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    answer["hook"] = "What if your alternator stopped spinning?"
+    earlier = earlier_item(ctx, "alternator", fixture_narration().replace(
+        "Why doesn't your car battery go flat while you drive?", answer["hook"]))  # fmt: skip
+
+    with pytest.raises(PolicyBlockedError, match=f"too similar to #{earlier}"):
+        stage.rescript(ctx, content_id, "new hook", llm=llm_for(ctx, FakeGenaiClient(
+            reply(json.dumps(answer)))), http=http_for(wiki_and_sources()))  # fmt: skip
+
+    current = ctx.conn.execute(
+        "SELECT version FROM scripts WHERE content_id = ? AND is_current = 1", (content_id,)
+    ).fetchone()[0]
+    assert (current, content(ctx, content_id)["status"]) == (1, "scripted")

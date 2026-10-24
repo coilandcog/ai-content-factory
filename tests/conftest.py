@@ -6,7 +6,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from fakes.fake_embedder import fake_embed
 
+from factory import similarity
 from factory.config import CONFIG_DIR, load_settings
 from factory.media import ffmpeg
 
@@ -31,6 +33,12 @@ def reset_factory_logging() -> Iterator[None]:
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
         handler.close()
+
+
+@pytest.fixture(autouse=True)
+def fake_embedding_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit tests never load the real embedding model (slow, needs a download)."""
+    monkeypatch.setattr(similarity, "default_embedder", lambda: fake_embed)
 
 
 @pytest.fixture(autouse=True, scope="session")

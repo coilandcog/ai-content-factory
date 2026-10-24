@@ -53,7 +53,7 @@
 - [x] At least 2 (Short) or 4 (Deep Dive) diagram files.
 - [x] `metadata.json` exists and is complete: the description lists at least 2 sources (every format), the title is ≤ 70 characters, 3 YouTube / 3–5 TikTok hashtags, AI flags on. If it couldn't be created (e.g. Gemini unavailable), the failure says why.
 - [x] YouTube render's music track is from `music_tracks` with `source = youtube_audio_library`; TikTok render has **no** music (silent under the logo sting, where nothing else plays).
-- [x] `beat_order` and `hook_type` differ from the previous content. Similarity below 0.80: *"not checked yet" until task 1.13.*
+- [x] `beat_order` and `hook_type` differ from the previous content. Similarity (stored by the script stage) at most 0.80; scripts written before task 1.13 show "not checked".
 - [x] Preview file is under 45 MB.
 
 ### Human (Gate 2)

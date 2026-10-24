@@ -1,7 +1,7 @@
 """Automated quality checks on a finished item (TESTING.md §4, ROADMAP 1.10, D-070).
 
 Each check returns a Check: ok=True (pass), ok=False (fail, with a reason the owner can act on)
-or ok=None (not checked yet, because the feature it needs comes in a later task).
+or ok=None (not checked, e.g. a script written before the similarity check existed).
 The stage gathers the facts that live in the database into QaInputs; this module only reads
 files, so every check can be tested on its own.
 """
@@ -53,6 +53,8 @@ class QaInputs:
     # metadata.json problems found by the stage ([] = complete); None = file missing
     metadata_problems: list[str] | None = None
     metadata_error: str | None = None  # why metadata.json could not be created, if it failed
+    similarity_max: float | None = None  # stored by the script stage; None = made before 1.13
+    similarity_threshold: float = 0.80
 
 
 def run_checks(inputs: QaInputs) -> list[Check]:
@@ -82,7 +84,7 @@ def run_checks(inputs: QaInputs) -> list[Check]:
         results.append(Check(name, ok, detail))
     results.append(Check("metadata", *metadata(inputs.metadata_problems, inputs.metadata_error)))
     results.append(
-        Check("similarity", None, "not checked yet: similarity check comes in task 1.13")
+        Check("similarity", *similarity(inputs.similarity_max, inputs.similarity_threshold))
     )
     return results
 
@@ -231,6 +233,15 @@ def variety(
     if repeats:
         return False, f"same {' and '.join(repeats)} as the previous video"
     return True, f"hook {current[0]} / beats {current[1]} differ from the previous video"
+
+
+def similarity(score: float | None, threshold: float) -> tuple[bool | None, str]:
+    """The script's highest similarity to the recent scripts stays at or below the threshold."""
+    if score is None:
+        return None, "not checked: the script was written before the similarity check existed"
+    if score > threshold:
+        return False, f"similarity {score:.2f} to a recent script (needs at most {threshold:.2f})"
+    return True, f"similarity {score:.2f} (at most {threshold:.2f})"
 
 
 def metadata(problems: list[str] | None, error: str | None) -> tuple[bool, str]:

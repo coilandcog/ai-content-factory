@@ -123,6 +123,8 @@ def _qa_inputs(
         ),
         metadata_problems=_metadata_problems(ctx, row["id"]),
         metadata_error=metadata_error,
+        similarity_max=script["similarity_max"],
+        similarity_threshold=ctx.channel.scoring.similarity_block_threshold,
     )
 
 

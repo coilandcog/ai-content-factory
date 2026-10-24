@@ -113,7 +113,7 @@ The LLM scores each idea from 0 to 100. Ideas with a score of at least `scoring.
 | Evergreen demand | 10 | One-off | Searched all year |
 | Novelty vs our catalog | 10 | Similar to something we've posted | New object and new angle |
 
-**Hard filters, applied before scoring:** blocklist match → rejected. Semantic similarity above `scoring.similarity_block_threshold` (default **0.80**) to any of the last 30 scripts → rejected.
+**Hard filters, applied before scoring:** blocklist match → rejected. Semantic similarity above `scoring.similarity_block_threshold` (**0.80**) to the current script of any of the last `similarity_window` (30) other items → archived with the reason (rejected and archived items don't count, D-076). The check runs on the finished script, so the scoring step of ideation (task 1.15) uses the same module. Measured with the model: a reworded script about the *same* machine scores 0.74–0.81, so 0.80 blocks near-copies only; a repeated object is caught by the "Novelty" score and by you at Gate 1.
 
 ## 10. Winner / loser labels (learn stage)
 
