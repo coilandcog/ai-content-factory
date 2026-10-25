@@ -204,6 +204,10 @@ def _rule_problems(draft: Any) -> list[str]:
             )
     if _repeats(draft.engineer_note_draft, draft.body):
         problems.append("engineer_note_draft repeats the body: give a fact the body doesn't say")
+    if _repeats(draft.loop_line, draft.hook):  # D-089: it leads back to the hook, not repeats it
+        problems.append(
+            "loop_line repeats the hook: write a new last sentence that leads back into the hook"
+        )
     if _repeats(draft.hook, " ".join(FIXED_HOOK_EXAMPLES)):
         problems.append("hook copies the formula's example: write your own hook for this machine")
     words = word_count(draft.narration())

@@ -62,7 +62,7 @@ The narrator speaks at about 142 words per minute (`voice.target_wpm`, measured 
 | 2–8 s | Setup | Why this object matters to *you* |
 | 8–30 s | Explanation | 2–3 beats, one idea each |
 | 30–36 s | Engineer's Note | One sentence of insight from the owner |
-| 36–40 s | Loop line | A complete sentence (no trailing "...") that flows back into the hook (D-062) |
+| 36–40 s | Loop line | A complete sentence (no trailing "...") that flows back into the hook in new words, never the hook repeated (D-062, D-089) |
 
 **Deep Dive (~120 s):** hook (0–3 s) → setup (3–15 s) → 4–6 explanation beats → one lesser-known fact, stated plainly → Engineer's Note (10–15 s) → recap in one sentence → loop line.
 

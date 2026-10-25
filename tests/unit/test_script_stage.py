@@ -206,6 +206,11 @@ def test_note_that_claims_what_viewers_miss_is_sent_back(ctx: AppContext) -> Non
             "engineer_note_draft repeats the body",
         ),
         ("hook", "You've seen this a thousand times, but never inside it.", "hook copies the"),
+        (
+            "loop_line",
+            "Why doesn't your car battery go flat while you drive?",
+            "loop_line repeats the hook",
+        ),
     ],
 )
 def test_quality_rule_breaks_are_sent_back(
