@@ -14,6 +14,7 @@ import re
 import sqlite3
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
+from urllib.parse import quote, unquote
 
 import httpx
 from pydantic import BaseModel, Field, create_model, model_validator
@@ -22,9 +23,15 @@ from factory.budgets import check_and_record
 from factory.config import ChannelConfig
 from factory.context import AppContext, StageResult
 from factory.db import set_status
-from factory.errors import BudgetExceededError, ConfigError, FactoryError, PolicyBlockedError
+from factory.errors import (
+    BudgetExceededError,
+    ConfigError,
+    FactoryError,
+    IntegrationError,
+    PolicyBlockedError,
+)
 from factory.integrations.gemini import GeminiClient
-from factory.integrations.wikimedia import WikiSummary, page_summary
+from factory.integrations.wikimedia import WikiSummary, article_title, page_summary
 from factory.prompts import render_prompt
 from factory.similarity import closest
 
@@ -506,8 +513,11 @@ def _open_sources(
                 continue  # Gemini repeated a URL it was told about
             if _reachable(http, source.url):
                 sources.append(source)
-            else:
-                dead.append(source.url)
+                continue
+            dead.append(source.url)
+            fixed = _wikipedia_fix(ctx, row, http, source)
+            if fixed and fixed.url not in [s.url for s in sources]:
+                sources.append(fixed)
         if dead:
             log.warning(
                 "#%s: %d source(s) could not be opened: %s",
@@ -535,6 +545,36 @@ def _open_sources(
             f"{SOURCE_ROUNDS} requests for replacements; not found: {', '.join(dead)}"
         )
     return sources
+
+
+WIKI_ARTICLE = re.compile(r"^https?://en\.wikipedia\.org/wiki/([^?#]+)$")
+
+
+def _wikipedia_fix(
+    ctx: AppContext, row: sqlite3.Row, http: httpx.Client, source: SourceDraft
+) -> SourceDraft | None:
+    """A dead English Wikipedia link whose title Gemini guessed ("Shield_tunneling") becomes
+    the real article that Wikipedia's search finds ("Tunnelling shield"), or None (D-087)."""
+    match = WIKI_ARTICLE.match(source.url)
+    if not match:
+        return None
+    guess = unquote(match.group(1)).replace("_", " ")
+    try:
+        title = article_title(
+            http, guess, before_call=lambda: check_and_record(ctx.conn, ctx.channel, "wikimedia")
+        )
+    except IntegrationError as exc:  # best effort: the Gemini replacement step still follows
+        log.warning("Wikipedia search for %r failed: %s", guess, exc,
+                    extra={"content_id": row["id"], "event": "wiki_fix_error"})  # fmt: skip
+        return None
+    if not title or title == guess:
+        return None
+    url = f"https://en.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}"
+    if not _reachable(http, url):
+        return None
+    log.info("#%s: Wikipedia has no %r; citing %r instead", row["id"], guess, title,
+             extra={"content_id": row["id"], "event": "wiki_fix"})  # fmt: skip
+    return source.model_copy(update={"url": url, "title": title, "publisher": "Wikipedia"})
 
 
 # Only Wikipedia answers honestly when it refuses a script: other sites (Britannica,

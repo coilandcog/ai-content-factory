@@ -369,6 +369,64 @@ def test_trailing_ellipsis_loop_line_is_corrected(ctx: AppContext) -> None:
     assert "loop_line must be a complete sentence" in sdk.calls[1]["contents"]
 
 
+def wiki_search(found: dict[str, str], dead: set[str]) -> Callable:
+    """wiki_and_sources plus Wikipedia full-text search: `found` maps a guess to an article."""
+    base = wiki_and_sources(dead=dead)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        guess = request.url.params.get("gsrsearch")
+        if guess is None:
+            return base(request)
+        pages = [{"title": found[guess], "index": 1}] if guess in found else []
+        return httpx.Response(200, json={"query": {"pages": pages}})
+
+    return handler
+
+
+def test_guessed_wikipedia_title_becomes_the_real_article(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+    answer = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    guessed, dead = (
+        "https://en.wikipedia.org/wiki/Car_charging_dynamo",
+        "https://invented.example/a",
+    )
+    answer["sources"][1]["url"], answer["sources"][2]["url"] = guessed, dead
+    sdk = FakeGenaiClient(reply(json.dumps(answer)))  # no replacement call is scripted
+
+    run_stage(ctx, sdk, wiki_search({"Car charging dynamo": "Dynamo"}, dead={guessed, dead}))
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    rows = ctx.conn.execute("SELECT url, title, publisher FROM sources ORDER BY id").fetchall()
+    assert [tuple(r) for r in rows][1] == (
+        "https://en.wikipedia.org/wiki/Dynamo",
+        "Dynamo",
+        "Wikipedia",
+    )
+    assert len(sdk.calls) == 1  # D-087: fixed without asking Gemini again
+
+
+@pytest.mark.parametrize("found", [{}, {"Car charging dynamo": "Alternator"}])
+def test_unfixable_wikipedia_guess_falls_back_to_gemini(
+    ctx: AppContext, found: dict[str, str]
+) -> None:
+    content_id = new_idea(ctx)
+    answer = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    guessed, dead = (
+        "https://en.wikipedia.org/wiki/Car_charging_dynamo",
+        "https://invented.example/a",
+    )
+    answer["sources"][1]["url"], answer["sources"][2]["url"] = guessed, dead
+    fresh = {**answer["sources"][1], "url": "https://www.example-museum.org/alternator"}
+    sdk = FakeGenaiClient(reply(json.dumps(answer)), reply(json.dumps({"sources": [fresh]})))
+
+    run_stage(ctx, sdk, wiki_search(found, dead={guessed, dead}))
+
+    # No hit, or a hit that is already cited (Alternator), is not used: Gemini replaces it.
+    assert content(ctx, content_id)["status"] == "scripted"
+    urls = [r["url"] for r in ctx.conn.execute("SELECT url FROM sources ORDER BY id")]
+    assert urls == [WIKI_URL, fresh["url"]]
+
+
 def test_bot_walls_count_as_existing_only_on_wikipedia(ctx: AppContext) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/invented":
