@@ -167,7 +167,7 @@ def test_redo_writes_version_2_and_keeps_version_1(ctx: AppContext) -> None:
 
 def test_failed_redo_keeps_version_1_current(ctx: AppContext) -> None:
     content_id = scripted_item(ctx)
-    client, _ = llm(reply("{}"), reply("{}"), reply("{}"))
+    client, _ = llm(*[reply("{}")] * (1 + script_stage.MAX_REASKS))  # every attempt fails
 
     with pytest.raises(FactoryError, match="redo saved, but the new version failed"):
         review.redo(ctx, content_id, "shorter hook", llm=client, http=http())

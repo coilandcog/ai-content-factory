@@ -134,6 +134,9 @@ def test_prompt_contains_reference_rules_and_blocklist(ctx: AppContext) -> None:
     assert EXTRACT in call["contents"]
     assert f"list {WIKI_URL} as the first source" in call["contents"]
     assert "between 71 and 118 words" in call["contents"]
+    # Per-part budgets (D-083): 94-word target = hook 12 + body 58 + note 14 + loop 10.
+    assert "hook: the first sentence, about 12 words" in call["contents"]
+    assert "about 58 words in short, plain sentences" in call["contents"]
     assert "defeating safety or emissions devices" in call["config"].system_instruction
 
 
@@ -176,6 +179,15 @@ def test_rule_break_is_fixed_by_the_reask(ctx: AppContext) -> None:
 
     assert content(ctx, content_id)["status"] == "scripted"
     assert "narration has" in sdk.calls[1]["contents"]  # the re-ask names the broken rule
+    assert "(hook " in sdk.calls[1]["contents"] and "body 4," in sdk.calls[1]["contents"]
+
+
+@pytest.mark.parametrize("target", [94, 254])
+def test_part_budgets_add_up_to_the_target(target: int) -> None:
+    parts = stage.part_words(target)
+
+    assert sum(parts.values()) == target
+    assert parts["body"] > parts["note"] >= parts["hook"]
 
 
 def test_unreachable_sources_fail_the_item_but_not_the_batch(ctx: AppContext) -> None:

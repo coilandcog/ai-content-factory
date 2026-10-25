@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import sqlite3
 from dataclasses import dataclass
@@ -54,9 +55,11 @@ MIN_DIAGRAMS = {"short": 2, "deep_dive": 4, "episode": 4}  # TESTING.md §4 QA r
 MIN_CLIPS, MAX_CLIPS = 3, 5  # DESIGN_SYSTEM.md §10.5
 # Ask for 3 sources, keep the item if at least 2 open: one invented URL then costs nothing.
 SOURCES_ASKED, SOURCES_NEEDED = 3, 2
-# Small models miscount words; two corrections cost at most 3 Gemini calls per idea.
-MAX_REASKS = 2
+# flash-lite fixes a named rule break when asked again; at most 5 Gemini calls per idea (D-083).
+MAX_REASKS = 4
 CLIP_MAX_S = 8.0
+# Planned shots must cover this share of the narration; assembly stretches the rest (D-058).
+COVERAGE = 0.85
 MAX_LABELS, MAX_LABEL_WORDS = 4, 4  # DESIGN_SYSTEM.md §7: labels of 4 words or fewer
 SOURCE_TIMEOUT_S = 10.0
 
@@ -169,8 +172,14 @@ def _rule_problems(draft: Any) -> list[str]:
         problems.append("loop_line must be a complete sentence ending in . ? or ! (no '...')")
     words = word_count(draft.narration())
     if not draft.min_words <= words <= draft.max_words:
+        # Per-part counts tell the model which part to shorten when it is asked again.
+        parts = ", ".join(
+            f"{name} {word_count(getattr(draft, name))}"
+            for name in ("hook", "body", "engineer_note_draft", "loop_line")
+        )
         problems.append(
-            f"narration has {words} words; it must have {draft.min_words}-{draft.max_words}"
+            f"narration has {words} words ({parts}); it must have "
+            f"{draft.min_words}-{draft.max_words}"
         )
     shots = draft.shots
     if [s.n for s in shots] != list(range(1, len(shots) + 1)):
@@ -185,7 +194,7 @@ def _rule_problems(draft: Any) -> list[str]:
     expected = list(BEAT_ORDERS[draft.beat_order])
     if first_seen != expected:
         problems.append(f"beats first appear as {first_seen}; beat_order needs {expected}")
-    needed_s = 0.85 * words / draft.wpm * 60
+    needed_s = COVERAGE * words / draft.wpm * 60
     total_s = sum(s.duration_s for s in shots)
     if total_s < needed_s:
         problems.append(f"shots last {total_s:.0f} s; they must cover at least {needed_s:.0f} s")
@@ -230,6 +239,29 @@ def script_schema(
     model.allowed_hooks = hooks
     model.allowed_beats = beats
     return model
+
+
+def part_words(target_words: int) -> dict[str, int]:
+    """A word budget per narration part that adds up to the target (D-083).
+
+    gemini-3.5-flash-lite overshot a single total by about 35%; small models keep short parts
+    to a length much better than one long total, so the prompt asks for each part separately.
+    """
+    hook, loop = 12, 10
+    note = min(25, round(target_words * 0.15))
+    return {"hook": hook, "body": target_words - hook - note - loop, "note": note, "loop": loop}
+
+
+def shot_seconds(target_s: int) -> dict[str, int]:
+    """The shot-list sum spelled out for the prompt (D-083): the model adds badly, so the code
+    does the arithmetic. Shorts get the fewest clips (Flow credits), longer videos the most."""
+    clips = MIN_CLIPS if target_s <= 60 else MAX_CLIPS
+    return {
+        "clips": clips,
+        "clip_s": round(clips * CLIP_MAX_S),
+        "rest_s": max(target_s - round(clips * CLIP_MAX_S), 0),
+        "min_total_s": math.ceil(COVERAGE * target_s),
+    }
 
 
 def word_range(channel: ChannelConfig, fmt: str) -> tuple[int, int]:
@@ -428,7 +460,9 @@ def _prompts(
         max_words=schema.max_words,
         # A target in the middle of the range keeps the model away from the edges.
         target_words=(target_words := round((schema.min_words + schema.max_words) / 2)),
-        target_total_s=round(target_words / schema.wpm * 60),
+        target_total_s=(target_s := round(target_words / schema.wpm * 60)),
+        part_words=part_words(target_words),
+        shot_seconds=shot_seconds(target_s),
         min_clips=MIN_CLIPS,
         max_clips=MAX_CLIPS,
         min_diagrams=schema.min_diagrams,

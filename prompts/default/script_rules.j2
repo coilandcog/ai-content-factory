@@ -20,20 +20,24 @@ Pick beat_order from:
 } %}
 {% for name in allowed_beats %}- {{ name }}: {{ orders[name] }}
 {% endfor %}
-Narration fields:
-- hook: the first sentence, at most 2 seconds of speech.
-- body: everything between hook and Engineer's Note.
+Narration fields, each with its own word budget (count the words of each part before answering):
+- hook: the first sentence, about {{ part_words.hook }} words.
+- body: everything between hook and Engineer's Note, about {{ part_words.body }} words in short, plain sentences.
 - engineer_note_draft: one sentence of genuine insight in the narrator's normal voice, for example
-  "Here's the surprising part: ..." or "What most people miss is ...". Never "As an engineer", never "I" or "me",
+  "Here's the surprising part: ..." or "What most people miss is ...", about {{ part_words.note }} words. Never "As an engineer", never "I" or "me",
   and no claims of expertise. It is a draft the channel owner will edit, so make it a genuine, checkable
   observation, never a made-up personal story.
 - loop_line: the last sentence. It must be a complete sentence that ends with a period, question mark or
   exclamation mark (never "..." or a dangling "because"), and it should lead naturally back to the hook when the video loops.
-- Total narration (hook + body + engineer_note_draft + loop_line): aim for about {{ target_words }} words.
-  It must stay between {{ min_words }} and {{ max_words }} words; count before answering.
+  About {{ part_words.loop }} words.
+- Together that is about {{ target_words }} words. The total must stay between {{ min_words }} and {{ max_words }} words:
+  going over is the most common mistake, so when in doubt, write less.
 
 Shot list ("shots"), numbered from 1, covering the whole narration: shot durations must add up to at least the
 narration's length, about {{ target_total_s }} seconds for {{ target_words }} words. Add stills or diagrams to fill time.
+Do the sum before answering (a total that is too short is the most common mistake): for example {{ shot_seconds.clips }} flow_clips
+x 8 s = {{ shot_seconds.clip_s }} s, so the diagrams and stills (3-6 s each) must add the other {{ shot_seconds.rest_s }} s.
+Add up every duration_s: about {{ target_total_s }} s, never under {{ shot_seconds.min_total_s }} s; more words need more seconds.
 - kind "flow_clip": an 8-second AI video clip, at most 8 seconds. Use {{ min_clips }} to {{ max_clips }} of them.
   Every flow_clip needs its beat's fields: studio -> hero_feature; cutaway -> internals and focus_part;
   flow -> energy (electric, heat or fluid), path and process; in_situ -> context.
