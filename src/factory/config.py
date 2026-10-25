@@ -106,7 +106,17 @@ class Niche(StrictModel):
     audience: Text
     pillars: list[Pillar] = Field(min_length=1)
     seed_topics: list[Text] = Field(min_length=1)
+    # Optional: the English Wikipedia article to use for a seed topic when search picks the
+    # wrong one (factory discover, D-078). Keys must be seed topics.
+    wikipedia_articles: dict[Text, Text] = Field(default_factory=dict)
     blocklist: list[Text]
+
+    @model_validator(mode="after")
+    def _articles_for_known_topics(self) -> Niche:
+        unknown = sorted(set(self.wikipedia_articles) - set(self.seed_topics))
+        if unknown:
+            raise ValueError(f"wikipedia_articles names topics that are not seed_topics: {unknown}")
+        return self
 
 
 class VideoFormat(StrictModel):
@@ -245,6 +255,7 @@ class EnvSettings(StrictModel):
     dry_run: bool
     factory_channel: KebabSlug
     gemini_api_key: SecretStr | None = None  # from GEMINI_API_KEY
+    youtube_api_key: SecretStr | None = None  # from YOUTUBE_API_KEY (read-only discover calls)
     wikimedia_user_agent: str | None = None  # from WIKIMEDIA_USER_AGENT (not a secret)
     # repr=False keeps this field out of repr() entirely.
     secrets: tuple[SecretStr, ...] = Field(default=(), repr=False)
@@ -268,6 +279,7 @@ def load_env(root: Path = REPO_ROOT) -> EnvSettings:
             dry_run=_parse_dry_run(merged.get("DRY_RUN")),
             factory_channel=merged.get("FACTORY_CHANNEL", "coil-and-cog"),
             gemini_api_key=merged.get("GEMINI_API_KEY") or None,
+            youtube_api_key=merged.get("YOUTUBE_API_KEY") or None,
             wikimedia_user_agent=merged.get("WIKIMEDIA_USER_AGENT") or None,
             secrets=secrets,
         )

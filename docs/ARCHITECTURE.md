@@ -52,7 +52,7 @@ flowchart LR
 
 | Stage | CLI | Input | Output | Status change | Free tool (launch) | Paid upgrade (approx./month) |
 |---|---|---|---|---|---|---|
-| **discover** | `factory discover` | Channel `seed_topics`, `pillars` | Rows in `trend_signals` | — | Wikimedia Pageviews API; YouTube Data API `search.list` / `videos.list`; Google Trends CSV exported manually by the owner (`factory trends import`) | Not needed |
+| **discover** | `factory discover` | Channel `seed_topics` (+ optional `wikipedia_articles`) | Rows in `trend_signals`: Wikipedia views and trend ratio daily, YouTube median views about weekly (D-078); `factory status --signals` shows the top 10 | — | Wikimedia Pageviews API; YouTube Data API `search.list` / `videos.list`; Google Trends CSV exported manually by the owner (`factory trends import`) | Not needed |
 | **ideate** | `factory ideate` | Signals, catalog history, winning patterns | `contents` rows with score breakdown | new → `idea` | Gemini API free tier; Ollama fallback | Claude API, about €3–8 |
 | **script** | `factory script` | `idea` contents with score ≥ threshold, or no score yet (created with `factory new`) | `scripts`, `sources`; Gate 1 request | `idea` → `scripted`; blocklisted topic or similarity above the threshold → `archived` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
 | **review (Gate 1)** | `factory review --gate script` | `scripted` | `reviews` row | → `script_approved` / `rejected` / back to `scripted` | Terminal (Phase 1); Telegram bot (Phase 2) | — |
@@ -126,7 +126,7 @@ Helper commands:
 Everything niche-specific is configuration. Code reads `config/settings.yaml` (global) plus one `config/channels/<slug>.yaml` per channel. Both are validated with Pydantic, a library that checks data against declared types. A new niche or channel means a new YAML file, a new set of prompt overrides (optional), new accounts, and `secrets/<slug>/` tokens. **No code changes.**
 
 `uv run factory config check` validates both files and prints a summary, or one readable error line per problem (file, key, reason). The models in `src/factory/config.py` enforce these rules (D-053):
-- Unknown keys are errors, so typos are caught. Every key in the shapes below is required except `prompts_dir`.
+- Unknown keys are errors, so typos are caught. Every key in the shapes below is required except `prompts_dir` and `niche.wikipedia_articles` (whose keys must be seed topics).
 - The channel `slug` must match its file name; `timezone` must be a real time zone; times are `HH:MM`; colors are `#RRGGBB`; each format has `min_s < max_s`; `weekly_plan` may only use enabled formats.
 - **Policy guards:** `gates.final` only accepts `required` (Gate 2 is never removed) and `platforms.*.ai_disclosure` only accepts `true`. Loosening either needs a code change and a new decision, not a YAML edit.
 
@@ -176,6 +176,8 @@ niche:
     - id: industry_and_energy
       description: "Heavy machines, cranes, factories and power generation"
   seed_topics: [alternator, turbocharger, jet engine, ship diesel engine, tunnel boring machine]  # full list in CONTENT_STRATEGY.md
+  wikipedia_articles:          # optional; only where Wikipedia search picks the wrong page (D-078)
+    differential: "Differential (mechanical device)"
   blocklist:
     - "weapons or firearm mechanisms"
     - "military aircraft, warships and weapon systems"
@@ -328,6 +330,7 @@ ai-content-factory/
 │   ├── integrations/
 │   │   ├── gemini.py
 │   │   ├── ollama.py
+│   │   ├── http_json.py          # GET JSON with the shared retry rules; URLs never in errors
 │   │   ├── wikimedia.py
 │   │   ├── youtube.py            # Data API: search, upload, schedule
 │   │   ├── youtube_analytics.py

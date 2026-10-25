@@ -43,6 +43,7 @@ from factory.logging_setup import Redactor, set_log_context, setup_logging
 from factory.media import ffmpeg, subtitles
 from factory.media.brand import build_brand_assets
 from factory.stages import assemble as assemble_stage
+from factory.stages import discover as discover_stage
 from factory.stages import generate as generate_stage
 from factory.stages import metadata as metadata_stage
 from factory.stages import publish as publish_stage
@@ -181,6 +182,21 @@ def _make_stub(stage: str, task: str) -> Callable[[Path], None]:
             raise FactoryError(f"'{stage}' is not built yet (ROADMAP task {task}).")
 
     return stub
+
+
+def discover(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Collect demand signals for the seed topics: Wikipedia daily, YouTube weekly (1.14)."""
+    with _tracked_run("discover", config_dir) as run:
+        ctx = _context(run, config_dir)
+        result = discover_stage.run(ctx)
+        run.tally.processed, run.tally.failed = result.processed, result.failed
+        typer.echo(
+            f"Topics with new signals: {result.processed}, failed: {result.failed} "
+            f"(YouTube searches: {result.youtube_searched})"
+        )
+        if result.youtube_note:
+            typer.echo(result.youtube_note)
+        typer.echo("Top topics: uv run factory status --signals")
 
 
 def script(
@@ -519,6 +535,7 @@ def publish(
 
 # Stages that are built; the rest stay stubs. Registered in pipeline order for --help.
 IMPLEMENTED: dict[str, Callable[..., None]] = {
+    "discover": discover,
     "script": script,
     "generate": generate,
     "assemble": assemble,
@@ -566,11 +583,17 @@ def status(
     show: Annotated[
         str | None, typer.Option(help="With an id: 'script' prints the current script.")
     ] = None,
+    signals: Annotated[
+        bool, typer.Option("--signals", help="Top 10 seed topics by trend (factory discover).")
+    ] = False,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
     """Show the channel summary, or one content item when an id is given."""
     with _tracked_run("status", config_dir) as run:
         channel = load_channel(run.env.factory_channel, config_dir)
+        if signals:
+            typer.echo(_signals_report(run.conn, channel))
+            return
         if content_id is None:
             typer.echo(_status_report(run.conn, channel, run.env.dry_run, run.run_id))
             return
@@ -579,6 +602,31 @@ def status(
             typer.echo(_script_report(run.conn, content_id))
         elif show is not None:
             raise FactoryError(f"--show accepts 'script', not '{show}'")
+
+
+SIGNALS_SHOWN = 10
+
+
+def _signals_report(conn: sqlite3.Connection, channel: ChannelConfig) -> str:
+    channel_id = conn.execute("SELECT id FROM channels WHERE slug = ?", (channel.slug,)).fetchone()
+    signals = discover_stage.latest_signals(conn, channel_id[0]) if channel_id else []
+    if not signals:
+        return "No signals yet. Run: uv run factory discover"
+
+    def number(value: float | None) -> str:
+        return "-" if value is None else f"{value:,.0f}"
+
+    lines = [
+        f"Top {min(SIGNALS_SHOWN, len(signals))} of {len(signals)} seed topics by Wikipedia trend "
+        "(last 7 days vs the 28 before; above 1.00x = rising)",
+        f"  {'#':>2}  {'topic':<26} {'views 7d':>10} {'trend':>7} {'YouTube median 30d':>19}",
+    ]
+    for rank, s in enumerate(signals[:SIGNALS_SHOWN], start=1):
+        trend = "-" if s.trend_ratio is None else f"{s.trend_ratio:.2f}x"
+        lines.append(f"  {rank:>2}  {s.topic[:26]:<26} {number(s.views_7d):>10} {trend:>7} "
+                     f"{number(s.youtube_median):>19}")  # fmt: skip
+    lines.append("  '-' = no data yet (no Wikipedia article, or YouTube not searched yet)")
+    return "\n".join(lines)
 
 
 def _content_report(conn: sqlite3.Connection, content_id: int) -> str:

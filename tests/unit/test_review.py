@@ -198,7 +198,7 @@ def cli_db(config_dir: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     tmp_ctx = make_ctx(config_dir.parent / "data" / "factory.db")
     scripted_item(tmp_ctx)
     tmp_ctx.conn.close()
-    monkeypatch.setattr(script_stage, "_http_client", lambda ctx: http())
+    monkeypatch.setattr(script_stage, "http_client", lambda ctx: http())
     return config_dir
 
 

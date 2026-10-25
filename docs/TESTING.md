@@ -28,7 +28,7 @@
 |---|---|---|
 | config | Valid YAML loads; missing key → `ConfigError` with a clear message | `uv run factory config check` |
 | db | Migrations apply; invalid status transition raises an error; `failed` → retry restores the previous status | `uv run factory db init` then `factory status` |
-| discover | Trend ratio math; 404 article is skipped; Trends CSV parser handles the real export fixture; re-import adds no duplicates | One real Wikimedia call; one YouTube `search.list` (watch `api_usage`); one real Trends CSV import |
+| discover | Trend ratio math; missing article skipped; disambiguation skipped; YAML article override; tiny pages get no trend; re-run adds nothing; YouTube weekly + stops at the budget and on `quotaExceeded`; the API key never appears in logs or rows; Trends CSV parser handles the real export fixture; re-import adds no duplicates | One real Wikimedia call; one YouTube `search.list` (watch `api_usage`); one real Trends CSV import |
 | ideate | Blocklist rejects; score threshold filters; weekly plan respects the variety rules | One real Gemini call → 5 ideas stored |
 | script | Schema validation; at least 2 sources required; similarity block over 0.80; word count within format bounds | One real script for "alternator"; owner reads it |
 | subtitles | Alignment (punctuation, split contractions, missing words); ≤4 words / ≤760 px per line, ≤2 lines; ASS style values and one cyan word per event; preview burns (slow) | Integration: real Kokoro, word starts within 0.15 s of speech onsets; owner watches `subs_preview.mp4` |

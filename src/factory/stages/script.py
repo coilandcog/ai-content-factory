@@ -258,7 +258,7 @@ def run(
         return result
     llm = llm or gemini_client(ctx)
     own_http = http is None
-    http = http or _http_client(ctx)
+    http = http or http_client(ctx)
     try:
         for row in ideas:
             _script_one_safely(ctx, row, llm, http, result)
@@ -318,7 +318,7 @@ def rescript(
         raise FactoryError(f"content #{content_id} is not a scripted item")
     llm = llm or gemini_client(ctx)
     own_http = http is None
-    http = http or _http_client(ctx)
+    http = http or http_client(ctx)
     try:
         return _script_one(ctx, row, llm, http, Feedback(feedback, current["body_text"]))
     finally:
@@ -527,7 +527,7 @@ def gemini_client(ctx: AppContext) -> GeminiClient:
     )
 
 
-def _http_client(ctx: AppContext) -> httpx.Client:
+def http_client(ctx: AppContext) -> httpx.Client:
     agent = ctx.env.wikimedia_user_agent
     if not agent or "CHANNEL_EMAIL_HERE" in agent:
         raise ConfigError(

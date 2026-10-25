@@ -49,6 +49,11 @@ niche:
     - steam turbine
     - transformer
     - elevator safety brake
+  wikipedia_articles:          # only where Wikipedia search picks the wrong page (factory discover)
+    differential: "Differential (mechanical device)"
+    electric car motor: "Traction motor"
+    hydroelectric turbine: "Water turbine"
+    elevator safety brake: "Elevator"
   blocklist:
     - "weapons or firearm mechanisms"
     - "military aircraft, warships and weapon systems"
