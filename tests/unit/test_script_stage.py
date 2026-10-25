@@ -133,6 +133,8 @@ def test_prompt_contains_reference_rules_and_blocklist(ctx: AppContext) -> None:
     [call] = sdk.calls
     assert EXTRACT in call["contents"]
     assert f"list {WIKI_URL} as the first source" in call["contents"]
+    # D-085: no URLs guessed from a site's folder structure.
+    assert "Never build or guess a URL from a website's folder structure" in call["contents"]
     assert "between 71 and 118 words" in call["contents"]
     # Per-part budgets (D-083): 94-word target = hook 12 + body 58 + note 14 + loop 10.
     assert "hook: the first sentence, about 12 words" in call["contents"]
