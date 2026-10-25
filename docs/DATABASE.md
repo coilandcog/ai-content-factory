@@ -71,7 +71,7 @@ Rows are created or updated from the channel YAML (`platforms.*`) when the first
 | channel_id | INTEGER FK | |
 | source | TEXT | `wikimedia_pageviews` \| `youtube_search` \| `youtube_popular` \| `google_trends_csv` \| `manual` |
 | query | TEXT | Topic or search phrase |
-| title | TEXT | Article title or video title (for inspiration only) |
+| title | TEXT | Article title or video title (for inspiration only); for `google_trends_csv` the region ("Worldwide", "United States", or `unspecified`) |
 | url | TEXT | |
 | metric_name | TEXT | e.g. `pageviews_7d`, `pageviews_trend_ratio`, `video_views_median_30d` (median views of the 25 most-viewed videos of the last 30 days; top 5 titles in `raw_json`), `trends_interest` (Google's 0–100 relative score), `trends_ratio` |
 | metric_value | REAL | |

@@ -319,6 +319,7 @@ ai-content-factory/
 │   ├── similarity.py             # script similarity: local embeddings, closest recent script (D-076)
 │   ├── stages/
 │   │   ├── discover.py
+│   │   ├── trends.py             # Google Trends CSV import (factory trends import)
 │   │   ├── ideate.py
 │   │   ├── script.py
 │   │   ├── voice.py              # voice audition + voice.wav (used by generate)

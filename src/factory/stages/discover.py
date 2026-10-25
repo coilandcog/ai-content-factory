@@ -37,6 +37,8 @@ YOUTUBE_WINDOW = timedelta(days=30)
 RECENT_DAYS, BEFORE_DAYS = 7, 28
 MIN_VIEWS_FOR_TREND = 280  # in the 28 days before: about 10 views a day
 TOP_TITLES = 5
+# The report uses worldwide Google Trends rows (or files without a region) only.
+TRENDS_FILTER = ("google_trends_csv", "Worldwide", "unspecified")
 
 
 @dataclass
@@ -250,6 +252,7 @@ class TopicSignals:
     trend_ratio: float | None
     youtube_median: float | None
     youtube_top: str | None
+    trends_ratio: float | None = None  # Google Trends CSV, worldwide (task 1.14a)
 
 
 def latest_signals(conn: sqlite3.Connection, channel_id: int) -> list[TopicSignals]:
@@ -258,11 +261,12 @@ def latest_signals(conn: sqlite3.Connection, channel_id: int) -> list[TopicSigna
         """
         SELECT t.query, t.metric_name, t.metric_value, t.title FROM trend_signals t
         JOIN (SELECT query, metric_name, MAX(observed_at) AS last FROM trend_signals
-              WHERE channel_id = ? GROUP BY query, metric_name) n
+              WHERE channel_id = ? AND NOT (source = ? AND title NOT IN (?, ?))
+              GROUP BY query, metric_name) n
           ON n.query = t.query AND n.metric_name = t.metric_name AND n.last = t.observed_at
-        WHERE t.channel_id = ?
+        WHERE t.channel_id = ? AND NOT (t.source = ? AND t.title NOT IN (?, ?))
         """,
-        (channel_id, channel_id),
+        (channel_id, *TRENDS_FILTER, channel_id, *TRENDS_FILTER),
     ).fetchall()
     data: dict[str, dict[str, object]] = {}
     for row in rows:
@@ -277,6 +281,7 @@ def latest_signals(conn: sqlite3.Connection, channel_id: int) -> list[TopicSigna
             trend_ratio=values.get("pageviews_trend_ratio"),  # type: ignore[arg-type]
             youtube_median=values.get("video_views_median_30d"),  # type: ignore[arg-type]
             youtube_top=values.get("video_views_median_30d_title"),  # type: ignore[arg-type]
+            trends_ratio=values.get("trends_ratio"),  # type: ignore[arg-type]
         )
         for name, values in data.items()
     ]

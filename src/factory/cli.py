@@ -49,6 +49,7 @@ from factory.stages import metadata as metadata_stage
 from factory.stages import publish as publish_stage
 from factory.stages import review as review_stage
 from factory.stages import script as script_stage
+from factory.stages import trends as trends_stage
 from factory.stages import voice as voice_stage
 
 log = logging.getLogger("factory.cli")
@@ -70,6 +71,8 @@ music_app = typer.Typer(
     help="YouTube Audio Library tracks for YouTube renders.", no_args_is_help=True
 )
 app.add_typer(music_app, name="music")
+trends_app = typer.Typer(help="Google Trends CSV files you downloaded.", no_args_is_help=True)
+app.add_typer(trends_app, name="trends")
 
 ConfigDirOption = Annotated[Path, typer.Option(help="Folder holding settings.yaml and channels/.")]
 
@@ -619,13 +622,18 @@ def _signals_report(conn: sqlite3.Connection, channel: ChannelConfig) -> str:
     lines = [
         f"Top {min(SIGNALS_SHOWN, len(signals))} of {len(signals)} seed topics by Wikipedia trend "
         "(last 7 days vs the 28 before; above 1.00x = rising)",
-        f"  {'#':>2}  {'topic':<26} {'views 7d':>10} {'trend':>7} {'YouTube median 30d':>19}",
+        f"  {'#':>2}  {'topic':<26} {'views 7d':>10} {'trend':>7} {'YouTube median 30d':>19}"
+        f" {'Trends':>7}",
     ]
     for rank, s in enumerate(signals[:SIGNALS_SHOWN], start=1):
         trend = "-" if s.trend_ratio is None else f"{s.trend_ratio:.2f}x"
+        google = "-" if s.trends_ratio is None else f"{s.trends_ratio:.2f}x"
         lines.append(f"  {rank:>2}  {s.topic[:26]:<26} {number(s.views_7d):>10} {trend:>7} "
-                     f"{number(s.youtube_median):>19}")  # fmt: skip
-    lines.append("  '-' = no data yet (no Wikipedia article, or YouTube not searched yet)")
+                     f"{number(s.youtube_median):>19} {google:>7}")  # fmt: skip
+    lines.append(
+        "  trend = Wikipedia; Trends = Google Trends CSV (worldwide, last 28 days vs the 56 "
+        "before); '-' = no data yet"
+    )
     return "\n".join(lines)
 
 
@@ -917,6 +925,23 @@ def _voice_line(f: voice_stage.VoiceFile, root: Path) -> str:
 
 
 # --- music ----------------------------------------------------------------------------------
+
+
+@trends_app.command("import")
+def trends_import(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Load Google Trends CSVs from data/inbox/trends/ into trend_signals (ROADMAP 1.14a)."""
+    with _tracked_run("trends import", config_dir) as run:
+        ctx = _context(run, config_dir)
+        result = trends_stage.import_inbox(ctx)
+        run.tally.processed, run.tally.failed = result.files, len(result.broken)
+        typer.echo(
+            f"Imported {result.files} file(s): {result.rows_added} row(s) added, "
+            f"{result.rows_skipped} already there"
+        )
+        for problem in result.broken:
+            typer.echo(f"Not imported (left in the inbox): {problem}", err=True)
+        if not result.files and not result.broken:
+            typer.echo(f"No CSV files in {trends_stage.inbox(ctx)}")
 
 
 @music_app.command("add")
