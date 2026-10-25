@@ -216,14 +216,37 @@ def test_unreachable_sources_fail_the_item_but_not_the_batch(ctx: AppContext) ->
     answer_b["shots"] = [shots[5], *shots[:5], shots[6]]  # in_situ first for context_first
     for i, shot in enumerate(answer_b["shots"], start=1):
         shot["n"] = i
-    sdk = FakeGenaiClient(reply(json.dumps(answer_a)), reply(json.dumps(answer_b)))
+    dead_c = "https://invented.example/c"
+    still_dead = reply(json.dumps({"sources": [{**answer["sources"][1], "url": dead_c}]}))
+    sdk = FakeGenaiClient(
+        reply(json.dumps(answer_a)), still_dead, still_dead, reply(json.dumps(answer_b))
+    )
 
-    result = run_stage(ctx, sdk, wiki_and_sources(dead={dead_a, dead_b}))
+    result = run_stage(ctx, sdk, wiki_and_sources(dead={dead_a, dead_b, dead_c}))
 
     assert (result.processed, result.failed) == (1, 1)
     assert content(ctx, first)["status"] == "failed"
-    assert "only 1 of 3 sources could be opened" in content(ctx, first)["status_reason"]
+    reason = content(ctx, first)["status_reason"]
+    assert "only 1 of 2 needed sources could be opened after 2 requests" in reason
+    assert f"not found: {dead_a}, {dead_b}, {dead_c}" in reason  # a repeated URL is not retried
     assert content(ctx, second)["status"] == "scripted"
+
+
+def test_dead_sources_are_replaced_by_gemini(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+    answer = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    dead_a, dead_b = "https://invented.example/a", "https://invented.example/b"
+    answer["sources"][1]["url"], answer["sources"][2]["url"] = dead_a, dead_b
+    fresh = {**answer["sources"][1], "url": "https://www.example-museum.org/alternator"}
+    sdk = FakeGenaiClient(reply(json.dumps(answer)), reply(json.dumps({"sources": [fresh]})))
+
+    run_stage(ctx, sdk, wiki_and_sources(dead={dead_a, dead_b}))
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    urls = [r["url"] for r in ctx.conn.execute("SELECT url FROM sources ORDER BY id")]
+    assert urls == [WIKI_URL, fresh["url"]]
+    asked = sdk.calls[1]["contents"]  # D-086: the dead URLs and the working one are named
+    assert f"- {dead_a}" in asked and f"- {WIKI_URL}" in asked and "Give 2 different" in asked
 
 
 def test_one_dead_source_is_dropped_and_the_rest_kept(ctx: AppContext) -> None:
@@ -346,15 +369,20 @@ def test_trailing_ellipsis_loop_line_is_corrected(ctx: AppContext) -> None:
     assert "loop_line must be a complete sentence" in sdk.calls[1]["contents"]
 
 
-def test_bot_walls_count_as_existing_but_404_does_not(ctx: AppContext) -> None:
+def test_bot_walls_count_as_existing_only_on_wikipedia(ctx: AppContext) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        codes = {"https://a.example/forbidden": 403, "https://a.example/busy": 429}
-        return httpx.Response(codes.get(str(request.url), 404))
+        if request.url.path == "/invented":
+            return httpx.Response(404)
+        return httpx.Response(403 if "forbidden" in request.url.path else 429)
 
     client = http_for(handler)
-    assert stage._reachable(client, "https://a.example/forbidden")
-    assert stage._reachable(client, "https://a.example/busy")
-    assert not stage._reachable(client, "https://a.example/invented")
+    assert stage._reachable(client, "https://en.wikipedia.org/wiki/forbidden")
+    assert stage._reachable(client, "https://de.wikipedia.org/wiki/busy")
+    assert not stage._reachable(client, "https://en.wikipedia.org/invented")
+    # D-086: Britannica answers 403 even for pages that don't exist.
+    assert not stage._reachable(client, "https://www.britannica.com/forbidden")
+    assert not stage._reachable(client, "https://a.example/busy")
+    assert not stage._reachable(client, "https://notwikipedia.org/forbidden")
 
 
 def test_user_agent_without_contact_is_refused(ctx: AppContext) -> None:

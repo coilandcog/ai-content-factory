@@ -1,0 +1,16 @@
+A script about the {{ object_name }} cites web pages as sources. These could not be opened (the page does not
+exist or refuses automatic checks), so they cannot be used:
+{% for url in dead %}- {{ url }}
+{% endfor %}
+{%- if working %}
+These sources work and are kept; do not repeat them:
+{% for url in working %}- {{ url }}
+{% endfor %}
+{%- endif %}
+Give {{ needed }} different replacement sources ("sources") that support the main facts of the narration below, each
+with url, title, publisher and the claim it supports. Never repeat a URL listed above.
+{% include "script_source_rules.j2" %}
+Narration:
+"""
+{{ narration }}
+"""

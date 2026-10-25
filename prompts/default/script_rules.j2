@@ -48,12 +48,7 @@ Add up every duration_s: about {{ target_total_s }} s, never under {{ shot_secon
 - Every one of the four beats appears, and the first appearance of each beat follows the chosen beat_order.
 
 Sources ("sources"): exactly 3 different real web pages that support the main facts, each with url, title, publisher and the claim it supports.
-Every URL is opened automatically and a page that does not exist fails the script, so:
-- Cite a page only if you know its exact URL. If you are not certain of the exact URL, choose a different source.
-- Prefer Wikipedia articles and well-known reference pages: encyclopedias, university course pages, standards bodies
-  and government agencies.
-- Never build or guess a URL from a website's folder structure (e.g. company.com/products/<name>/). A company's own
-  pages are fine only when you know the exact page.
+{% include "script_source_rules.j2" %}
 {% if reference %}
 Reference text (Wikipedia, "{{ reference.title }}"). Base the facts on it, and list {{ reference.url }} as the first source:
 """

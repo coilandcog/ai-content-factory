@@ -55,6 +55,8 @@ MIN_DIAGRAMS = {"short": 2, "deep_dive": 4, "episode": 4}  # TESTING.md §4 QA r
 MIN_CLIPS, MAX_CLIPS = 3, 5  # DESIGN_SYSTEM.md §10.5
 # Ask for 3 sources, keep the item if at least 2 open: one invented URL then costs nothing.
 SOURCES_ASKED, SOURCES_NEEDED = 3, 2
+# Fewer than 2 open: ask Gemini for replacements at most this many times (D-086).
+SOURCE_ROUNDS = 2
 # flash-lite fixes a named rule break when asked again; at most 5 Gemini calls per idea (D-083).
 MAX_REASKS = 4
 CLIP_MAX_S = 8.0
@@ -128,6 +130,12 @@ class SourceDraft(BaseModel):
     title: str
     publisher: str
     claim: str
+
+
+class SourceReplacements(BaseModel):
+    """Gemini's answer when cited pages could not be opened (D-086)."""
+
+    sources: list[SourceDraft]
 
 
 class ScriptDraftBase(BaseModel):
@@ -401,12 +409,7 @@ def _script_one(
     )
     if not draft.policy.allowed:
         raise PolicyBlockedError(draft.policy.reason)
-    sources = [s for s in draft.sources if _reachable(http, s.url)]
-    if len(sources) < SOURCES_NEEDED:
-        raise FactoryError(
-            f"only {len(sources)} of {len(draft.sources)} sources could be opened: "
-            + ", ".join(s.url for s in draft.sources)
-        )
+    sources = _open_sources(ctx, row, llm, http, draft, system.text)
     match = closest(conn, row["channel_id"], row["id"], draft.narration(),
                     window=channel.scoring.similarity_window)  # fmt: skip
     threshold = channel.scoring.similarity_block_threshold
@@ -484,21 +487,77 @@ def _prompts(
     return system, user
 
 
-# A page that refuses robots still exists; an invented URL answers 404/410 (D-064).
+def _open_sources(
+    ctx: AppContext,
+    row: sqlite3.Row,
+    llm: GeminiClient,
+    http: httpx.Client,
+    draft: ScriptDraftBase,
+    system: str,
+) -> list[SourceDraft]:
+    """The cited pages that open. With fewer than SOURCES_NEEDED, Gemini replaces the dead ones,
+    at most SOURCE_ROUNDS times; still too few raises FactoryError (D-086)."""
+    candidates = list(draft.sources)
+    sources: list[SourceDraft] = []
+    dead: list[str] = []
+    for round_n in range(SOURCE_ROUNDS + 1):
+        for source in candidates:
+            if source.url in dead or source.url in [s.url for s in sources]:
+                continue  # Gemini repeated a URL it was told about
+            if _reachable(http, source.url):
+                sources.append(source)
+            else:
+                dead.append(source.url)
+        if dead:
+            log.warning(
+                "#%s: %d source(s) could not be opened: %s",
+                row["id"], len(dead), ", ".join(dead),
+                extra={"content_id": row["id"], "event": "sources_dead"},
+            )  # fmt: skip
+        if len(sources) >= SOURCES_NEEDED or round_n == SOURCE_ROUNDS:
+            break
+        prompt = render_prompt(
+            "script_sources",
+            ctx.channel,
+            prompts_root=ctx.root / ctx.settings.paths.prompts_dir,
+            object_name=row["object_name"],
+            dead=dead,
+            working=[s.url for s in sources],
+            needed=SOURCES_ASKED - len(sources),
+            narration=draft.narration(),
+        )
+        candidates = llm.generate_json(
+            system=system, prompt=prompt.text, schema=SourceReplacements
+        ).sources
+    if len(sources) < SOURCES_NEEDED:
+        raise FactoryError(
+            f"only {len(sources)} of {SOURCES_NEEDED} needed sources could be opened after "
+            f"{SOURCE_ROUNDS} requests for replacements; not found: {', '.join(dead)}"
+        )
+    return sources
+
+
+# Only Wikipedia answers honestly when it refuses a script: other sites (Britannica,
+# ice.org.uk) send 403 even for pages that don't exist, so there it counts as missing (D-086).
 EXISTS_BUT_BLOCKS_BOTS = {401, 403, 429}
+HONEST_HOSTS = ("wikipedia.org",)
 
 
 def _reachable(http: httpx.Client, url: str) -> bool:
     """Does the cited page exist? One request per source, following redirects.
 
-    2xx = yes. 401/403/429 = yes too: sites like Britannica and Wikipedia sometimes refuse
-    scripts, but the page is there. 404/410, server errors and dead domains = no.
+    2xx = yes. 401/403/429 = yes only on HONEST_HOSTS. 404/410, server errors, dead domains
+    and bot walls elsewhere = no.
     """
     try:
         status = http.get(url).status_code
     except httpx.HTTPError:
         return False
-    return 200 <= status < 300 or status in EXISTS_BUT_BLOCKS_BOTS
+    if 200 <= status < 300:
+        return True
+    host = httpx.URL(url).host
+    honest = any(host == h or host.endswith(f".{h}") for h in HONEST_HOSTS)
+    return honest and status in EXISTS_BUT_BLOCKS_BOTS
 
 
 def _save(
