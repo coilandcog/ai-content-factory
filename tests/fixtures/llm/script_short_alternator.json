@@ -8,7 +8,7 @@
   "beat_order": "classic",
   "hook": "Why doesn't your car battery go flat while you drive?",
   "body": "Because a belt from the engine spins a small generator called the alternator. Inside, a spinning rotor carries an electromagnet. Its moving magnetic field sweeps past copper coils in the stator and pushes current through them. That current flips direction constantly, so a set of diodes turns it into one-way current the battery can store. A regulator keeps the voltage near fourteen volts, whether you idle or cruise.",
-  "engineer_note_draft": "As an engineer, what surprises me is how much power such a small part makes from a rubber belt.",
+  "engineer_note_draft": "A few amps flowing in the spinning rotor control more than a hundred amps of output from the stator.",
   "loop_line": "So next time you start the engine, remember why your battery stays alive.",
   "shots": [
     {

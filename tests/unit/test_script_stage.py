@@ -182,6 +182,18 @@ def test_rule_break_is_fixed_by_the_reask(ctx: AppContext) -> None:
     assert "(hook " in sdk.calls[1]["contents"] and "body 4," in sdk.calls[1]["contents"]
 
 
+def test_note_that_claims_what_viewers_miss_is_sent_back(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+    claiming = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    claiming["engineer_note_draft"] = "What most people miss is that the diodes do the real work."
+    sdk = FakeGenaiClient(reply(json.dumps(claiming)), fixture_reply("script_short_alternator"))
+
+    run_stage(ctx, sdk)
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    assert "engineer_note_draft says 'most people'" in sdk.calls[1]["contents"]  # D-084
+
+
 @pytest.mark.parametrize("target", [94, 254])
 def test_part_budgets_add_up_to_the_target(target: int) -> None:
     parts = stage.part_words(target)
@@ -284,7 +296,7 @@ def test_show_script_prints_every_part(config_dir: Path) -> None:
         "status: scripted",
         "hook: why_question | beats: classic",
         "HOOK:  Why doesn't your car battery go flat",
-        "ENGINEER'S NOTE (draft, yours to edit at Gate 1):  As an engineer",
+        "ENGINEER'S NOTE (draft, yours to edit at Gate 1):  A few amps",
         " 4. flow     flow_clip  8.0 s",
         "energy=electric",
         "[labels: Rotor, Stator, Diodes, Regulator; dots: electric]",

@@ -62,6 +62,13 @@ CLIP_MAX_S = 8.0
 COVERAGE = 0.85
 MAX_LABELS, MAX_LABEL_WORDS = 4, 4  # DESIGN_SYSTEM.md §7: labels of 4 words or fewer
 SOURCE_TIMEOUT_S = 10.0
+# The Engineer's Note states a plain fact; it never claims what viewers know or miss (D-084).
+NOTE_CLAIM_PHRASES = re.compile(
+    r"most people|surpris|as an engineer|you (?:might|may|probably) (?:not|never|n't)|"
+    r"nobody (?:tells|knows|realises|realizes)|few people (?:know|realise|realize)|"
+    r"(?:didn't|don't|did not|do not) know",
+    re.IGNORECASE,
+)
 
 
 # --- the ScriptDraft schema ----------------------------------------------------------------
@@ -170,6 +177,11 @@ def _rule_problems(draft: Any) -> list[str]:
     # The owner rejected a trailing "because..." at Gate 1 as an incomplete sentence (D-062).
     if loop and (loop.endswith(("...", "…")) or loop[-1] not in ".?!"):
         problems.append("loop_line must be a complete sentence ending in . ? or ! (no '...')")
+    if claim := NOTE_CLAIM_PHRASES.search(draft.engineer_note_draft):
+        problems.append(
+            f"engineer_note_draft says '{claim.group(0)}': state the fact plainly, "
+            "without saying what people know, miss or find surprising"
+        )
     words = word_count(draft.narration())
     if not draft.min_words <= words <= draft.max_words:
         # Per-part counts tell the model which part to shorten when it is asked again.

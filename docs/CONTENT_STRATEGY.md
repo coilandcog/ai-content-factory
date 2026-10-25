@@ -66,7 +66,7 @@ The narrator speaks at about 142 words per minute (`voice.target_wpm`, measured 
 
 **Deep Dive (~120 s):** hook (0–3 s) → setup (3–15 s) → 4–6 explanation beats → a "most people don't know" fact → Engineer's Note (10–15 s) → recap in one sentence → loop line.
 
-**Engineer's Note** (required in every script): one insight or real-world observation from the owner, said in the narrator's normal voice, for example "Here's the surprising part: a few amps in the rotor control over 100 amps of output." No "As an engineer" and no first-person claims of expertise; it should sound like a curious friend, not a lecture (D-077). The AI drafts a suggestion; the owner edits or replaces it at Gate 1. This is the main protection against the inauthentic-content policy.
+**Engineer's Note** (required in every script): one insight or real-world observation from the owner, said plainly in the narrator's normal voice, for example "A few amps in the rotor control over 100 amps of output." No lead-in that claims what viewers know, miss or find surprising ("What most people miss is…", "Here's the surprising part…"; the script stage sends such a draft back, D-084), no "As an engineer" and no first-person claims of expertise; it should sound like a curious friend, not a lecture (D-077). The AI drafts a suggestion; the owner edits or replaces it at Gate 1. This is the main protection against the inauthentic-content policy.
 
 ## 6. Hook formulas (`hook_type` values)
 
