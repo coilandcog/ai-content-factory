@@ -196,6 +196,62 @@ def test_note_that_claims_what_viewers_miss_is_sent_back(ctx: AppContext) -> Non
     assert "engineer_note_draft says 'most people'" in sdk.calls[1]["contents"]  # D-084
 
 
+@pytest.mark.parametrize(
+    ("field", "text", "problem"),
+    [
+        ("body", "Most people do not know that a belt spins it.", "body says 'Most people'"),
+        (
+            "engineer_note_draft",
+            "Because a belt from the engine spins a small generator called the alternator.",
+            "engineer_note_draft repeats the body",
+        ),
+        ("hook", "You've seen this a thousand times, but never inside it.", "hook copies the"),
+    ],
+)
+def test_quality_rule_breaks_are_sent_back(
+    ctx: AppContext, field: str, text: str, problem: str
+) -> None:
+    content_id = new_idea(ctx)
+    broken = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    broken[field] = text if field != "body" else f"{text} {broken['body']}"
+    sdk = FakeGenaiClient(reply(json.dumps(broken)), fixture_reply("script_short_alternator"))
+
+    run_stage(ctx, sdk)
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    assert problem in sdk.calls[1]["contents"]  # D-088
+
+
+@pytest.mark.parametrize(
+    ("url", "citable"),
+    [
+        ("https://en.wikipedia.org/wiki/Tunnel_boring_machine", True),
+        ("https://de.wikipedia.org/wiki/Tunnelbohrmaschine", True),
+        ("https://www.example-university.edu/ee/alternator-basics", True),
+        ("https://www.wikidata.org/wiki/Q192275", False),
+        ("https://commons.wikimedia.org/wiki/File:Tunnel_boring_machine_diagram_en.svg", False),
+        ("https://en.wikipedia.org/wiki/File:TBM.jpg", False),
+        ("https://en.wikipedia.org/wiki/Special:Search?search=tbm", False),
+        ("https://en.wiktionary.org/wiki/alternator", False),
+    ],
+)
+def test_only_wikipedia_articles_are_citable_from_wikimedia(url: str, citable: bool) -> None:
+    assert stage._citable(url) is citable  # D-088
+
+
+def test_wikidata_source_is_not_kept(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+    answer = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    answer["sources"][2]["url"] = "https://www.wikidata.org/wiki/Q192275"  # opens with 200
+    sdk = FakeGenaiClient(reply(json.dumps(answer)))
+
+    run_stage(ctx, sdk)
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    urls = [r["url"] for r in ctx.conn.execute("SELECT url FROM sources ORDER BY id")]
+    assert urls == [WIKI_URL, SECOND_SOURCE]
+
+
 @pytest.mark.parametrize("target", [94, 254])
 def test_part_budgets_add_up_to_the_target(target: int) -> None:
     parts = stage.part_words(target)

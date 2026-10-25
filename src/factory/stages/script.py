@@ -71,8 +71,12 @@ CLIP_MAX_S = 8.0
 COVERAGE = 0.85
 MAX_LABELS, MAX_LABEL_WORDS = 4, 4  # DESIGN_SYSTEM.md §7: labels of 4 words or fewer
 SOURCE_TIMEOUT_S = 10.0
-# The Engineer's Note states a plain fact; it never claims what viewers know or miss (D-084).
-NOTE_CLAIM_PHRASES = re.compile(
+# A hook formula that is a whole sentence (script_rules.j2) must not be used word for word (D-088).
+FIXED_HOOK_EXAMPLES = ("You've seen this a thousand times, but never inside it.",)
+REPEAT_SHARE = 0.5
+# Body and Engineer's Note state plain facts; they never claim what viewers know or miss
+# (D-084, body since D-088). The hook is not checked: the myth_bust formula is "Most people think".
+CLAIM_PHRASES = re.compile(
     r"most people|surpris|as an engineer|you (?:might|may|probably) (?:not|never|n't)|"
     r"nobody (?:tells|knows|realises|realizes)|few people (?:know|realise|realize)|"
     r"(?:didn't|don't|did not|do not) know",
@@ -192,11 +196,16 @@ def _rule_problems(draft: Any) -> list[str]:
     # The owner rejected a trailing "because..." at Gate 1 as an incomplete sentence (D-062).
     if loop and (loop.endswith(("...", "…")) or loop[-1] not in ".?!"):
         problems.append("loop_line must be a complete sentence ending in . ? or ! (no '...')")
-    if claim := NOTE_CLAIM_PHRASES.search(draft.engineer_note_draft):
-        problems.append(
-            f"engineer_note_draft says '{claim.group(0)}': state the fact plainly, "
-            "without saying what people know, miss or find surprising"
-        )
+    for name in ("body", "engineer_note_draft"):
+        if claim := CLAIM_PHRASES.search(getattr(draft, name)):
+            problems.append(
+                f"{name} says '{claim.group(0)}': state the fact plainly, "
+                "without saying what people know, miss or find surprising"
+            )
+    if _repeats(draft.engineer_note_draft, draft.body):
+        problems.append("engineer_note_draft repeats the body: give a fact the body doesn't say")
+    if _repeats(draft.hook, " ".join(FIXED_HOOK_EXAMPLES)):
+        problems.append("hook copies the formula's example: write your own hook for this machine")
     words = word_count(draft.narration())
     if not draft.min_words <= words <= draft.max_words:
         # Per-part counts tell the model which part to shorten when it is asked again.
@@ -230,6 +239,18 @@ def _rule_problems(draft: Any) -> list[str]:
     if draft.reference_url and draft.reference_url not in [s.url for s in draft.sources]:
         problems.append(f"list {draft.reference_url} as a source")
     return problems
+
+
+def _trigrams(text: str) -> set[tuple[str, ...]]:
+    words = re.findall(r"[a-z0-9']+", text.lower())
+    return {tuple(words[i : i + 3]) for i in range(len(words) - 2)}
+
+
+def _repeats(part: str, other: str) -> bool:
+    """Does `part` mostly repeat `other`? Half or more of its three-word runs appear there
+    (D-088): catches a copied sentence, not a shared technical term."""
+    own = _trigrams(part)
+    return bool(own) and len(own & _trigrams(other)) / len(own) >= REPEAT_SHARE
 
 
 def script_schema(
@@ -511,7 +532,7 @@ def _open_sources(
         for source in candidates:
             if source.url in dead or source.url in [s.url for s in sources]:
                 continue  # Gemini repeated a URL it was told about
-            if _reachable(http, source.url):
+            if _citable(source.url) and _reachable(http, source.url):
                 sources.append(source)
                 continue
             dead.append(source.url)
@@ -520,7 +541,7 @@ def _open_sources(
                 sources.append(fixed)
         if dead:
             log.warning(
-                "#%s: %d source(s) could not be opened: %s",
+                "#%s: %d source(s) could not be opened or are not citable: %s",
                 row["id"], len(dead), ", ".join(dead),
                 extra={"content_id": row["id"], "event": "sources_dead"},
             )  # fmt: skip
@@ -545,6 +566,30 @@ def _open_sources(
             f"{SOURCE_ROUNDS} requests for replacements; not found: {', '.join(dead)}"
         )
     return sources
+
+
+# Wikimedia pages other than Wikipedia articles (a Wikidata item, a Commons file, Wikipedia's own
+# File: or Special: pages) open fine but don't support a claim: Gemini cited Wikidata's
+# "phosphorescence" item for a tunnel boring machine (D-088).
+WIKIMEDIA_HOSTS = (
+    "wikipedia.org", "wikidata.org", "wikimedia.org", "wiktionary.org", "wikibooks.org",
+    "wikiquote.org", "wikisource.org", "wikiversity.org", "wikivoyage.org", "wikinews.org",
+)  # fmt: skip
+ANY_WIKI_ARTICLE = re.compile(r"^https?://[a-z-]+\.wikipedia\.org/wiki/([^?#]+)$")
+NON_ARTICLE = re.compile(
+    r"^(?:File|Image|Media|Special|Category|Talk|User|Wikipedia|Help|Template|Portal|Draft|"
+    r"Module|MediaWiki)(?:[ _]talk)?:",
+    re.IGNORECASE,
+)
+
+
+def _citable(url: str) -> bool:
+    """Any page outside Wikimedia; inside it, only Wikipedia articles (D-088)."""
+    host = httpx.URL(url).host
+    if not any(host == h or host.endswith(f".{h}") for h in WIKIMEDIA_HOSTS):
+        return True
+    match = ANY_WIKI_ARTICLE.match(url)
+    return bool(match) and not NON_ARTICLE.match(unquote(match.group(1)))
 
 
 WIKI_ARTICLE = re.compile(r"^https?://en\.wikipedia\.org/wiki/([^?#]+)$")

@@ -8,7 +8,9 @@ Hook: pick hook_type from {{ allowed_hooks | join(", ") }}.
   "reveal": "\"Inside this {object} is a {surprising thing}.\"",
 } %}
 {% for name in allowed_hooks %}- {{ name }}: {{ formulas[name] }}
-{% endfor %}
+{% endfor -%}
+A formula is a pattern: write the hook in your own words for this machine, never copy a formula word for word.
+
 Visual beats: Studio (object on a dark pedestal), Cutaway (casing opens to show the inside),
 Flow (glowing energy moves through the parts), In situ (the part installed where it is used).
 Pick beat_order from:
@@ -23,8 +25,9 @@ Pick beat_order from:
 Narration fields, each with its own word budget (count the words of each part before answering):
 - hook: the first sentence, about {{ part_words.hook }} words.
 - body: everything between hook and Engineer's Note, about {{ part_words.body }} words in short, plain sentences.
-- engineer_note_draft: one sentence with one genuine, checkable fact, said plainly in the narrator's normal voice,
-  about {{ part_words.note }} words. State the fact directly, with no lead-in: never claim what viewers know, miss
+  State facts directly: never claim what viewers know, miss or find surprising ("most people", "you might not know").
+- engineer_note_draft: one sentence with one genuine, checkable fact that the body does not already say, said plainly
+  in the narrator's normal voice, about {{ part_words.note }} words. State the fact directly, with no lead-in: never claim what viewers know, miss
   or find surprising ("most people", "the surprising part", "you might not know"). Never "As an engineer", never
   "I" or "me", and no claims of expertise. It is a draft the channel owner will edit, never a made-up personal story.
 - loop_line: the last sentence. It must be a complete sentence that ends with a period, question mark or
