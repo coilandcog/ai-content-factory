@@ -91,11 +91,11 @@ Rows are created or updated from the channel YAML (`platforms.*`) when the first
 | hook_type | TEXT | See `CONTENT_STRATEGY.md` §6 |
 | beat_order | TEXT | `classic` \| `context_first` \| `action_first` \| `cold_open` |
 | virality_score | INTEGER | 0–100 |
-| score_breakdown_json | TEXT | Per-criterion scores and reasons |
+| score_breakdown_json | TEXT | Per-criterion scores, `trend_signal` with `trend_detail`, Gemini's `reason`, `suggested_hook`, model and prompt version (D-080) |
 | status | TEXT | See §4 |
 | status_before_failure | TEXT | Set when the status becomes `failed` |
 | status_reason | TEXT | Last error or reject reason |
-| planned_publish_at | TEXT | UTC slot from the weekly plan |
+| planned_publish_at | TEXT | UTC slot from the weekly plan (`factory plan`); set together with `hook_type` and `beat_order`, which the script stage must then use |
 | affiliate_links_json | TEXT | **Disabled at launch**; always `NULL` |
 | created_at / updated_at | TEXT | |
 

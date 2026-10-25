@@ -97,12 +97,12 @@ The 4 beats are **Studio**, **Cutaway**, **Flow** and **In situ**. They form a m
 - **Launch:** 5 videos/week, Mon–Fri at **17:00 Europe/Berlin**. Default weekly mix: Mon Short, Tue Deep Dive, Wed Short, Thu Deep Dive, Fri Short.
 - **After 2 stable weeks:** 7/week, adding Sat and Sun Shorts.
 - **Phase 2:** plus 1 Episode/week (Sunday) on YouTube.
-- **Variety rules:** don't post the same pillar more than 2 days in a row; don't repeat a `hook_type` or `beat_order` back to back.
+- **Variety rules:** don't post the same pillar more than 2 days in a row; don't repeat a `hook_type` or `beat_order` back to back. `factory plan` enforces them: it skips an idea that would make a pillar run 3 days, gives each slot the idea's suggested hook unless the day before used it (then the next hook in the list), rotates the beat order, and the script stage must write that hook and beat order (D-080).
 - The publish time is retuned after about 30 posts using our own analytics.
 
 ## 9. Virality scoring rubric (ideate stage)
 
-The LLM scores each idea from 0 to 100. Ideas with a score of at least `scoring.min_virality_score` (default **65**) go on to scripting. The highest-scoring ideas fill the weekly mix.
+Each idea is scored from 0 to 100. Gemini scores five criteria (85 points); the factory calculates **Trend signal** (15 points) from the real discover data, because language models are unreliable with numbers (D-080): up to 9 points for rising interest (the higher of the Wikipedia and Google Trends ratios: 0 at 0.8x, full at 1.3x) and up to 6 for YouTube demand (median views: 0 at 10k, full at 1M, on a log scale). Ideas with a score of at least `scoring.min_virality_score` (**65**) are saved as `idea` items. A machine that already has an active item (anything not rejected or archived) is never proposed again; at most 3 machines per run may come from outside the seed list. `factory plan --week next` then fills the weekly mix with the highest-scoring ideas, and only planned ideas (or items you create with `factory new`) get scripts.
 
 | Criterion | Weight | 0 = | max = |
 |---|---|---|---|

@@ -202,16 +202,20 @@ def script_schema(
     *,
     previous: tuple[str | None, str | None],
     reference_url: str | None,
+    planned: tuple[str, str] | None = None,
 ) -> type[ScriptDraftBase]:
     """Build the ScriptDraft model for one item.
 
     The previous video's hook_type and beat_order are left out of the allowed values, so Gemini
-    cannot repeat them (CONTENT_STRATEGY.md §6-7). Word limits come from the format's seconds and
-    the narrator's words per minute in the YAML.
+    cannot repeat them (CONTENT_STRATEGY.md §6-7). An item from the weekly plan must use the
+    hook_type and beat_order the plan gave it (D-080). Word limits come from the format's seconds
+    and the narrator's words per minute in the YAML.
     """
     prev_hook, prev_beat = previous
     hooks = tuple(h for h in HOOK_TYPES if h != prev_hook)
     beats = tuple(b for b in BEAT_ORDERS if b != prev_beat)
+    if planned is not None:
+        hooks, beats = (planned[0],), (planned[1],)
     model = create_model(
         f"ScriptDraft_{fmt}",
         __base__=ScriptDraftBase,
@@ -343,6 +347,9 @@ def _script_one(
         row["format"],
         previous=previous,
         reference_url=reference.url if reference else None,
+        planned=(row["hook_type"], row["beat_order"])
+        if row["planned_publish_at"] and row["hook_type"] and row["beat_order"]
+        else None,
     )
     system, user = _prompts(ctx, row, schema, reference, feedback)
     draft = llm.generate_json(
@@ -368,26 +375,28 @@ def _script_one(
 
 
 def _eligible_ideas(ctx: AppContext, limit: int | None) -> list[sqlite3.Row]:
-    # Items created by hand (factory new) have no score yet; the owner chose them, so they count.
+    # Items created by hand (factory new) have no score; the owner chose them, so they count.
+    # Scored ideas from `factory ideate` wait until the weekly plan picks them (D-080).
     return ctx.conn.execute(
         """
         SELECT c.* FROM contents c JOIN channels ch ON ch.id = c.channel_id
         WHERE ch.slug = ? AND c.status = 'idea'
-          AND (c.virality_score IS NULL OR c.virality_score >= ?)
-        ORDER BY c.id LIMIT ?
+          AND (c.virality_score IS NULL OR c.planned_publish_at IS NOT NULL)
+        ORDER BY COALESCE(c.planned_publish_at, c.created_at), c.id LIMIT ?
         """,
-        (ctx.channel.slug, ctx.channel.scoring.min_virality_score, limit or -1),
+        (ctx.channel.slug, limit or -1),
     ).fetchall()
 
 
 def previous_variety(
     conn: sqlite3.Connection, channel_id: int, content_id: int
 ) -> tuple[str | None, str | None]:
-    """hook_type and beat_order of the channel's most recent other scripted item."""
+    """hook_type and beat_order of the channel's most recent other scripted item (planned ideas
+    already carry the plan's values but are not scripted yet, so they don't count)."""
     row = conn.execute(
         """
         SELECT hook_type, beat_order FROM contents
-        WHERE channel_id = ? AND id <> ? AND hook_type IS NOT NULL
+        WHERE channel_id = ? AND id <> ? AND hook_type IS NOT NULL AND status <> 'idea'
         ORDER BY updated_at DESC, id DESC LIMIT 1
         """,
         (channel_id, content_id),

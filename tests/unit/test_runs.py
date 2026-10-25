@@ -25,14 +25,14 @@ def runs_table(config_dir: Path) -> list[tuple[object, ...]]:
 def test_every_command_writes_a_run_row_and_log_line(config_dir: Path) -> None:
     assert invoke(config_dir, "db", "init").exit_code == 0
     status = invoke(config_dir, "status")
-    stub = invoke(config_dir, "ideate")
+    stub = invoke(config_dir, "learn")
 
     assert status.exit_code == 0, status.output
     assert stub.exit_code == 1
     assert runs_table(config_dir) == [
         ("db init", "ok", 1, None),
         ("status", "ok", 1, None),
-        ("ideate", "failed", 1, "'ideate' is not built yet (ROADMAP task 1.15)."),
+        ("learn", "failed", 1, "'learn' is not built yet (ROADMAP task 2.5)."),
     ]
     [log_file] = (config_dir.parent / "data" / "logs").glob("factory-*.jsonl")
     events = [json.loads(line)["event"] for line in log_file.read_text().splitlines()]

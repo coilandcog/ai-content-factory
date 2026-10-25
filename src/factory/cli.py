@@ -45,6 +45,7 @@ from factory.media.brand import build_brand_assets
 from factory.stages import assemble as assemble_stage
 from factory.stages import discover as discover_stage
 from factory.stages import generate as generate_stage
+from factory.stages import ideate as ideate_stage
 from factory.stages import metadata as metadata_stage
 from factory.stages import publish as publish_stage
 from factory.stages import review as review_stage
@@ -200,6 +201,57 @@ def discover(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
         if result.youtube_note:
             typer.echo(result.youtube_note)
         typer.echo("Top topics: uv run factory status --signals")
+
+
+def ideate(
+    count: Annotated[int, typer.Option(help="How many ideas to ask Gemini for.")] = 10,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Scored video ideas from the signals: ideas scoring 65+ become `idea` items (1.15)."""
+    with _tracked_run("ideate", config_dir) as run:
+        ctx = _context(run, config_dir)
+        result = ideate_stage.run(ctx, count=count)
+        run.tally.processed = len(result.saved)
+        threshold = ctx.channel.scoring.min_virality_score
+        typer.echo(
+            f"Ideas saved: {len(result.saved)}, below {threshold}: {result.below_threshold}, "
+            f"skipped: {len(result.skipped)}"
+        )
+        for content_id in result.saved:
+            row = run.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
+            typer.echo(f"  #{content_id} {row['virality_score']:>3}  {row['format']:<9} "
+                       f"{row['object_name']}: {row['angle']}")  # fmt: skip
+        for line in result.skipped:
+            typer.echo(f"  skipped {line}")
+        typer.echo("Next: uv run factory plan --week next")
+
+
+@app.command()
+def plan(
+    week: Annotated[str, typer.Option(help="'next' or 'this' week.")] = "next",
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Fill the week's slots with the best ideas, with variety rules (ROADMAP 1.15)."""
+    if week not in ("next", "this"):
+        raise typer.BadParameter("use --week next or --week this")
+    with _tracked_run("plan", config_dir) as run:
+        ctx = _context(run, config_dir)
+        monday = ideate_stage.week_start(ctx, week)
+        slots = ideate_stage.plan_week(ctx, monday)
+        run.tally.processed = sum(1 for s in slots if s.note == "planned now")
+        typer.echo(f"Week of {monday.isoformat()} ({ctx.channel.cadence.publish_time} "
+                   f"{ctx.channel.timezone})")  # fmt: skip
+        typer.echo(f"  {'day':<10} {'format':<9} {'#':>4} {'score':>5}  {'machine':<24} "
+                   f"{'pillar':<20} {'hook':<17} beats")  # fmt: skip
+        for s in slots:
+            day = s.day.strftime("%a %d %b")
+            if s.content_id is None:
+                typer.echo(f"  {day:<10} {s.fmt:<9}  ---  {s.note}")
+                continue
+            typer.echo(f"  {day:<10} {s.fmt:<9} {s.content_id:>4} {s.score or '-':>5}  "
+                       f"{(s.object_name or '')[:24]:<24} {s.pillar or '':<20} "
+                       f"{s.hook_type or '-':<17} {s.beat_order or '-'}")  # fmt: skip
+        typer.echo("Next: uv run factory script  (writes the planned items' scripts)")
 
 
 def script(
@@ -539,6 +591,7 @@ def publish(
 # Stages that are built; the rest stay stubs. Registered in pipeline order for --help.
 IMPLEMENTED: dict[str, Callable[..., None]] = {
     "discover": discover,
+    "ideate": ideate,
     "script": script,
     "generate": generate,
     "assemble": assemble,
@@ -656,6 +709,10 @@ def _content_report(conn: sqlite3.Connection, content_id: int) -> str:
         lines.append(f"  failed while: {row['status_before_failure']}")
     if row["status_reason"]:
         lines.append(f"  reason: {row['status_reason']}")
+    if row["virality_score"] is not None:
+        lines.append(f"  score: {row['virality_score']} | angle: {row['angle']}")
+    if row["planned_publish_at"]:
+        lines.append(f"  planned: {row['planned_publish_at']} (UTC)")
     if row["working_title"]:
         lines.append(f"  title: {row['working_title']}")
         lines.append(f"  hook: {row['hook_type']} | beats: {row['beat_order']}")

@@ -1,0 +1,21 @@
+Propose {{ count }} video ideas: at least {{ min_short }} for the format "short" ({{ channel.formats.short.min_s }}-{{ channel.formats.short.max_s }} s) and at least {{ min_deep }} for "deep_dive" ({{ channel.formats.deep_dive.min_s }}-{{ channel.formats.deep_dive.max_s }} s).
+A short explains one machine's core trick; a deep dive goes through how the whole machine works.
+
+Seed topics with this week's demand data (Wikipedia trend: last 7 days vs the 28 before, above 1.00 = rising;
+YouTube: median views of the most-viewed videos of the last 30 days; "-" = no data):
+{% for t in topics %}- {{ t.topic }}: Wikipedia trend {{ t.trend }}, YouTube {{ t.youtube }}{% if t.google %}, Google Trends {{ t.google }}{% endif %}
+{% endfor %}
+Prefer seed topics, especially rising ones. You may add at most {{ max_new }} machines that are not in the list,
+if they fit a pillar and the audience would find them fascinating.
+
+Already covered (never propose these machines again, in any format):
+{% for name in covered %}- {{ name }}
+{% else %}- (nothing yet)
+{% endfor %}
+For each idea give:
+- object_name: the machine, lowercase, 1-4 words, as a viewer would search for it (for example "jet engine").
+- pillar, format.
+- angle: one sentence on what is new or surprising about this video.
+- hook_type: the best opening style, one of: {{ hook_types | join(", ") }}.
+- scores and one short sentence explaining them.
+Every object_name must be different.

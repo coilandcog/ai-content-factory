@@ -1,0 +1,194 @@
+{
+  "ideas": [
+    {
+      "object_name": "Jet Engine",
+      "pillar": "air_and_sea",
+      "format": "short",
+      "angle": "What really happens inside a Jet Engine.",
+      "hook_type": "reveal",
+      "policy": {
+        "allowed": true,
+        "reason": "Explains how it works."
+      },
+      "scores": {
+        "hook_strength": 22,
+        "familiarity": 18,
+        "visual_potential": 19,
+        "evergreen": 9,
+        "novelty": 9,
+        "reason": "Strong visual, well known."
+      }
+    },
+    {
+      "object_name": "turbocharger",
+      "pillar": "vehicles",
+      "format": "short",
+      "angle": "What really happens inside a turbocharger.",
+      "hook_type": "why_question",
+      "policy": {
+        "allowed": true,
+        "reason": "Explains how it works."
+      },
+      "scores": {
+        "hook_strength": 20,
+        "familiarity": 18,
+        "visual_potential": 18,
+        "evergreen": 9,
+        "novelty": 8,
+        "reason": "Strong visual, well known."
+      }
+    },
+    {
+      "object_name": "tunnel boring machine",
+      "pillar": "industry_and_energy",
+      "format": "deep_dive",
+      "angle": "What really happens inside a tunnel boring machine.",
+      "hook_type": "hidden_inside",
+      "policy": {
+        "allowed": true,
+        "reason": "Explains how it works."
+      },
+      "scores": {
+        "hook_strength": 21,
+        "familiarity": 12,
+        "visual_potential": 19,
+        "evergreen": 8,
+        "novelty": 9,
+        "reason": "Strong visual, well known."
+      }
+    },
+    {
+      "object_name": "wind turbine",
+      "pillar": "industry_and_energy",
+      "format": "short",
+      "angle": "What really happens inside a wind turbine.",
+      "hook_type": "surprising_number",
+      "policy": {
+        "allowed": true,
+        "reason": "Explains how it works."
+      },
+      "scores": {
+        "hook_strength": 18,
+        "familiarity": 17,
+        "visual_potential": 17,
+        "evergreen": 9,
+        "novelty": 8,
+        "reason": "Strong visual, well known."
+      }
+    },
+    {
+      "object_name": "alternator",
+      "pillar": "vehicles",
+      "format": "short",
+      "angle": "What really happens inside a alternator.",
+      "hook_type": "why_question",
+      "policy": {
+        "allowed": true,
+        "reason": "Explains how it works."
+      },
+      "scores": {
+        "hook_strength": 20,
+        "familiarity": 18,
+        "visual_potential": 16,
+        "evergreen": 9,
+        "novelty": 2,
+        "reason": "Strong visual, well known."
+      }
+    },
+    {
+      "object_name": "helicopter rotor",
+      "pillar": "air_and_sea",
+      "format": "deep_dive",
+      "angle": "What really happens inside a helicopter rotor.",
+      "hook_type": "myth_bust",
+      "policy": {
+        "allowed": true,
+        "reason": "Explains how it works."
+      },
+      "scores": {
+        "hook_strength": 19,
+        "familiarity": 15,
+        "visual_potential": 18,
+        "evergreen": 9,
+        "novelty": 9,
+        "reason": "Strong visual, well known."
+      }
+    },
+    {
+      "object_name": "escalator",
+      "pillar": "industry_and_energy",
+      "format": "short",
+      "angle": "What really happens inside a escalator.",
+      "hook_type": "what_if",
+      "policy": {
+        "allowed": true,
+        "reason": "Explains how it works."
+      },
+      "scores": {
+        "hook_strength": 15,
+        "familiarity": 18,
+        "visual_potential": 14,
+        "evergreen": 9,
+        "novelty": 9,
+        "reason": "Strong visual, well known."
+      }
+    },
+    {
+      "object_name": "differential",
+      "pillar": "vehicles",
+      "format": "deep_dive",
+      "angle": "What really happens inside a differential.",
+      "hook_type": "why_question",
+      "policy": {
+        "allowed": true,
+        "reason": "Explains how it works."
+      },
+      "scores": {
+        "hook_strength": 15,
+        "familiarity": 14,
+        "visual_potential": 15,
+        "evergreen": 9,
+        "novelty": 9,
+        "reason": "Strong visual, well known."
+      }
+    },
+    {
+      "object_name": "tank autoloader",
+      "pillar": "vehicles",
+      "format": "short",
+      "angle": "What really happens inside a tank autoloader.",
+      "hook_type": "reveal",
+      "policy": {
+        "allowed": false,
+        "reason": "Weapon systems are blocklisted."
+      },
+      "scores": {
+        "hook_strength": 20,
+        "familiarity": 10,
+        "visual_potential": 18,
+        "evergreen": 5,
+        "novelty": 9,
+        "reason": "Strong visual, well known."
+      }
+    },
+    {
+      "object_name": "maglev train",
+      "pillar": "vehicles",
+      "format": "deep_dive",
+      "angle": "What really happens inside a maglev train.",
+      "hook_type": "reveal",
+      "policy": {
+        "allowed": true,
+        "reason": "Explains how it works."
+      },
+      "scores": {
+        "hook_strength": 20,
+        "familiarity": 15,
+        "visual_potential": 19,
+        "evergreen": 7,
+        "novelty": 9,
+        "reason": "Strong visual, well known."
+      }
+    }
+  ]
+}
