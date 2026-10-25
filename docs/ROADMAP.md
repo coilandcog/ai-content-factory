@@ -81,7 +81,7 @@ Before starting Phase 2, re-check OQ-2 (YouTube incentive programs) and §3 of `
 | 3.2 | Unattended discover and ideate every night; budget alerts | 14 nights without manual starts | Check the `runs` table |
 | 3.3 | Gate 1 `batch_weekly` mode. Allowed only after at least 40 published videos **and** at least 85% Gate 1 approvals over the last 20 | You review a whole week of scripts in one Telegram session; the Engineer's Note is still yours | Do one Sunday batch review |
 | 3.4 | Asset retention cleanup (raw clips 180 days after `analyzed`) | Old clips are removed; renders and the database are kept | Dry-run lists the files it would delete |
-| 3.5 | Research spike: Wan 2.2 (Apache 2.0) on a free Kaggle GPU | A written verdict in `DECISIONS.md`: quality, time per clip, reliability | Watch 3 test clips |
+| 3.5 | Research spike: Wan 2.2 (Apache 2.0) on a free Kaggle GPU. **Done early on 2026-10-25: dropped (D-081)** | A written verdict in `DECISIONS.md`: quality, time per clip, reliability | Watch 3 test clips |
 | 3.6 | Optional n8n dashboard (reads status only, calls the CLI) | Workflows exported to `n8n/` | Open n8n and see today's pipeline |
 
 ## Phase 4: Multi-channel (month 6+)
