@@ -128,11 +128,13 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 |---|---|---|
 | Auth | Bot token from @BotFather → `TELEGRAM_BOT_TOKEN`. Only `TELEGRAM_ALLOWED_CHAT_ID` is accepted; everything else is ignored | ✔ |
 | Mode | Long polling (`getUpdates`), so no public server or webhook is needed. Run with `factory bot`, a long-running process | ✔ |
-| Messages | `sendMessage` with `inline_keyboard` buttons: `approve:<gate>:<content_id>`, `reject:<gate>:<content_id>`, `redo:<gate>:<content_id>`. Reject and redo prompt for a text reason | — |
-| Video preview | `sendVideo` with `preview_720p.mp4`. Bot uploads are limited to **50 MB**, so the preview is encoded to stay under 45 MB | Confirm in task 2.1 |
-| Alerts | `failed` items, budget stops, `spam_risk`, quota errors | — |
+| Client | `integrations/telegram_bot.py`: plain `httpx` POSTs to `https://api.telegram.org/bot<token>/<method>` for `getUpdates`, `sendMessage`, `sendVideo`, `answerCallbackQuery`, `editMessageReplyMarkup` (D-082). The token is in every URL, so errors name only the method and Telegram's `description`, and httpx's own request log is off | ✔ |
+| Messages | Plain text (no Markdown, so nothing needs escaping), at most 4,096 characters per message, longer texts are sent in parts. `inline_keyboard` callback data `<action>:<gate>:<content_id>` with actions `approve`, `reject`, `redo`, `skip`, `edit` (Gate 2), `keep` (Gate 1 draft note), `confirm` (Gate 2 checklist), `cancel`. Reject and redo take your next text message as the reason | ✔ |
+| Video preview | `sendVideo` (multipart upload, caption ≤1,024 characters) with `preview_720p.mp4`. Bot uploads are limited to **50 MB** (Bot API docs, checked 2026-10-25); QA keeps the preview under 45 MB | ✔ |
+| Alerts | While `factory bot` runs: runs that end `failed`/`partial` (budget stops and quota errors included, with the redacted `runs.error`) and items that newly become `failed`, each once. `spam_risk` comes with the publish API tasks | ✔ (task 2.1) |
 | Reports | Monday 06:00: weekly winners and losers plus pattern summary | — |
-| Errors | 429 → respect the `retry_after` value | — |
+| Errors | 429 → wait `parameters.retry_after` seconds, then retry; network errors and 5xx → the shared 4-attempt backoff; other 4xx → `HttpStatusError` with Telegram's description. If Telegram stays unreachable the bot waits 60 s and polls again | ✔ |
+| Usage | Each `sendMessage`/`sendVideo` adds 1 to `api_usage` (`telegram`, no daily limit); polling is not counted | ✔ |
 
 ## 8. Google Flow (generate; manual, no API)
 

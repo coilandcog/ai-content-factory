@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-import textwrap
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -16,7 +15,7 @@ import click
 import typer
 
 from factory import music
-from factory.budgets import usage_date, usage_today
+from factory.budgets import check_and_record, usage_date, usage_today
 from factory.config import (
     CONFIG_DIR,
     ChannelConfig,
@@ -39,10 +38,12 @@ from factory.db import (
 )
 from factory.errors import ConfigError, FactoryError
 from factory.integrations.kokoro_tts import KokoroTTS
+from factory.integrations.telegram_bot import TelegramClient
 from factory.logging_setup import Redactor, set_log_context, setup_logging
 from factory.media import ffmpeg, subtitles
 from factory.media.brand import build_brand_assets
 from factory.stages import assemble as assemble_stage
+from factory.stages import bot as bot_stage
 from factory.stages import discover as discover_stage
 from factory.stages import generate as generate_stage
 from factory.stages import ideate as ideate_stage
@@ -411,27 +412,9 @@ def _review_final_interactively(ctx: AppContext, content_id: int) -> str:
 
 
 def _final_report(ctx: AppContext, content_id: int) -> str:
-    data = metadata_stage.load(ctx, content_id)
     folder = voice_stage.asset_dir(ctx, content_id)
-    qa_path = folder / "qa_report.json"
-    qa_lines = []
-    if qa_path.is_file():
-        for check in json.loads(qa_path.read_text()):
-            mark = {True: "PASS", False: "FAIL", None: "----"}[check["ok"]]
-            qa_lines.append(f"  {mark} {check['check']}: {check['detail']}")
-    music = data.get("music") or {}
     lines = [
-        _content_report(ctx.conn, content_id),
-        "",
-        f"YOUTUBE TITLE:  {data['youtube']['title']}",
-        "YOUTUBE DESCRIPTION:",
-        textwrap.indent(data["youtube"]["description"], "  "),
-        "",
-        f"TIKTOK CAPTION:  {data['tiktok']['caption']}",
-        f"MUSIC (YouTube only):  {music.get('title', '-')} by {music.get('artist') or '?'}",
-        "",
-        "AUTOMATED QA:",
-        *(qa_lines or ["  (no qa_report.json)"]),
+        review_stage.final_report(ctx, content_id),
         "",
         "WATCH BEFORE DECIDING (outside VS Code, it can't play the sound):",
         f'  explorer.exe "$(wslpath -w {folder.relative_to(ctx.root)})"',
@@ -466,8 +449,8 @@ def _edit_metadata(ctx: AppContext, content_id: int) -> None:
 def _review_interactively(ctx: AppContext, content_id: int) -> str:
     """Show one item and loop until it is decided. Returns approve/reject/skip/quit."""
     while True:
-        typer.echo(_content_report(ctx.conn, content_id))
-        typer.echo(_script_report(ctx.conn, content_id))
+        typer.echo(review_stage.content_report(ctx.conn, content_id))
+        typer.echo(review_stage.script_report(ctx.conn, content_id))
         choice = typer.prompt(
             "\n[a]pprove  [r]eject  re[d]o  [s]kip  [q]uit",
             type=click.Choice(["a", "r", "d", "s", "q"]),
@@ -609,6 +592,58 @@ def _context(run: _Run, config_dir: Path) -> AppContext:
     return AppContext(run.settings, run.env, channel, run.conn, config_dir.parent, run.run_id)
 
 
+# --- Telegram bot ---------------------------------------------------------------------------
+
+
+@app.command()
+def bot(
+    find_chat_id: Annotated[
+        bool,
+        typer.Option(
+            "--find-chat-id", help="Print the chat id of whoever messaged the bot, then stop."
+        ),
+    ] = False,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Telegram review bot: Gate 1 and Gate 2 with buttons, plus alerts (ROADMAP 2.1).
+
+    Runs until you press Ctrl+C. Only TELEGRAM_ALLOWED_CHAT_ID is listened to.
+    """
+    with _tracked_run("bot", config_dir) as run:
+        ctx = _context(run, config_dir)
+        token = run.env.telegram_bot_token
+        if token is None:
+            raise FactoryError("TELEGRAM_BOT_TOKEN is missing in .env (the @BotFather token)")
+        client = TelegramClient(
+            token.get_secret_value(),
+            before_send=lambda: check_and_record(run.conn, ctx.channel, "telegram"),
+        )
+        if find_chat_id:
+            typer.echo("Send /start to the bot in Telegram now. Waiting up to 30 s ...")
+            chats = bot_stage.find_chats(client)
+            for chat_id, name in chats:
+                typer.echo(f"  chat id {chat_id} ({name})")
+            typer.echo(
+                "Put yours in .env as TELEGRAM_ALLOWED_CHAT_ID=<chat id>."
+                if chats
+                else "No messages arrived. Send /start to the bot, then run this again."
+            )
+            return
+        chat_id = run.env.telegram_allowed_chat_id
+        if chat_id is None:
+            raise FactoryError(
+                "TELEGRAM_ALLOWED_CHAT_ID is missing in .env: find it with "
+                "`uv run factory bot --find-chat-id`"
+            )
+        review_bot = bot_stage.ReviewBot(ctx, client, chat_id)
+        typer.echo("Bot running: open Telegram. Press Ctrl+C here to stop it.")
+        try:
+            review_bot.run_forever()
+        except KeyboardInterrupt:  # the normal way to stop it: a clean 'ok' run, not a crash
+            typer.echo("\nBot stopped.")
+        run.tally.processed = review_bot.decisions
+
+
 # --- status -------------------------------------------------------------------------------
 
 
@@ -653,9 +688,9 @@ def status(
         if content_id is None:
             typer.echo(_status_report(run.conn, channel, run.env.dry_run, run.run_id))
             return
-        typer.echo(_content_report(run.conn, content_id))
+        typer.echo(review_stage.content_report(run.conn, content_id))
         if show == "script":
-            typer.echo(_script_report(run.conn, content_id))
+            typer.echo(review_stage.script_report(run.conn, content_id))
         elif show is not None:
             raise FactoryError(f"--show accepts 'script', not '{show}'")
 
@@ -687,84 +722,6 @@ def _signals_report(conn: sqlite3.Connection, channel: ChannelConfig) -> str:
         "  trend = Wikipedia; Trends = Google Trends CSV (worldwide, last 28 days vs the 56 "
         "before); '-' = no data yet"
     )
-    return "\n".join(lines)
-
-
-def _content_report(conn: sqlite3.Connection, content_id: int) -> str:
-    row = conn.execute(
-        """
-        SELECT c.*, ch.slug FROM contents c JOIN channels ch ON ch.id = c.channel_id
-        WHERE c.id = ?
-        """,
-        (content_id,),
-    ).fetchone()
-    if row is None:
-        raise FactoryError(f"content #{content_id} does not exist")
-    lines = [
-        f"Content #{row['id']} ({row['slug']})",
-        f"  object: {row['object_name']} | format: {row['format']} | pillar: {row['pillar']}",
-        f"  status: {row['status']}",
-    ]
-    if row["status_before_failure"]:
-        lines.append(f"  failed while: {row['status_before_failure']}")
-    if row["status_reason"]:
-        lines.append(f"  reason: {row['status_reason']}")
-    if row["virality_score"] is not None:
-        lines.append(f"  score: {row['virality_score']} | angle: {row['angle']}")
-    if row["planned_publish_at"]:
-        lines.append(f"  planned: {row['planned_publish_at']} (UTC)")
-    if row["working_title"]:
-        lines.append(f"  title: {row['working_title']}")
-        lines.append(f"  hook: {row['hook_type']} | beats: {row['beat_order']}")
-    lines.append(f"  created: {row['created_at']} | updated: {row['updated_at']}")
-    return "\n".join(lines)
-
-
-def _script_report(conn: sqlite3.Connection, content_id: int) -> str:
-    """The current script as plain text: narration parts, shot list and sources (for Gate 1)."""
-    script = conn.execute(
-        "SELECT * FROM scripts WHERE content_id = ? AND is_current = 1", (content_id,)
-    ).fetchone()
-    if script is None:
-        raise FactoryError(f"content #{content_id} has no script yet: run `factory script`")
-    shots = json.loads(script["shot_list_json"])
-    item_status = conn.execute("SELECT status FROM contents WHERE id = ?", (content_id,)).fetchone()
-    note_label = {
-        "scripted": "ENGINEER'S NOTE (draft, yours to edit at Gate 1)",
-        "rejected": "ENGINEER'S NOTE (draft, not approved)",
-        "archived": "ENGINEER'S NOTE (draft, not approved)",
-    }.get(item_status["status"], "ENGINEER'S NOTE (approved by you)")
-    sources = conn.execute(
-        "SELECT url, publisher, claim FROM sources WHERE content_id = ? ORDER BY id", (content_id,)
-    ).fetchall()
-    similar = script["similarity_max"]
-    lines = [
-        "",
-        f"Script v{script['version']} | {script['word_count']} words | "
-        f"~{script['est_duration_s']:.0f} s | {script['llm_model']} | "
-        f"prompt {script['prompt_version']} | similarity "
-        + ("not checked" if similar is None else f"{similar:.2f}"),
-        "",
-        f"HOOK:  {script['hook']}",
-        "",
-        "NARRATION:",
-        textwrap.fill(script["body_text"], width=96, initial_indent="  ", subsequent_indent="  "),
-        "",
-        f"{note_label}:  {script['engineer_note']}",
-        f"LOOP LINE:  {script['loop_line']}",
-        "",
-        "SHOTS:",
-    ]
-    for shot in shots:
-        extra = ", ".join(f"{k}={v}" for k, v in shot["prompt_vars"].items())
-        if shot.get("labels"):  # diagram label cards (task 1.8): check them before approving
-            extra = f"labels: {', '.join(shot['labels'])}; dots: {shot.get('energy') or 'electric'}"
-        lines.append(
-            f"  {shot['n']:>2}. {shot['beat']:<8} {shot['kind']:<9} {shot['duration_s']:>4.1f} s  "
-            f"{shot['description']}" + (f"  [{extra}]" if extra else "")
-        )
-    lines += ["", "SOURCES:"]
-    lines += [f"  - {s['url']} ({s['publisher']}): {s['claim']}" for s in sources]
     return "\n".join(lines)
 
 

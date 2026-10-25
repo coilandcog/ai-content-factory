@@ -257,6 +257,8 @@ class EnvSettings(StrictModel):
     gemini_api_key: SecretStr | None = None  # from GEMINI_API_KEY
     youtube_api_key: SecretStr | None = None  # from YOUTUBE_API_KEY (read-only discover calls)
     wikimedia_user_agent: str | None = None  # from WIKIMEDIA_USER_AGENT (not a secret)
+    telegram_bot_token: SecretStr | None = None  # from TELEGRAM_BOT_TOKEN
+    telegram_allowed_chat_id: int | None = None  # from TELEGRAM_ALLOWED_CHAT_ID (not a secret)
     # repr=False keeps this field out of repr() entirely.
     secrets: tuple[SecretStr, ...] = Field(default=(), repr=False)
 
@@ -281,6 +283,8 @@ def load_env(root: Path = REPO_ROOT) -> EnvSettings:
             gemini_api_key=merged.get("GEMINI_API_KEY") or None,
             youtube_api_key=merged.get("YOUTUBE_API_KEY") or None,
             wikimedia_user_agent=merged.get("WIKIMEDIA_USER_AGENT") or None,
+            telegram_bot_token=merged.get("TELEGRAM_BOT_TOKEN") or None,
+            telegram_allowed_chat_id=merged.get("TELEGRAM_ALLOWED_CHAT_ID") or None,
             secrets=secrets,
         )
     except ValidationError as exc:

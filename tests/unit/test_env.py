@@ -48,3 +48,28 @@ def test_secrets_are_collected_but_never_shown(root: Path) -> None:
     assert "http://localhost:11434" not in [s.get_secret_value() for s in env.secrets]
     assert FAKE_KEY not in repr(env)
     assert FAKE_KEY not in str(env.secrets)
+
+
+def test_telegram_settings_load_and_the_token_is_a_secret(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_CHAT_ID"):
+        monkeypatch.delenv(name, raising=False)
+    token = "123456:FAKE-telegram-token"
+    (root / ".env").write_text(f"TELEGRAM_BOT_TOKEN={token}\nTELEGRAM_ALLOWED_CHAT_ID=987654\n")
+
+    env = load_env(root)
+
+    assert env.telegram_allowed_chat_id == 987654
+    assert env.telegram_bot_token is not None and token not in repr(env)
+    assert token in [s.get_secret_value() for s in env.secrets]  # masked in logs
+
+
+def test_a_chat_id_that_is_not_a_number_is_an_error(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("TELEGRAM_ALLOWED_CHAT_ID", raising=False)
+    (root / ".env").write_text("TELEGRAM_ALLOWED_CHAT_ID=@me\n")
+
+    with pytest.raises(ConfigError, match="telegram_allowed_chat_id"):
+        load_env(root)

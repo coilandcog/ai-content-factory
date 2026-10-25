@@ -81,7 +81,7 @@ There is one user, **the owner**:
 | # | Question | Owner | Resolve by |
 |---|---|---|---|
 | OQ-1 | ~~Exact Gemini API free-tier limits (RPM/RPD) for the chosen model~~ **Resolved 2026-10-23:** `gemini-3.5-flash-lite`, 15 RPM / 500 RPD (`INTEGRATIONS.md` §1, D-051) | Claude (read in AI Studio with the owner's key) | ROADMAP task 0.5 |
-| OQ-2 | Details of YouTube's announced incentive programs for channels under the Shorts threshold | Claude | Before Phase 2 |
+| OQ-2 | Details of YouTube's announced incentive programs for channels under the Shorts threshold. *Re-checked 2026-10-25: announced (milestone earnings, Shopping bonuses, brand-deal incentives, trend boosts) but no details yet (D-082); check again before task 2.3* | Claude | Before Phase 2 |
 | OQ-3 | TikTok app review requirements for Login Kit, Content Posting (inbox) and Display API; redirect URI for a local app | Claude | ROADMAP task 2.4 |
 | OQ-4 | Whether the YouTube Analytics API exposes "stayed to watch" for Shorts; otherwise read it manually in Studio | Claude | ROADMAP task 2.5 |
 | OQ-5 | Claim `@coilandcog` on YouTube and TikTok; trademark search result for "Coil & Cog" | Owner | ROADMAP task 0.2 |
