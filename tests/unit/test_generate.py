@@ -109,7 +109,7 @@ def test_approved_script_gets_flow_sheet_inbox_and_voice(ctx: AppContext) -> Non
     assert "4 × Veo 3.1 - Fast, **80 credits**" in sheet
     assert "you have 50 of 50 left today" in sheet
     assert "make 2 clip(s) today and the rest on the next day(s)" in sheet
-    assert "close-up of the alternator rotating slowly on a matte dark pedestal" in sheet
+    assert "close-up of the alternator rotating steadily on a matte dark pedestal" in sheet
     assert "Save as: `shot_01.mp4`" in sheet and "Save as: `shot_03.mp4`" not in sheet  # diagram
     assert "glowing cyan energy surges through the stator coils" in sheet
     assert "of the alternator, vertical 9:16, with three smooth camera angles" in sheet
@@ -118,6 +118,8 @@ def test_approved_script_gets_flow_sheet_inbox_and_voice(ctx: AppContext) -> Non
     prompts = json.loads((folder / "flow_prompts.json").read_text())
     assert "pedestal" in prompts["1"] and "pedestal" not in prompts["5"]  # in situ: no studio set
     assert "installed in a car engine bay" in prompts["5"]
+    assert "already moving in the very first frame" in prompts["1"]  # D-090: shot 1 only
+    assert "already moving" not in prompts["5"]
     assert (ctx.root / "data" / "inbox" / "flow" / "000001").is_dir()
     assert (folder / "voice.wav").is_file()
     assert len(assets(ctx, "flow_sheet")) == 1 and len(assets(ctx, "voiceover")) == 1

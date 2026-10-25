@@ -58,7 +58,7 @@ The narrator speaks at about 142 words per minute (`voice.target_wpm`, measured 
 
 | Time | Part | Rule |
 |---|---|---|
-| 0–2 s | Hook | One line; see §6. A visual reveal starts at frame 1. |
+| 0–2 s | Hook | One line of at most 12 words that names the machine or states the video's most surprising fact; see §6. Shot 1 is always a moving Flow clip, so motion starts at frame 1 (D-090). |
 | 2–8 s | Setup | Why this object matters to *you* |
 | 8–30 s | Explanation | 2–3 beats, one idea each |
 | 30–36 s | Engineer's Note | One sentence of insight from the owner |
@@ -66,7 +66,7 @@ The narrator speaks at about 142 words per minute (`voice.target_wpm`, measured 
 
 **Deep Dive (~120 s):** hook (0–3 s) → setup (3–15 s) → 4–6 explanation beats → one lesser-known fact, stated plainly → Engineer's Note (10–15 s) → recap in one sentence → loop line.
 
-**Engineer's Note** (required in every script): one insight or real-world observation from the owner, said plainly in the narrator's normal voice, for example "A few amps in the rotor control over 100 amps of output." No lead-in that claims what viewers know, miss or find surprising ("What most people miss is…", "Here's the surprising part…"; the script stage sends such a draft back, D-084; the same applies to the body, D-088), no repeat of a sentence the body already says, no "As an engineer" and no first-person claims of expertise; it should sound like a curious friend, not a lecture (D-077). The AI drafts a suggestion; the owner edits or replaces it at Gate 1. This is the main protection against the inauthentic-content policy.
+**Engineer's Note** (required in every script): one insight or real-world observation from the owner, opening with "As an engineer, what surprises me is that…" (D-090), for example "As an engineer, what surprises me is that a few amps in the rotor control over 100 amps of output." After that lead-in, no claim of what viewers know or miss ("What most people miss is…"; the script stage sends such a draft back, D-084; the same applies to the body, D-088, where "As an engineer" is not allowed) and no repeat of a sentence the body already says. The hook may tease the same fact (D-090). The AI drafts a suggestion; the owner edits or replaces it at Gate 1. This is the main protection against the inauthentic-content policy.
 
 ## 6. Hook formulas (`hook_type` values)
 
@@ -75,7 +75,7 @@ No two consecutive videos may use the same `hook_type`.
 | `hook_type` | Formula | Example |
 |---|---|---|
 | `why_question` | "Why does/doesn't {machine} {surprising behavior}?" | "Why doesn't your car battery die while you drive?" |
-| `hidden_inside` | "You've seen this a thousand times, but never inside it." | "You've flown behind one of these. Here's what actually happens inside." |
+| `hidden_inside` | "You've seen a {machine} {where viewers see it}, but never {the surprising thing inside}." (D-090: names the machine) | "You've flown behind a jet engine, but never seen the fire inside." |
 | `surprising_number` | "{Big or small number} + {object}" | "This part spins 18,000 times a minute under your hood." |
 | `myth_bust` | "Most people think {X}. Actually {Y}." | "A jet engine doesn't push against the air behind it." |
 | `what_if` | "What happens if {part} fails or stops?" | "What happens if your alternator stops spinning?" |

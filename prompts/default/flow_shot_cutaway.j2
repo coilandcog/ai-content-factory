@@ -2,4 +2,5 @@ Create a premium {{ clip_seconds }}-second technical cutaway video of the {{ obj
 Start close on the {{ object }} as its outer casing splits apart along a clean cut plane, revealing {{ internals }}.
 Then the camera orbits the opened {{ object }} while {{ focus_part }} moves as it does in operation, and the shot finishes on a macro close-up of {{ focus_part }} in motion. Cut surfaces are clean brushed metal.
 {{ description.rstrip(".") }}.
-{% include "style_block.j2" %}
+{% if first %}The camera and the parts are already moving in the very first frame: no fade-in, no still or slow opening.
+{% endif %}{% include "style_block.j2" %}

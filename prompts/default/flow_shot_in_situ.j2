@@ -2,4 +2,5 @@ Create a premium {{ clip_seconds }}-second video of the {{ object }} running in 
 Open on a wide view of the setting, then move in to the {{ object }} installed in {{ context }}, working, with its moving parts in motion, lit by moody cyan and amber accent lights.
 Finish on a close detail of the {{ object }} in operation. Realistic, clean environment with no visible brands.
 {{ description.rstrip(".") }}.
-{% include "style_block.j2" %}
+{% if first %}The camera and the parts are already moving in the very first frame: no fade-in, no still or slow opening.
+{% endif %}{% include "style_block.j2" %}

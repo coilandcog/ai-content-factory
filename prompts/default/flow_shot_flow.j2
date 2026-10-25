@@ -2,4 +2,5 @@ Create a premium {{ clip_seconds }}-second technical animation of the {{ object 
 Start on a clean cutaway of the {{ object }} with its parts in motion against a dark studio background, then glowing {{ energy_color_name }} energy surges through {{ path }}, showing {{ process }}.
 Finish with the camera circling close around the moving parts as the energy pulses. The motion is clear and readable, not chaotic.
 {{ description.rstrip(".") }}.
-{% include "style_block.j2" %}
+{% if first %}The camera and the parts are already moving in the very first frame: no fade-in, no still or slow opening.
+{% endif %}{% include "style_block.j2" %}

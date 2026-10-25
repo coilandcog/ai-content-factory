@@ -74,6 +74,10 @@ SOURCE_TIMEOUT_S = 10.0
 # A hook formula that is a whole sentence (script_rules.j2) must not be used word for word (D-088).
 FIXED_HOOK_EXAMPLES = ("You've seen this a thousand times, but never inside it.",)
 REPEAT_SHARE = 0.5
+# The hook is said in the first 2-3 seconds, before viewers swipe away (D-090).
+HOOK_MAX_WORDS = 12
+# The Engineer's Note opens with this lead-in (D-090); the fact after it is checked like the body.
+NOTE_LEAD_IN = "As an engineer, what surprises me is that"
 # Body and Engineer's Note state plain facts; they never claim what viewers know or miss
 # (D-084, body since D-088). The hook is not checked: the myth_bust formula is "Most people think".
 CLAIM_PHRASES = re.compile(
@@ -196,8 +200,9 @@ def _rule_problems(draft: Any) -> list[str]:
     # The owner rejected a trailing "because..." at Gate 1 as an incomplete sentence (D-062).
     if loop and (loop.endswith(("...", "…")) or loop[-1] not in ".?!"):
         problems.append("loop_line must be a complete sentence ending in . ? or ! (no '...')")
-    for name in ("body", "engineer_note_draft"):
-        if claim := CLAIM_PHRASES.search(getattr(draft, name)):
+    note_fact = re.sub(rf"^\s*{re.escape(NOTE_LEAD_IN)}", "", draft.engineer_note_draft, flags=re.I)
+    for name, text in (("body", draft.body), ("engineer_note_draft", note_fact)):
+        if claim := CLAIM_PHRASES.search(text):
             problems.append(
                 f"{name} says '{claim.group(0)}': state the fact plainly, "
                 "without saying what people know, miss or find surprising"
@@ -210,6 +215,8 @@ def _rule_problems(draft: Any) -> list[str]:
         )
     if _repeats(draft.hook, " ".join(FIXED_HOOK_EXAMPLES)):
         problems.append("hook copies the formula's example: write your own hook for this machine")
+    if (hook_words := word_count(draft.hook)) > HOOK_MAX_WORDS:
+        problems.append(f"hook has {hook_words} words: keep it to {HOOK_MAX_WORDS} or fewer")
     words = word_count(draft.narration())
     if not draft.min_words <= words <= draft.max_words:
         # Per-part counts tell the model which part to shorten when it is asked again.
@@ -224,6 +231,8 @@ def _rule_problems(draft: Any) -> list[str]:
     shots = draft.shots
     if [s.n for s in shots] != list(range(1, len(shots) + 1)):
         problems.append("shots must be numbered 1, 2, 3, ... in order")
+    if shots and shots[0].kind != "flow_clip":  # D-090: motion from frame 1
+        problems.append(f"shot 1 is a {shots[0].kind}: the first shot must be a flow_clip")
     clips = sum(s.kind == "flow_clip" for s in shots)
     if not MIN_CLIPS <= clips <= MAX_CLIPS:
         problems.append(f"{clips} flow_clip shots; use {MIN_CLIPS}-{MAX_CLIPS}")
@@ -299,8 +308,8 @@ def part_words(target_words: int) -> dict[str, int]:
     gemini-3.5-flash-lite overshot a single total by about 35%; small models keep short parts
     to a length much better than one long total, so the prompt asks for each part separately.
     """
-    hook, loop = 12, 10
-    note = min(25, round(target_words * 0.15))
+    hook, loop = 10, 10
+    note = min(25, round(target_words * 0.15)) + word_count(NOTE_LEAD_IN)
     return {"hook": hook, "body": target_words - hook - note - loop, "note": note, "loop": loop}
 
 
@@ -509,6 +518,8 @@ def _prompts(
         target_words=(target_words := round((schema.min_words + schema.max_words) / 2)),
         target_total_s=(target_s := round(target_words / schema.wpm * 60)),
         part_words=part_words(target_words),
+        hook_max_words=HOOK_MAX_WORDS,
+        note_lead_in=NOTE_LEAD_IN,
         shot_seconds=shot_seconds(target_s),
         min_clips=MIN_CLIPS,
         max_clips=MAX_CLIPS,

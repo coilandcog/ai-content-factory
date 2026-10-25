@@ -1,7 +1,7 @@
 Hook: pick hook_type from {{ allowed_hooks | join(", ") }}.
 {%- set formulas = {
   "why_question": "\"Why does/doesn't {machine} {surprising behavior}?\"",
-  "hidden_inside": "\"You've seen this a thousand times, but never inside it.\"",
+  "hidden_inside": "\"You've seen a {machine} {where viewers see it}, but never {the surprising thing inside}.\"",
   "surprising_number": "\"{Big or small number} + {object}\"",
   "myth_bust": "\"Most people think {X}. Actually {Y}.\"",
   "what_if": "\"What happens if {part} fails or stops?\"",
@@ -10,6 +10,8 @@ Hook: pick hook_type from {{ allowed_hooks | join(", ") }}.
 {% for name in allowed_hooks %}- {{ name }}: {{ formulas[name] }}
 {% endfor -%}
 A formula is a pattern: write the hook in your own words for this machine, never copy a formula word for word.
+Viewers decide in the first two seconds whether to stay: the hook names the machine or states the video's most surprising
+fact (the one the Engineer's Note explains), never a vague "this thing". At most {{ hook_max_words }} words.
 
 Visual beats: Studio (object on a dark pedestal), Cutaway (casing opens to show the inside),
 Flow (glowing energy moves through the parts), In situ (the part installed where it is used).
@@ -26,10 +28,10 @@ Narration fields, each with its own word budget (count the words of each part be
 - hook: the first sentence, about {{ part_words.hook }} words.
 - body: everything between hook and Engineer's Note, about {{ part_words.body }} words in short, plain sentences.
   State facts directly: never claim what viewers know, miss or find surprising ("most people", "you might not know").
-- engineer_note_draft: one sentence with one genuine, checkable fact that the body does not already say, said plainly
-  in the narrator's normal voice, about {{ part_words.note }} words. State the fact directly, with no lead-in: never claim what viewers know, miss
-  or find surprising ("most people", "the surprising part", "you might not know"). Never "As an engineer", never
-  "I" or "me", and no claims of expertise. It is a draft the channel owner will edit, never a made-up personal story.
+- engineer_note_draft: one sentence that starts with "{{ note_lead_in }}" and then gives one genuine, checkable fact
+  that the body does not already say, about {{ part_words.note }} words in all. After the lead-in, state the fact directly: never claim
+  what viewers know or miss ("most people", "you might not know"). No other "I" or "me", and no made-up personal story:
+  it is a draft the channel's engineer will edit.
 - loop_line: the last sentence. It must be a complete sentence that ends with a period, question mark or
   exclamation mark (never "..." or a dangling "because"), and it should lead naturally back to the hook when the video loops,
   in new words: never repeat the hook.
@@ -49,6 +51,7 @@ Add up every duration_s: about {{ target_total_s }} s, never under {{ shot_secon
 - kind "diagram": a label card drawn by code over the picture: "labels" holds 1-4 part names of at most 4 words each
   (e.g. ["Rotor", "Stator Coils", "Diode Bridge"]), and "energy" picks the colour of their dots. At least {{ min_diagrams }} diagrams.
   Every other shot has "labels": [].
+- Shot 1 is always a flow_clip, so the video moves from the first frame (never a still or diagram first).
 - Every one of the four beats appears, and the first appearance of each beat follows the chosen beat_order.
 
 Sources ("sources"): exactly 3 different real web pages that support the main facts, each with url, title, publisher and the claim it supports.

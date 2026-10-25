@@ -136,9 +136,11 @@ def test_prompt_contains_reference_rules_and_blocklist(ctx: AppContext) -> None:
     # D-085: no URLs guessed from a site's folder structure.
     assert "Never build or guess a URL from a website's folder structure" in call["contents"]
     assert "between 71 and 118 words" in call["contents"]
-    # Per-part budgets (D-083): 94-word target = hook 12 + body 58 + note 14 + loop 10.
-    assert "hook: the first sentence, about 12 words" in call["contents"]
-    assert "about 58 words in short, plain sentences" in call["contents"]
+    # Per-part budgets (D-083, D-090): 94 words = hook 10 + body 52 + note 14+8 lead-in + loop 10.
+    assert "hook: the first sentence, about 10 words" in call["contents"]
+    assert "about 52 words in short, plain sentences" in call["contents"]
+    assert "At most 12 words" in call["contents"]
+    assert "Shot 1 is always a flow_clip" in call["contents"]
     assert "defeating safety or emissions devices" in call["config"].system_instruction
 
 
@@ -211,6 +213,11 @@ def test_note_that_claims_what_viewers_miss_is_sent_back(ctx: AppContext) -> Non
             "Why doesn't your car battery go flat while you drive?",
             "loop_line repeats the hook",
         ),
+        (
+            "hook",
+            "Why doesn't the battery in your car ever go flat while you drive it around town?",
+            "hook has 16 words: keep it to 12 or fewer",
+        ),
     ],
 )
 def test_quality_rule_breaks_are_sent_back(
@@ -255,6 +262,33 @@ def test_wikidata_source_is_not_kept(ctx: AppContext) -> None:
     assert content(ctx, content_id)["status"] == "scripted"
     urls = [r["url"] for r in ctx.conn.execute("SELECT url FROM sources ORDER BY id")]
     assert urls == [WIKI_URL, SECOND_SOURCE]
+
+
+def test_note_may_open_with_the_engineer_lead_in(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+    answer = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    answer["engineer_note_draft"] = (
+        f"{stage.NOTE_LEAD_IN} a few amps in the rotor control the output."
+    )
+    sdk = FakeGenaiClient(reply(json.dumps(answer)))
+
+    run_stage(ctx, sdk)
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    assert len(sdk.calls) == 1  # D-090: the lead-in is not a rule break
+    assert stage.NOTE_LEAD_IN in sdk.calls[0]["contents"]
+
+
+def test_first_shot_that_is_not_a_clip_is_sent_back(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+    answer = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    answer["shots"][0]["kind"] = "still"
+    sdk = FakeGenaiClient(reply(json.dumps(answer)), fixture_reply("script_short_alternator"))
+
+    run_stage(ctx, sdk)
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    assert "shot 1 is a still: the first shot must be a flow_clip" in sdk.calls[1]["contents"]
 
 
 @pytest.mark.parametrize("target", [94, 254])

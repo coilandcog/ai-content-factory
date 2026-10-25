@@ -128,6 +128,7 @@ def _shot_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> 
         description=shot["description"],
         aspect=aspect,
         clip_seconds=FLOW_CLIP_SECONDS,
+        first=shot["n"] == 1,  # D-090: shot 1 moves from its first frame
         **variables,
     )
     return rendered.text.strip()
