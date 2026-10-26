@@ -43,5 +43,6 @@ This file is for any AI coding assistant (Claude Code or others) working in this
 - [ ] `uv run pytest` passes. New logic has unit tests, and external calls are faked in unit tests.
 - [ ] The task's "How I test it myself" steps have been written out for the owner and work.
 - [ ] Docs are updated if anything in rule 5 changed, with a `DECISIONS.md` entry if a decision changed.
+- [ ] The *Current state* section of `CLAUDE.md` is rewritten (D-091).
 - [ ] No secrets appear in the diff, and `.env.example` is updated if new settings were added.
 - [ ] A short summary is given to the owner: what changed, why, how to test it, and what's next.
