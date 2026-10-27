@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -178,3 +180,36 @@ def test_frame_images_are_not_reported_as_unexpected_inbox_files(
 
     warning = next(r.message for r in caplog.records if "unexpected files" in r.message)
     assert "notes.txt" in warning and "frame_01.png" not in warning
+
+
+# --- prompt versions (D-098) ----------------------------------------------------------------------
+
+
+def test_clip_saved_before_its_prompt_was_reissued_is_flagged(ctx: AppContext) -> None:
+    content_id = waiting_item(ctx)
+    issued = {"1": {"sha256": "a" * 64, "issued_at": "2000-01-01T00:00:00Z"},
+              "3": {"sha256": "b" * 64, "issued_at": "2026-10-27T06:40:00Z"}}  # fmt: skip
+    (asset_dir(ctx, content_id) / generate.ISSUED_FILE).write_text(json.dumps(issued))
+    save(ctx, content_id, "shot_01.mp4")
+    save(ctx, content_id, "shot_03.mp4")
+    old = datetime(2026, 10, 26, 12, 0, tzinfo=UTC).timestamp()  # made before the restage
+    os.utime(generate.inbox_dir(ctx, content_id) / "shot_03.mp4", (old, old))
+    llm, _ = fake_llm(ctx, PASS, FAIL)
+
+    entries = clip_review.review(ctx, content_id, llm=llm)
+
+    assert [(e["file"], e["older_than_prompt"]) for e in entries] == [
+        ("shot_01.mp4", False), ("shot_03.mp4", True),
+    ]  # fmt: skip
+    assert entries[1]["prompt_sha256"] == "b" * 64
+    assert entries[1]["file_saved_at"] == "2026-10-26T12:00:00Z"
+
+
+def test_sheet_without_version_file_is_never_flagged(ctx: AppContext) -> None:
+    content_id = waiting_item(ctx)
+    save(ctx, content_id, "shot_01.mp4")
+    llm, _ = fake_llm(ctx, PASS)
+
+    entry = clip_review.review(ctx, content_id, only=(1,), llm=llm)[0]
+
+    assert (entry["older_than_prompt"], entry["prompt_issued_at"]) == (False, None)

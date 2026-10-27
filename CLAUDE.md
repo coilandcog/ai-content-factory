@@ -42,7 +42,7 @@
 
 *Updated 2026-10-27 (after D-097).*
 
-- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093; benchmark list D-094; close framing + image-first Flow sheet D-095; flow direction + `--restage N --shots` D-096; clip review `factory clips review` D-097 = ROADMAP 2.13 done early (all on `main`). **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
+- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093; benchmark list D-094; close framing + image-first Flow sheet D-095; flow direction + `--restage N --shots` D-096; clip review `factory clips review` D-097 = ROADMAP 2.13 done early; prompt versions D-098 = 2.14 (branch `feat/prompt-versions`, awaiting owner "commit"); next: 2.15 code-drawn flows (planned; Gemini point test: right order but one point stepped backwards → code keeps only forward points). New roadmap tasks 2.14–2.21 cover all of the owner's A–O ideas except L (paid model). **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
 - **Published:** #5 alternator (YouTube + TikTok), #6 turbocharger (YouTube `shorts/rtzPTV6B0KQ`; TikTok post not recorded yet).
 - **Real items:**
 

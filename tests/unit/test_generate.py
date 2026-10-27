@@ -456,3 +456,23 @@ def test_shots_option_needs_restage(config_dir: Path) -> None:
 
     assert result.exit_code == 1
     assert "--shots only works together with --restage" in result.output
+
+
+def test_restage_gives_only_changed_prompts_a_new_issue_time(ctx: AppContext) -> None:
+    content_id = approved_item(ctx)
+    run(ctx)
+    folder = voice.asset_dir(ctx, content_id)
+    first = json.loads((folder / generate.ISSUED_FILE).read_text())
+    assert set(first) == {"1", "2", "4", "5", "frame_1", "frame_2", "frame_4", "frame_5"}
+    stamped = {k: {**v, "issued_at": "2026-01-01T00:00:00Z"} for k, v in first.items()}
+    (folder / generate.ISSUED_FILE).write_text(json.dumps(stamped))
+    redo = {"shots": [{"n": 4, "scene": "Side cutaway: current flows from left to right",
+                       "camera": "side track", "end_frame": "the diode plate"}]}  # fmt: skip
+    llm, _ = fake_llm(ctx, json.dumps(redo))
+
+    generate.restage(ctx, content_id, llm=llm, only=(4,))
+
+    after = json.loads((folder / generate.ISSUED_FILE).read_text())
+    changed = {k for k in after if after[k]["issued_at"] != "2026-01-01T00:00:00Z"}
+    assert changed == {"4", "frame_4", "5"}  # 5 continues from 4's new end frame
+    assert after["4"]["sha256"] != first["4"]["sha256"]

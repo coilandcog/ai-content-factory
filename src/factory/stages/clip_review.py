@@ -64,6 +64,7 @@ def review(
             raise FactoryError(f"--shots {sorted(unknown)} are not flow_clips of #{content_id}")
         shots = [s for s in shots if s["n"] in only]
     issued = _issued_prompts(ctx, content_id)
+    versions = generate.issued_prompts(ctx, content_id)
     aspect = getattr(ctx.channel.formats, row["format"]).aspect
     todo = []
     for shot in shots:
@@ -85,6 +86,9 @@ def review(
     system = render_prompt("clip_review_system", ctx.channel, prompts_root=prompts_root).text
     entries = []
     for shot, kind, path, shot_prompt in todo:
+        key = f"frame_{shot['n']}" if kind == "frame" else str(shot["n"])
+        version = versions.get(key, {})
+        made = datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         user = render_prompt(
             "clip_review",
             ctx.channel,
@@ -106,6 +110,10 @@ def review(
             "reviewed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "shot": shot["n"], "kind": kind, "file": path.name,
             "sha256": hashlib.sha256(data).hexdigest(), "model": llm.model,
+            "prompt_sha256": version.get("sha256"), "prompt_issued_at": version.get("issued_at"),
+            "file_saved_at": made,
+            # D-098: saved before its prompt was (re)issued, so it was made from an older prompt
+            "older_than_prompt": bool(version) and made < version["issued_at"],
             **verdict.model_dump(),
         })  # fmt: skip
         log.info("#%s %s: %s %d/10", content_id, path.name, verdict.verdict, verdict.score,

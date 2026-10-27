@@ -52,6 +52,8 @@ We build a "walking skeleton" first: the thinnest path from topic to video (1.1�
 
 ## Phase 2: Semi-automated (weeks 7–12, about 25 h)
 
+Learning from results (views, stayed-to-watch per hook, machine and shot) stays in tasks 2.5, 2.9 and 3.1. Tasks 2.13–2.21 were added on 2026-10-27 after the owner's clip failures (from D-097 on).
+
 **Milestone AC:** the nightly run produces scripts and renders automatically; both gates happen in Telegram; approved videos are scheduled on YouTube and arrive as TikTok drafts; analytics are collected; the first weekly Episode is published.
 
 Before starting Phase 2, re-check OQ-2 (YouTube incentive programs) and §3 of `SECURITY_COMPLIANCE.md`.
@@ -71,6 +73,14 @@ Before starting Phase 2, re-check OQ-2 (YouTube incentive programs) and §3 of `
 | 2.11 | `factory run-nightly` plus Windows Task Scheduler jobs (01:00, 02:30, 06:00) with how-to steps in `ops/windows/` | Jobs run with the laptop on and WSL closed | Check the next morning's Telegram messages and `runs` table |
 | 2.12 | **[Owner]** Turn on Docker Desktop's WSL integration for Ubuntu; optional n8n container that only calls the CLI | `docker run hello-world` works in WSL | Run that command |
 | 2.13 | Clip review: `factory clips review <id> [--shots N]` — Gemini watches each Flow clip and frame image and checks it against its prompt and the film rules. **Done early on 2026-10-27 (D-097), before 2.2** | A wrong or broken clip gets `fail` with the problems named; reviews are kept in `clip_review.json`; no status changes | Save a clip you know is wrong and one that is good, run the review, compare the verdicts |
+| 2.14 | Prompt versions: `flow_issued.json` keeps each clip and frame prompt's fingerprint and issue time; `clips review` flags a file saved before its current prompt (D-098) | A clip made from an older prompt gets "⚠ saved before its current prompt"; an unchanged prompt keeps its time on restage | Restage a shot, review an old clip of it, see the warning |
+| 2.15 | Code-drawn flows: the flow shot becomes `flow_overlay`: the script gives the route (ordered parts, screen direction, where the colour changes); the owner makes only the free frame image; Gemini places the parts; code keeps only points that move forward in the route's direction and draws glowing particles over three code-made camera moves (0 Flow credits) | Direction can never reverse; `flow_preview_NN.png` shows the path; the shot renders and passes QA | Check the preview on a real frame, then watch the rendered shot |
+| 2.16 | Flow consistency tools in the sheet: one reference image of the machine reused in every clip ("Ingredients") and start + end frames, if the owner's Flow plan offers them | The sheet gives the steps; the machine looks the same in every clip | Make two clips with the same reference image and compare |
+| 2.17 | `factory clips review --fix`: a failed shot gets a new prompt written from the review's problems and fix (`--restage --shots`) | One command turns a FAIL into a new prompt for that shot only | Review a failed clip with `--fix`, read the new prompt |
+| 2.18 | Lessons from failed reviews: Gemini proposes short lessons, the owner approves each one (`factory lessons`), approved lessons join the film rules | Only approved lessons reach the prompts; the owner can remove one | Approve one lesson and see it in the next restaged prompt |
+| 2.19 | Own footage: a clip the owner filmed is marked as the owner's (`assets.generator = owner`), skipped by AI checks and listed in the upload kit as original material | Owner clips are recorded as such | Save a phone clip as a shot and see it marked |
+| 2.20 | Reference library: images and clips the owner likes go into `data/inbox/references/`; Gemini writes what makes each good; approved notes feed the prompts like benchmarks. Never copying other creators' videos | Notes are stored and appear in the film rules | Add one image, read its note, restage a shot |
+| 2.21 | Engineer's Note in the owner's own voice: `factory voice note <id> <file>` normalises the recording, aligns its words and mixes it into the narration and subtitles | The note is in the owner's voice; subtitles still match | Record the note on the phone, run the command, watch the preview |
 
 ## Phase 3: Fully automated (months 4–6, about 15 h)
 

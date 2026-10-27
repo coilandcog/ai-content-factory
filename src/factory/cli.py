@@ -939,6 +939,11 @@ def clips_review(
         entries = clip_review_stage.review(ctx, content_id, only=only)
         for e in entries:
             typer.echo(f"{e['file']:<14} {e['verdict'].upper()} {e['score']}/10")
+            if e["older_than_prompt"]:
+                typer.echo(
+                    f"  ⚠ saved before its current prompt (issued {e['prompt_issued_at']}): it was "
+                    "made from an older prompt, so remake it from the Flow sheet"
+                )
             for problem in e["problems"]:
                 typer.echo(f"  - {problem}")
             if e["fix"]:

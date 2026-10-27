@@ -17,6 +17,7 @@ import os
 import shutil
 import sqlite3
 from collections.abc import Callable
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 
@@ -44,6 +45,9 @@ MIN_CLIP_SECONDS = 3.0  # shorter files are almost certainly failed downloads
 ENERGY_COLORS = {"electric": "cyan", "heat": "amber", "fluid": "blue"}  # DESIGN_SYSTEM.md §3
 ENERGY_WORDS = {"electric": "electric current", "heat": "heat", "fluid": "fluid and air"}
 PROMPTS_FILE = script_stage.FLOW_PROMPTS_FILE  # the prompts issued, read back when clips arrive
+# Per prompt: its fingerprint and when it was first issued in this form, so a clip made from an
+# older prompt can be spotted (D-098). Keys: clip "3", frame image "frame_3".
+ISSUED_FILE = "flow_issued.json"
 STILL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")  # optional owner images: still_NN.<ext>
 STILL_SAFE_AREA = "upper third and the lower quarter"  # where labels and subtitles go
 
@@ -124,6 +128,7 @@ def _write_sheet(ctx: AppContext, row: sqlite3.Row) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     all_prompts = {**prompts, **still_prompts}
     (folder / PROMPTS_FILE).write_text(json.dumps(all_prompts, indent=2, ensure_ascii=False))
+    _record_issued(folder, {**prompts, **{f"frame_{n}": p for n, p in frame_prompts.items()}})
     inbox = inbox_dir(ctx, content_id)
     inbox.mkdir(parents=True, exist_ok=True)
     sheet = folder / "flow_sheet.md"
@@ -132,6 +137,26 @@ def _write_sheet(ctx: AppContext, row: sqlite3.Row) -> Path:
     )
     replace_assets(ctx, content_id, "flow_sheet", [{"path": sheet, "generator": "factory"}])
     return sheet
+
+
+def _record_issued(folder: Path, prompts: dict) -> None:
+    """Keep each prompt's first issue time while its text stays the same; a changed prompt
+    (restage) gets a new time (D-098)."""
+    path = folder / ISSUED_FILE
+    old = json.loads(path.read_text()) if path.is_file() else {}
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    issued = {}
+    for key, text in prompts.items():
+        sha = hashlib.sha256(text.encode()).hexdigest()
+        same = old.get(str(key), {}).get("sha256") == sha
+        issued[str(key)] = old[str(key)] if same else {"sha256": sha, "issued_at": now}
+    path.write_text(json.dumps(issued, indent=2))
+
+
+def issued_prompts(ctx: AppContext, content_id: int) -> dict[str, dict]:
+    """Fingerprint and issue time per prompt key ("3", "frame_3"); {} for older sheets."""
+    path = asset_dir(ctx, content_id) / ISSUED_FILE
+    return json.loads(path.read_text()) if path.is_file() else {}
 
 
 def _shot_prompt(
