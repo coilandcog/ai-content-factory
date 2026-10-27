@@ -219,3 +219,47 @@ def test_db_init_is_safe_to_rerun(config_dir: Path) -> None:
     db = connect(config_dir.parent / "data" / "factory.db")
     assert db.execute("SELECT slug FROM channels").fetchall()[0]["slug"] == "coil-and-cog"
     db.close()
+
+
+# --- factory drop (D-093) ------------------------------------------------------------------------
+
+PRE_PUBLIC_PATH = ["scripted", "script_approved", "awaiting_clips", "generated", "assembled",
+                   "approved"]  # fmt: skip
+
+
+@pytest.mark.parametrize("stop", range(len(PRE_PUBLIC_PATH) + 1))
+def test_anything_not_public_yet_can_be_archived(
+    conn: sqlite3.Connection, channel_id: int, stop: int
+) -> None:
+    content_id = add_content(conn, channel_id)
+    for status in PRE_PUBLIC_PATH[:stop]:
+        set_status(conn, content_id, status)
+
+    set_status(conn, content_id, "archived", reason="dropped: weak clips")
+
+    assert status_of(conn, content_id)["status"] == "archived"
+
+
+@pytest.mark.parametrize("public", ["scheduled", "published"])
+def test_public_items_cannot_be_archived_even_after_failing(
+    conn: sqlite3.Connection, channel_id: int, public: str
+) -> None:
+    content_id = add_content(conn, channel_id)
+    for status in [*PRE_PUBLIC_PATH, public]:
+        set_status(conn, content_id, status)
+
+    with pytest.raises(StatusTransitionError):
+        set_status(conn, content_id, "archived")
+    set_status(conn, content_id, "failed")
+    with pytest.raises(StatusTransitionError):
+        set_status(conn, content_id, "archived")
+
+
+def test_failed_item_can_be_dropped(conn: sqlite3.Connection, channel_id: int) -> None:
+    content_id = add_content(conn, channel_id)
+    set_status(conn, content_id, "scripted")
+    set_status(conn, content_id, "failed")
+
+    set_status(conn, content_id, "archived")
+
+    assert status_of(conn, content_id)["status"] == "archived"

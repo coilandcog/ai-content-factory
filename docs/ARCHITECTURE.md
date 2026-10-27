@@ -67,6 +67,7 @@ Helper commands:
 - `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
 - `factory plan --week next|this`: fills the week's `cadence.weekly_plan` slots with the best unplanned ideas (no pillar 3 days in a row; hook type and beat order differ from the day before) and prints the plan; slots already planned are kept (D-080).
 - `factory generate --restage N`: new film shots (Gemini) for an approved item that has no clips yet: the narration stays, the clip prompts and (for `awaiting_clips`) the Flow sheet are rewritten (D-092).
+- `factory drop <id> --reason "..."`: drops an item that is not public yet: it becomes `archived` with the reason, and every stage ignores it (D-093).
 - `factory flow-log --credits N`: logs Flow credits you spent (refused above `budgets_per_day.flow_credits`).
 - `factory bot [--find-chat-id]`: the Telegram review bot for both gates, plus alerts (§3, task 2.1). `--find-chat-id` prints the chat id of whoever sent the bot a message, for `TELEGRAM_ALLOWED_CHAT_ID` in `.env`.
 - `factory voice audition [--voices a,b,c] [--text ...|--content-id N]`: the same text read by several Kokoro voices into `data/audition/voice_<id>.wav`, to choose `voice.voice_id`.
@@ -176,7 +177,7 @@ niche:
     - id: vehicles
       description: "Cars, trucks, motorbikes and trains"
     - id: air_and_sea
-      description: "Aircraft, helicopters, ships, submarines and rockets"
+      description: "Aircraft, helicopters, ships and rockets"
     - id: industry_and_energy
       description: "Heavy machines, cranes, factories and power generation"
   seed_topics: [alternator, turbocharger, jet engine, ship diesel engine, tunnel boring machine]  # full list in CONTENT_STRATEGY.md
@@ -185,6 +186,7 @@ niche:
   blocklist:
     - "weapons or firearm mechanisms"
     - "military aircraft, warships and weapon systems"
+    - "submarines (AI video draws them as navy warships)"
     - "step-by-step dangerous repairs (mains electricity, airbags, fuel systems, brakes)"
     - "defeating safety or emissions devices"
     - "real brand logos or endorsements"
@@ -259,6 +261,7 @@ stateDiagram-v2
     published --> analyzed : 28-day metrics collected
     analyzed --> [*]
     rejected --> archived
+    awaiting_clips --> archived : factory drop (any status before public)
 ```
 
 From any non-terminal status, an item can move to `failed`. `factory retry` returns it to `status_before_failure`.

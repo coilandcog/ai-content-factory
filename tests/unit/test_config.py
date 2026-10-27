@@ -34,7 +34,7 @@ def test_real_config_is_valid() -> None:
 
     assert settings.log_level == "INFO"
     assert channel.llm.model == "gemini-3.5-flash-lite"
-    assert len(channel.niche.seed_topics) == 27
+    assert len(channel.niche.seed_topics) == 26  # submarine ballast tanks dropped (D-093)
     assert channel.gates.final == "required"
 
 

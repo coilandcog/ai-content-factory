@@ -11,7 +11,7 @@ Shot list (n, beat, kind, seconds: what the shot is about):
 {% for s in shots %}- {{ s.n }}, {{ s.beat }}, {{ s.kind }}, {{ s.duration_s }} s: {{ s.description }}
 {% endfor %}
 Each flow_clip's scene shows what the narration at that moment is about. The descriptions were written before the
-film rules: when one asks for something that does not exist on its own in reality (for example a ballast tank as a
-separate object, when it is really the space between a submarine's two hulls), show the real machine instead.
+film rules: when one asks for something that does not exist on its own in reality (for example a coolant passage as a
+separate object, when it is really a channel inside an engine block), show the real machine instead.
 
 {% include "visual_rules.j2" %}

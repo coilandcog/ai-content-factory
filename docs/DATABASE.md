@@ -258,17 +258,17 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | Status | Meaning | Set by | Next |
 |---|---|---|---|
 | `idea` | Scored idea | ideate | `scripted`, `archived` |
-| `scripted` | Script draft waiting for Gate 1 | script | `script_approved`, `scripted` (redo), `rejected` |
-| `script_approved` | Owner approved the script | review | `awaiting_clips` |
-| `awaiting_clips` | Flow sheet issued; waiting for the owner's clips in `data/inbox/flow/<id>/` | generate | `generated` |
-| `generated` | Clips, voice, subtitles, stills and diagrams all present. Built up task by task: since task 1.6 it means every Flow clip (checked: readable, portrait, ≥3 s) plus `voice.wav`; subtitles (1.7) and stills/diagrams (1.8) join when built | generate | `assembled` |
-| `assembled` | Renders done and automated QA passed | assemble | `approved`, `generated` (redo), `rejected` |
-| `approved` | Owner approved the final video | review | `scheduled`, `published` (manual post, D-072) |
+| `scripted` | Script draft waiting for Gate 1 | script | `script_approved`, `scripted` (redo), `rejected`, `archived` (drop) |
+| `script_approved` | Owner approved the script | review | `awaiting_clips`, `archived` (drop) |
+| `awaiting_clips` | Flow sheet issued; waiting for the owner's clips in `data/inbox/flow/<id>/` | generate | `generated`, `archived` (drop) |
+| `generated` | Clips, voice, subtitles, stills and diagrams all present. Built up task by task: since task 1.6 it means every Flow clip (checked: readable, portrait, ≥3 s) plus `voice.wav`; subtitles (1.7) and stills/diagrams (1.8) join when built | generate | `assembled`, `archived` (drop) |
+| `assembled` | Renders done and automated QA passed | assemble | `approved`, `generated` (redo), `rejected`, `archived` (drop) |
+| `approved` | Owner approved the final video | review | `scheduled`, `published` (manual post, D-072), `archived` (drop) |
 | `scheduled` | YouTube scheduled and/or TikTok draft sent | publish | `published` |
 | `published` | Live on at least one platform | publish | `analyzed` |
 | `analyzed` | 28-day metrics stored and labeled | learn | (end) |
 | `rejected` | Owner rejected it | review | `archived` |
-| `failed` | Stage error after retries | any | `status_before_failure` via `factory retry` |
+| `failed` | Stage error after retries | any | `status_before_failure` via `factory retry`; `archived` (drop) unless it failed after going public |
 | `archived` | Kept for history, ignored by stages | owner / system | (end) |
 
 `db.note_reason()` sets `status_reason` without changing the status (used when QA fails and the item stays `generated`).
@@ -277,6 +277,7 @@ Rules for `failed` (enforced by `db.set_status()`):
 - Any **working** status can move to `failed`: `idea`, `scripted`, `script_approved`, `awaiting_clips`, `generated`, `assembled`, `approved`, `scheduled`, `published`. `analyzed`, `rejected`, `archived` and `failed` can't, because no stage works on them. The previous status is saved in `status_before_failure`.
 - `failed` can only move back to `status_before_failure` (what `factory retry` does); that clears `status_before_failure`.
 - `scripted → scripted` (Gate 1 redo) is the only move to the same status.
+- **Drop (D-093):** `factory drop <id> --reason ...` moves any item that is not public yet (not `scheduled`, `published` or `analyzed`, also when it failed after that) to `archived`, with `status_reason = "dropped: <reason>"`. A public item is deleted or hidden on the platform instead; the factory keeps its record.
 
 The main path is the one in the PRD: **idea → scripted → generated → approved → published → analyzed**. The extra statuses (`script_approved`, `awaiting_clips`, `assembled`, `scheduled`) mark the waiting points between those steps.
 

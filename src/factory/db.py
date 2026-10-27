@@ -15,14 +15,15 @@ _NOW_UTC = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
 
 # Allowed status moves from DATABASE.md §4. Moves into and out of 'failed' are handled
 # separately in _is_allowed(), because they depend on the status before the failure.
+# Every status before anything is public can be dropped to 'archived' (`factory drop`, D-093).
 TRANSITIONS: dict[str, frozenset[str]] = {
     "idea": frozenset({"scripted", "archived"}),
-    "scripted": frozenset({"script_approved", "scripted", "rejected"}),  # scripted = Gate 1 redo
-    "script_approved": frozenset({"awaiting_clips"}),
-    "awaiting_clips": frozenset({"generated"}),
-    "generated": frozenset({"assembled"}),
-    "assembled": frozenset({"approved", "generated", "rejected"}),  # generated = Gate 2 redo
-    "approved": frozenset({"scheduled", "published"}),  # published = manual post (D-072)
+    "scripted": frozenset({"script_approved", "scripted", "rejected", "archived"}),  # Gate 1 redo
+    "script_approved": frozenset({"awaiting_clips", "archived"}),
+    "awaiting_clips": frozenset({"generated", "archived"}),
+    "generated": frozenset({"assembled", "archived"}),
+    "assembled": frozenset({"approved", "generated", "rejected", "archived"}),  # Gate 2 redo
+    "approved": frozenset({"scheduled", "published", "archived"}),  # published = manual (D-072)
     "scheduled": frozenset({"published"}),
     "published": frozenset({"analyzed"}),
     "analyzed": frozenset(),
@@ -45,6 +46,10 @@ CAN_FAIL = frozenset(
         "published",
     }
 )
+
+
+# Live (or about to go live) on a platform: dropping it in the factory wouldn't remove the post.
+PUBLIC = frozenset({"scheduled", "published", "analyzed"})
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -258,6 +263,9 @@ def _is_allowed(current: str, new: str, status_before_failure: str | None) -> bo
     if new == "failed":
         return current in CAN_FAIL
     if current == "failed":
-        # `factory retry` may only return the item to where it failed.
+        # `factory retry` may only return the item to where it failed; `factory drop` parks it,
+        # unless it failed after going public (D-093).
+        if new == "archived":
+            return status_before_failure not in PUBLIC
         return new == status_before_failure
     return new in TRANSITIONS.get(current, frozenset())

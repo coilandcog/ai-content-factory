@@ -28,11 +28,13 @@ from factory.config import (
 )
 from factory.context import AppContext, StageResult
 from factory.db import (
+    PUBLIC,
     add_content,
     connect,
     finish_run,
     migrate,
     schema_version,
+    set_status,
     start_run,
     upsert_channel,
 )
@@ -684,6 +686,28 @@ def new(
             extra={"event": "content_created", "content_id": content_id},
         )
         typer.echo(f"Created content #{content_id}: status idea")
+
+
+@app.command()
+def drop(
+    content_id: Annotated[int, typer.Argument(help="The item to drop.")],
+    reason: Annotated[str, typer.Option(help="Why, kept in status_reason.")],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Drop an item that isn't public yet: it becomes 'archived' and every stage ignores it."""
+    with _tracked_run("drop", config_dir) as run:
+        if not reason.strip():
+            raise FactoryError("--reason must not be empty")
+        row = run.conn.execute("SELECT status FROM contents WHERE id = ?", (content_id,)).fetchone()
+        if row is not None and row["status"] in PUBLIC:
+            raise FactoryError(
+                f"content #{content_id} is {row['status']}: it is public, so delete or hide it on "
+                "the platform; the factory keeps its record"
+            )
+        set_status(run.conn, content_id, "archived", reason=f"dropped: {reason.strip()}")
+        log.info("#%s dropped: %s", content_id, reason,
+                 extra={"event": "content_dropped", "content_id": content_id})  # fmt: skip
+        typer.echo(f"#{content_id} archived (dropped: {reason.strip()})")
 
 
 @app.command()

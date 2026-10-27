@@ -709,7 +709,7 @@ def test_script_prompt_asks_for_a_short_film() -> None:
     assert "one short cinematic film" in rules and "end_frame" in rules
     assert "three smooth camera angles" in rules  # the owner wants 3 angles per clip
     assert "a shot that starts underwater stays underwater" in rules  # #11: surfaced mid-clip
-    assert "the hero is the whole machine" in rules  # D-092: no invented "ballast tank" objects
+    assert "the hero is the whole machine" in rules  # D-092: no invented stand-alone parts
     assert "Never military" in rules  # the blocklist bans warships, also in the pictures
     assert "brand-new and flawless" in rules and "no rust, dirt" in rules  # premium look, no wear
 

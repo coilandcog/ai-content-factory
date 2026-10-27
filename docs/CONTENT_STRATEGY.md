@@ -10,7 +10,7 @@
 | Niche | How Machines Work |
 | Promise | "See what moves inside the machines that move the world." |
 | Language / region | English, aimed at US, UK and DE viewers |
-| Pillars | `vehicles`: cars, trucks, motorbikes and trains. `air_and_sea`: aircraft, helicopters, ships, submarines and rockets. `industry_and_energy`: heavy machines, cranes, factories and power generation (D-073). |
+| Pillars | `vehicles`: cars, trucks, motorbikes and trains. `air_and_sea`: aircraft, helicopters, ships and rockets. `industry_and_energy`: heavy machines, cranes, factories and power generation (D-073). |
 | Planned second niche | Telecom ("Inside Tech and Telecom"), a separate channel profile in Phase 4 |
 
 ## 2. Audience
@@ -24,7 +24,7 @@
 
 **`vehicles`:** alternator, turbocharger, CVT gearbox, differential, disc brakes and ABS (how they work, *not* how to repair them), electric car motor, diesel-electric locomotive, train pantograph, maglev train.
 
-**`air_and_sea`:** jet engine, helicopter rotor (swashplate), aircraft landing gear, variable-pitch propeller, ship diesel engine, azimuth thruster, ship stabilizers, submarine ballast tanks, rocket engine.
+**`air_and_sea`:** jet engine, helicopter rotor (swashplate), aircraft landing gear, variable-pitch propeller, ship diesel engine, azimuth thruster, ship stabilizers, rocket engine.
 
 **`industry_and_energy`:** tunnel boring machine, excavator hydraulics, tower crane, hydraulic press, wind turbine, hydroelectric turbine, steam turbine, transformer, elevator safety brake.
 
@@ -35,6 +35,7 @@ Small household objects (zippers, pens, locks and similar) are out of scope: the
 These are enforced by `niche.blocklist` in the YAML and checked at the ideate and script stages:
 - Weapons and firearm mechanisms.
 - Military aircraft, warships and weapon systems.
+- Submarines: AI video draws them as navy warships whatever the prompt says, and their mechanism is hidden inside the hull (D-093).
 - Step-by-step dangerous repairs (mains electricity, airbags, fuel systems, brakes).
 - Defeating safety or emissions devices.
 - Real brand logos or endorsements.
@@ -102,7 +103,7 @@ The 4 beats are **Studio**, **Cutaway**, **Flow** and **In situ**. They form a m
 
 ## 9. Virality scoring rubric (ideate stage)
 
-Each idea is scored from 0 to 100. Gemini scores five criteria (85 points); the factory calculates **Trend signal** (15 points) from the real discover data, because language models are unreliable with numbers (D-080): up to 9 points for rising interest (the higher of the Wikipedia and Google Trends ratios: 0 at 0.8x, full at 1.3x) and up to 6 for YouTube demand (median views: 0 at 10k, full at 1M, on a log scale). **Filmable objects only (D-092):** an idea's `object_name` must be one real machine that can be filmed as a whole and visibly moves. A system or part with no shape of its own (ballast tanks, a cooling circuit) becomes the machine plus an angle: "submarine", angle "how a submarine dives by flooding its ballast tanks". Ideas with a score of at least `scoring.min_virality_score` (**65**) are saved as `idea` items. A machine that already has an active item (anything not rejected or archived) is never proposed again; at most 3 machines per run may come from outside the seed list. `factory plan --week next` then fills the weekly mix with the highest-scoring ideas, and only planned ideas (or items you create with `factory new`) get scripts.
+Each idea is scored from 0 to 100. Gemini scores five criteria (85 points); the factory calculates **Trend signal** (15 points) from the real discover data, because language models are unreliable with numbers (D-080): up to 9 points for rising interest (the higher of the Wikipedia and Google Trends ratios: 0 at 0.8x, full at 1.3x) and up to 6 for YouTube demand (median views: 0 at 10k, full at 1M, on a log scale). **Filmable objects only (D-092):** an idea's `object_name` must be one real machine that can be filmed as a whole and visibly moves. A system or part with no shape of its own (a cooling circuit, a fuel system) becomes the machine plus an angle: "car engine", angle "how a car engine keeps itself cool". Ideas with a score of at least `scoring.min_virality_score` (**65**) are saved as `idea` items. A machine that already has an active item (anything not rejected or archived) is never proposed again; at most 3 machines per run may come from outside the seed list. `factory plan --week next` then fills the weekly mix with the highest-scoring ideas, and only planned ideas (or items you create with `factory new`) get scripts.
 
 | Criterion | Weight | 0 = | max = |
 |---|---|---|---|

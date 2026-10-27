@@ -41,18 +41,17 @@
 
 *Updated 2026-10-27.*
 
-- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; **film-shot Flow prompts D-092** (branch `feat/short-movie-prompts`, awaiting owner test + "commit"). **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
-- **Published:** #5 alternator (YouTube + TikTok), #6 turbocharger (YouTube `shorts/rtzPTV6B0KQ`; TikTok post not recorded yet). Owner judged #6 and #11's first clips weak → D-092.
+- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093. **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
+- **Proposed, not started:** a benchmark list of the owner's best videos (#5 alternator, #6 turbo) fed into the film-shot prompts; waiting for the owner's go.
+- **Published:** #5 alternator (YouTube + TikTok), #6 turbocharger (YouTube `shorts/rtzPTV6B0KQ`; TikTok post not recorded yet).
 - **Real items:**
 
 | # | Machine | Format | Status | Note |
 |---|---|---|---|---|
-| 4 | zipper | short | approved | **Dead, never upload** (stand-in clips, off-niche) |
-| 5, 6 | alternator, turbocharger | short | published | #6 TikTok link still to record |
+| 5, 6 | alternator, turbocharger | short | published | owner's quality benchmarks; #6 TikTok link still to record |
 | 8 | CVT gearbox | short | awaiting_clips | old prompts: run `factory generate --restage 8` first; 4 clips |
-| 10 | jet engine | deep_dive | awaiting_clips | old prompts: `--restage 10` first; 3 clips |
-| 11 | submarine ballast tanks | short | awaiting_clips | old prompts: `--restage 11` first; 4 clips. Owner made 2 clips from hand-written film prompts A/B (2026-10-27) but they were not in `data/inbox/flow/000011/` |
+| 10 | jet engine | deep_dive | awaiting_clips | old prompts: `--restage 10` first; 3 clips; recommended next video |
 | 9, 12, 13, 14 | differential, landing gear, tower crane, e-car motor | | idea | |
-| 1, 2, 3, 7 | | | rejected / failed | history only |
+| 1, 2, 3, 4, 7, 11 | | | rejected / failed / archived | history only (#4 zipper and #11 submarine dropped, D-093) |
 
-- **Open items:** `factory retry` is not built (a failed item is reset by hand); a gemini-3.8-flash script experiment is pending (needs owner go); Flow capacity (2 clips/day) cannot keep up with 5 videos/week; channel description/banner + per-pillar playlists suggested to the owner (manual, no code); flash-lite film shots vary between runs (restage again if a shot reads wrong); clips use 3 camera angles (owner), the place is fixed per clip.
+- **Open items:** `factory retry` is not built (a failed item is reset by hand); a gemini-3.8-flash script experiment is pending (needs owner go); Flow capacity (2 clips/day) cannot keep up with 5 videos/week; channel description/banner + per-pillar playlists suggested to the owner (manual, no code); flash-lite film shots vary between runs (restage again if a shot reads wrong). DB backup before the drops: `data/factory.before-drop-2026-10-27.db`.

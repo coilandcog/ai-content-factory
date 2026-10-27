@@ -99,3 +99,42 @@ def test_status_shows_failure_details(config_dir: Path) -> None:
     assert "status: failed" in shown.output
     assert "failed while: idea" in shown.output
     assert "reason: Gemini 503 after 3 retries" in shown.output
+
+
+def test_drop_archives_an_item_with_the_reason(config_dir: Path) -> None:
+    opts = ["--config-dir", str(config_dir)]
+    runner.invoke(app, ["db", "init", *opts])
+    runner.invoke(
+        app, ["new", "--object", "submarine", "--format", "short", "--pillar", "air_and_sea", *opts]
+    )
+    db = connect(config_dir.parent / "data" / "factory.db")
+    for status in ("scripted", "script_approved", "awaiting_clips"):
+        set_status(db, 1, status)
+
+    dropped = runner.invoke(app, ["drop", "1", "--reason", "Veo draws warships", *opts])
+    empty = runner.invoke(app, ["drop", "1", "--reason", "  ", *opts])
+
+    assert dropped.exit_code == 0, dropped.output
+    assert "#1 archived (dropped: Veo draws warships)" in dropped.output
+    row = db.execute("SELECT status, status_reason FROM contents WHERE id = 1").fetchone()
+    assert tuple(row) == ("archived", "dropped: Veo draws warships")
+    assert empty.exit_code == 1 and "--reason must not be empty" in empty.output
+    db.close()
+
+
+def test_drop_refuses_a_published_item(config_dir: Path) -> None:
+    opts = ["--config-dir", str(config_dir)]
+    runner.invoke(app, ["db", "init", *opts])
+    runner.invoke(
+        app, ["new", "--object", "alternator", "--format", "short", "--pillar", "vehicles", *opts]
+    )
+    db = connect(config_dir.parent / "data" / "factory.db")
+    for status in ("scripted", "script_approved", "awaiting_clips", "generated", "assembled",
+                   "approved", "published"):  # fmt: skip
+        set_status(db, 1, status)
+    db.close()
+
+    result = runner.invoke(app, ["drop", "1", "--reason", "old", *opts])
+
+    assert result.exit_code == 1
+    assert "it is public, so delete or hide it on the platform" in result.output
