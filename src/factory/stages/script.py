@@ -51,13 +51,17 @@ BEAT_ORDERS: dict[str, tuple[str, ...]] = {
     "action_first": ("flow", "cutaway", "studio", "in_situ"),
     "cold_open": ("cutaway", "flow", "in_situ", "studio"),
 }
-# Fields each beat's Flow template needs (DESIGN_SYSTEM.md §10.2).
+# Every flow_clip is one shot of a short film: what happens, one camera move and the last frame,
+# which the next clip continues from (D-092). The flow beat also names its energy colour.
+SCENE_FIELDS = ("scene", "camera", "end_frame")
 CLIP_FIELDS: dict[str, tuple[str, ...]] = {
-    "studio": ("hero_feature",),
-    "cutaway": ("internals", "focus_part"),
-    "flow": ("energy", "path", "process"),
-    "in_situ": ("context",),
+    "studio": SCENE_FIELDS,
+    "cutaway": SCENE_FIELDS,
+    "flow": (*SCENE_FIELDS, "energy"),
+    "in_situ": SCENE_FIELDS,
 }
+# The hero_look is repeated word for word in every clip prompt so Veo draws the same machine.
+HERO_LOOK_WORDS = (20, 80)
 MIN_DIAGRAMS = {"short": 2, "deep_dive": 4, "episode": 4}  # TESTING.md §4 QA rule
 MIN_CLIPS, MAX_CLIPS = 3, 5  # DESIGN_SYSTEM.md §10.5
 # Ask for 3 sources, keep the item if at least 2 open: one invented URL then costs nothing.
@@ -105,13 +109,11 @@ class Shot(BaseModel):
     duration_s: float = Field(
         ge=0.5, le=12, description="Seconds on screen; a flow_clip is at most 8 seconds"
     )
-    hero_feature: str | None = None
-    internals: str | None = None
-    focus_part: str | None = None
+    # Required (Gemini leaves out optional fields); flow_clip only, "" for other kinds (D-092).
+    scene: str = Field(description="flow_clip only: what happens in this film shot; else ''")
+    camera: str = Field(description="flow_clip only: one smooth camera move and lens; else ''")
+    end_frame: str = Field(description="flow_clip only: what the last frame shows; else ''")
     energy: Literal["electric", "heat", "fluid"] | None = None
-    path: str | None = None
-    process: str | None = None
-    context: str | None = None
     # Required (Gemini leaves out optional fields): the diagram's part labels, [] for other kinds.
     labels: list[str] = Field(description="diagram only: 1-4 labels of at most 4 words; else []")
 
@@ -128,7 +130,7 @@ class Shot(BaseModel):
         else:
             self.labels = []
         if self.kind == "flow_clip":
-            missing = [f for f in CLIP_FIELDS[self.beat] if not getattr(self, f)]
+            missing = [f for f in CLIP_FIELDS[self.beat] if not str(getattr(self, f) or "").strip()]
             if missing:
                 raise ValueError(f"shot {self.n} ({self.beat} flow_clip) needs {missing}")
             # A Veo clip is at most 8 s long, so cap the plan instead of rejecting the script;
@@ -137,7 +139,7 @@ class Shot(BaseModel):
         return self
 
     def prompt_vars(self) -> dict[str, str]:
-        return {f: getattr(self, f) for f in CLIP_FIELDS[self.beat] if getattr(self, f)}
+        return {f: getattr(self, f).strip() for f in CLIP_FIELDS[self.beat] if getattr(self, f)}
 
 
 class SourceDraft(BaseModel):
@@ -153,6 +155,39 @@ class SourceReplacements(BaseModel):
     sources: list[SourceDraft]
 
 
+class ShotVisual(BaseModel):
+    n: int = Field(ge=1)
+    scene: str = Field(min_length=20)
+    camera: str = Field(min_length=5)
+    end_frame: str = Field(min_length=5)
+
+
+class VisualPlan(BaseModel):
+    """New film shots for an approved script's flow_clips; the narration stays (D-092)."""
+
+    hero_look: str
+    shots: list[ShotVisual]
+
+    clip_numbers: ClassVar[tuple[int, ...]] = ()  # set per call by visual_plan_schema()
+
+    @model_validator(mode="after")
+    def _matches_shot_list(self) -> VisualPlan:
+        problems = hero_look_problems(self.hero_look)
+        if (got := tuple(s.n for s in self.shots)) != self.clip_numbers:
+            problems.append(
+                f"shots are {list(got)}; give exactly the flow_clips {list(self.clip_numbers)}"
+            )
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+
+def visual_plan_schema(clip_numbers: tuple[int, ...]) -> type[VisualPlan]:
+    model = create_model("VisualPlan_clips", __base__=VisualPlan)
+    model.clip_numbers = clip_numbers
+    return model
+
+
 class ScriptDraftBase(BaseModel):
     """Fields shared by every format; script_schema() adds hook_type/beat_order and limits."""
 
@@ -164,6 +199,7 @@ class ScriptDraftBase(BaseModel):
     body: str
     engineer_note_draft: str
     loop_line: str
+    hero_look: str
     shots: list[Shot]
     sources: list[SourceDraft]
 
@@ -228,6 +264,7 @@ def _rule_problems(draft: Any) -> list[str]:
             f"narration has {words} words ({parts}); it must have "
             f"{draft.min_words}-{draft.max_words}"
         )
+    problems += hero_look_problems(draft.hero_look)
     shots = draft.shots
     if [s.n for s in shots] != list(range(1, len(shots) + 1)):
         problems.append("shots must be numbered 1, 2, 3, ... in order")
@@ -252,6 +289,13 @@ def _rule_problems(draft: Any) -> list[str]:
     if draft.reference_url and draft.reference_url not in [s.url for s in draft.sources]:
         problems.append(f"list {draft.reference_url} as a source")
     return problems
+
+
+def hero_look_problems(hero_look: str) -> list[str]:
+    low, high = HERO_LOOK_WORDS
+    if not low <= (words := word_count(hero_look)) <= high:
+        return [f"hero_look has {words} words: describe the machine in {low}-{high} words"]
+    return []
 
 
 def _trigrams(text: str) -> set[tuple[str, ...]]:
@@ -524,6 +568,7 @@ def _prompts(
         min_clips=MIN_CLIPS,
         max_clips=MAX_CLIPS,
         min_diagrams=schema.min_diagrams,
+        hero_look_words=HERO_LOOK_WORDS,
         reference=reference,
         feedback=feedback,
     )
@@ -678,7 +723,11 @@ def _save(
             "kind": s.kind,
             "description": s.description,
             "duration_s": s.duration_s,
-            "prompt_vars": s.prompt_vars() if s.kind == "flow_clip" else {},
+            "prompt_vars": (
+                {"hero_look": draft.hero_look.strip(), **s.prompt_vars()}
+                if s.kind == "flow_clip"
+                else {}
+            ),
             **({"labels": s.labels, "energy": s.energy} if s.kind == "diagram" else {}),
         }
         for s in draft.shots

@@ -39,20 +39,20 @@
 
 ## Current state (Claude rewrites this at the end of every task)
 
-*Updated 2026-10-26.*
+*Updated 2026-10-27.*
 
-- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) committed (D-082); script-quality fixes D-083 to D-090 on `main`. **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
-- **Published:** #5 alternator (YouTube `shorts/9P7T7irzSoM` + TikTok). YouTube report on #5 led to D-090 (43% swiped away early).
+- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; **film-shot Flow prompts D-092** (branch `feat/short-movie-prompts`, awaiting owner test + "commit"). **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
+- **Published:** #5 alternator (YouTube + TikTok), #6 turbocharger (YouTube `shorts/rtzPTV6B0KQ`; TikTok post not recorded yet). Owner judged #6 and #11's first clips weak → D-092.
 - **Real items:**
 
 | # | Machine | Format | Status | Note |
 |---|---|---|---|---|
 | 4 | zipper | short | approved | **Dead, never upload** (stand-in clips, off-niche) |
-| 6 | turbocharger | short | approved (Gate 2, Telegram) | Renders ready, not posted yet; pre-D-090 script kept by owner |
-| 8 | CVT gearbox | short | awaiting_clips | 4 clips (80 credits); slot Wed 28 Oct |
-| 10 | jet engine | deep_dive | awaiting_clips | 3 clips (60 credits); slot Thu 29 Oct |
-| 11 | submarine ballast tanks | short | awaiting_clips | 4 clips (80 credits); slot was Mon 26 Oct |
+| 5, 6 | alternator, turbocharger | short | published | #6 TikTok link still to record |
+| 8 | CVT gearbox | short | awaiting_clips | old prompts: run `factory generate --restage 8` first; 4 clips |
+| 10 | jet engine | deep_dive | awaiting_clips | old prompts: `--restage 10` first; 3 clips |
+| 11 | submarine ballast tanks | short | awaiting_clips | old prompts: `--restage 11` first; 4 clips. Owner made 2 clips from hand-written film prompts A/B (2026-10-27) but they were not in `data/inbox/flow/000011/` |
 | 9, 12, 13, 14 | differential, landing gear, tower crane, e-car motor | | idea | |
 | 1, 2, 3, 7 | | | rejected / failed | history only |
 
-- **Open items:** `factory retry` is not built (a failed item is reset by hand); a gemini-3.8-flash script experiment is pending (needs owner go); Flow capacity (2 clips/day) cannot keep up with 5 videos/week.
+- **Open items:** `factory retry` is not built (a failed item is reset by hand); a gemini-3.8-flash script experiment is pending (needs owner go); Flow capacity (2 clips/day) cannot keep up with 5 videos/week; channel description/banner + per-pillar playlists suggested to the owner (manual, no code); flash-lite film shots vary between runs (restage again if a shot reads wrong); clips use 3 camera angles (owner), the place is fixed per clip.

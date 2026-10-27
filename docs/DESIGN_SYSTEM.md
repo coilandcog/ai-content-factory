@@ -101,48 +101,36 @@ These are our own work and a major part of the "original value" each video adds.
 
 ## 10. AI generation prompt templates
 
-These templates live in `prompts/default/` as Jinja2 files (a text-template format where `{{ variable }}` gets filled in). A channel can override them in `prompts/<slug>/`. They're rendered by the generate stage into a **Flow prompt sheet** (`flow_sheet.md`) that the owner copies into Google Flow. Since task 1.6 they are real files (`style_block.j2`, `flow_shot_<beat>.j2`, `flow_sheet.j2`); colours are named in plain words (cyan, amber; D-074), so a channel with a different palette overrides the templates in `prompts/<slug>/`, and each beat template ends with the shot's description from the script.
+These templates live in `prompts/default/` as Jinja2 files (a text-template format where `{{ variable }}` gets filled in). A channel can override them in `prompts/<slug>/`. They're rendered by the generate stage into a **Flow prompt sheet** (`flow_sheet.md`) that the owner copies into Google Flow. The files are `flow_shot.j2` (one template for every clip), `style_block.j2`, `flow_sheet.j2` and `visual_rules.j2` (the film rules Gemini follows). Colours are named in plain words (cyan, amber), because video models follow plain words better than hex codes.
 
-Since D-074 every clip prompt reads like a short **commercial brief** (the style of the owner's alternator benchmark): "Create a premium 8-second … video of the {object}, vertical 9:16, with three smooth camera angles. Open on … then … Finish with …", followed by the shot's description from the script and the shared closing block. Every clip asks for **motion and 2–3 camera angles** (parts rotating, casing splitting, energy surging; wide → orbit → close-up), and only the studio shot uses the pedestal, so clips don't repeat each other once they are cut together. Lighting is described with colour **names** (cyan, amber), not hex codes, because video models follow plain words better.
+**Since D-092 the clips of a video are the shots of one short cinematic film.** At the script stage Gemini writes the film, so every clip is specific to its machine instead of a fill-in-the-blanks template (D-074 is replaced):
+- **`hero_look`** (20–80 words, once per video): exactly how this machine looks: a real, typical example, its size, shape, materials, colours and setting, always **brand-new and flawless** (smooth, polished, crisp reflections, no rust, dirt or wear), like the alternator and turbocharger product films the owner liked. It is repeated word for word in every clip prompt, so Veo draws the same machine in every shot. When the topic is a system inside a bigger machine (ballast tanks, a gearbox), the hero is the whole machine and the cutaway goes inside it; a pedestal is only for a part small enough to carry. Never a military version.
+- The setting is named precisely and only once ("fully submerged in deep water, no water surface in view"): no details from another place (a waterline, a dock) that Veo could draw instead, because #11's first film shot surfaced mid-clip when the look mentioned "the waterline".
+- Per `flow_clip`: **`scene`** (40–80 words, one shot in concrete physical detail, in one place that never changes inside the clip), **`camera`** (**three smooth camera angles** that flow into each other, each with a lens; the owner's choice), **`end_frame`** (the final picture). The next clip's prompt starts with "This shot continues the film from the previous shot, which ended on: …", so the clips cut together like a film.
+- The beats still give the story order: Studio (the machine alone on a dark set) → Cutaway (the casing opens) → Flow (glowing energy) → In situ (the machine at work), in the script's `beat_order`.
+- Approved scripts from before D-092 get their film shots with `factory generate --restage <id>`: the narration stays as approved, and only the clip prompts (and, for an item waiting for clips, the Flow sheet) are rewritten.
 
 ### 10.1 Shared closing block (`style_block.j2`), added to the end of every clip prompt
 
+The cyan and amber lights stay as the channel's signature, as accents on top of the scene's own realistic light (the owner's choice, D-092):
+
 ```
-Realistic materials, polished commercial lighting with a cool cyan rim light from the left and a warm amber rim light from the right, smooth camera movement, sharp product detail, photorealistic.
+Lighting: the scene's own realistic light plus the channel's signature accents, a cool cyan light on one side and a warm amber light on the other. Brand-new, flawless surfaces: smooth polished metal and clean paint with crisp, glossy reflections, no rust, dirt or wear, like a premium product film. Real proportions, shallow depth of field, sharp detail, photorealistic.
 No logos, no text, no brand names, no people, no hands, no faces, no extra or distorted components.
 Sound: realistic mechanical sounds of the machine only; no music, no voices, no narration.
 ```
 
-### 10.2 Beat templates (`flow_shot_<beat>.j2`)
+### 10.2 Clip template (`flow_shot.j2`)
 
-Each ends with `{{ description }}.` (the script's shot description) and the closing block. `clip_seconds` is Flow's clip length (8).
-
-**Studio**
 ```
-Create a premium {{ clip_seconds }}-second product video of the {{ object }}, vertical {{ aspect }}, with three smooth camera angles.
-Open on a close-up of the {{ object }} rotating steadily on a matte dark pedestal against a deep graphite studio background, with crisp metallic highlights sliding across {{ hero_feature }}.
-Then a low angle orbits around the {{ object }}, and the shot finishes on a three-quarter hero angle with a close detail of {{ hero_feature }}.
-```
-
-**Cutaway**
-```
-Create a premium {{ clip_seconds }}-second technical cutaway video of the {{ object }}, vertical {{ aspect }}, with three smooth camera angles.
-Start close on the {{ object }} as its outer casing splits apart along a clean cut plane, revealing {{ internals }}.
-Then the camera orbits the opened {{ object }} while {{ focus_part }} moves as it does in operation, and the shot finishes on a macro close-up of {{ focus_part }} in motion. Cut surfaces are clean brushed metal.
-```
-
-**Flow**
-```
-Create a premium {{ clip_seconds }}-second technical animation of the {{ object }} running, vertical {{ aspect }}, with two or three smooth camera angles.
-Start on a clean cutaway of the {{ object }} with its parts in motion against a dark studio background, then glowing {{ energy_color_name }} energy surges through {{ path }}, showing {{ process }}.
-Finish with the camera circling close around the moving parts as the energy pulses. The motion is clear and readable, not chaotic.
-```
-
-**In situ**
-```
-Create a premium {{ clip_seconds }}-second video of the {{ object }} running in its real setting, vertical {{ aspect }}, with three smooth camera angles.
-Open on a wide view of the setting, then move in to the {{ object }} installed in {{ context }}, working, with its moving parts in motion, lit by moody cyan and amber accent lights.
-Finish on a close detail of the {{ object }} in operation. Realistic, clean environment with no visible brands.
+Vertical {{ aspect }}, {{ clip_seconds }}-second shot from a cinematic short film that shows how it works inside: {{ object }}. Photorealistic, like a high-end documentary.
+The machine: {{ hero_look }}.
+[shots 2+] This shot continues the film from the previous shot, which ended on: {{ previous_end }}.
+{{ scene }}.
+[flow beat] Glowing {{ energy_color_name }} light traces show the {{ energy_word }} moving through the parts, clear and readable, not chaotic.
+Camera, three smooth angles: {{ camera }}. Smooth, fluid transitions between the angles; the place, the machine and the physics stay the same from the first to the last frame[; shot 1: the camera and the machine are already moving in the very first frame, no fade-in].
+The shot ends on: {{ end_frame }}.
+{{ style_block }}
 ```
 
 ### 10.3 Still-image template (`still_image.j2`), used for animated stills
@@ -169,5 +157,6 @@ Open on a wide establishing shot of {{ theme_scene }}, then a slow dolly in, cin
 
 - Free-tier credit plan: final clips use **Veo 3.1 Fast**, about 2 per day. Use Lite only to test prompts.
 - Each shot is about 8 s. Plan 3–5 Flow shots per video; animated stills and diagrams fill the rest.
+- Three smooth camera angles per clip, all in the same place; the prompt says the place and physics never change (D-092).
 - Never ask for real brand names, logos, real people or real identifiable locations.
 - Record the exact prompt text for every generated asset in the `assets.prompt` field.

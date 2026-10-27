@@ -26,9 +26,11 @@ from factory.budgets import check_and_record, daily_limits, usage_today
 from factory.context import AppContext, StageResult
 from factory.db import set_status
 from factory.errors import BudgetExceededError, FactoryError
+from factory.integrations.gemini import GeminiClient
 from factory.media import diagrams, stills
 from factory.media.ffmpeg import probe
 from factory.prompts import render_prompt
+from factory.stages import script as script_stage
 from factory.stages import voice
 from factory.stages.voice import Synthesizer, asset_dir
 
@@ -40,6 +42,7 @@ FLOW_CREDITS_PER_CLIP = 20  # conservative until confirmed in Flow's model menu 
 FLOW_CLIP_SECONDS = 8
 MIN_CLIP_SECONDS = 3.0  # shorter files are almost certainly failed downloads
 ENERGY_COLORS = {"electric": "cyan", "heat": "amber", "fluid": "blue"}  # DESIGN_SYSTEM.md §3
+ENERGY_WORDS = {"electric": "electric current", "heat": "heat", "fluid": "fluid and air"}
 PROMPTS_FILE = "flow_prompts.json"  # the exact prompts issued, read back when clips arrive
 STILL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")  # optional owner images: still_NN.<ext>
 STILL_SAFE_AREA = "upper third and the lower quarter"  # where labels and subtitles go
@@ -78,6 +81,21 @@ def inbox_dir(ctx: AppContext, content_id: int) -> Path:
 
 def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
     content_id = row["id"]
+    sheet = _write_sheet(ctx, row)
+    voice.render(ctx, content_id, speech)
+    set_status(ctx.conn, content_id, "awaiting_clips")
+    log.info(
+        "#%s: Flow sheet ready: %s",
+        content_id,
+        sheet.relative_to(ctx.root),
+        extra={"content_id": content_id, "event": "flow_sheet_issued"},
+    )
+    return True
+
+
+def _write_sheet(ctx: AppContext, row: sqlite3.Row) -> Path:
+    """flow_prompts.json + flow_sheet.md from the current script, and the inbox folder."""
+    content_id = row["id"]
     script = current_script(ctx, content_id)
     shots = _flow_shots(script)
     if not shots:
@@ -88,8 +106,17 @@ def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
             f"diagram shots {unlabelled} have no labels (script made before task 1.8): redo the "
             "script at Gate 1"
         )
+    if any("scene" not in s["prompt_vars"] for s in shots):
+        raise FactoryError(
+            f"the script's clips have no film shots (made before D-092): run "
+            f"`factory generate --restage {content_id}`"
+        )
     aspect = getattr(ctx.channel.formats, row["format"]).aspect
-    prompts = {shot["n"]: _shot_prompt(ctx, row, shot, aspect) for shot in shots}
+    # Each clip continues from the previous clip's last frame, like a cut in a film (D-092).
+    ends = [None] + [s["prompt_vars"]["end_frame"] for s in shots[:-1]]
+    prompts = {
+        s["n"]: _shot_prompt(ctx, row, s, aspect, end) for s, end in zip(shots, ends, strict=True)
+    }
     still_prompts = {s["n"]: _still_prompt(ctx, row, s, aspect) for s in _shots(script, "still")}
 
     folder = asset_dir(ctx, content_id)
@@ -101,37 +128,91 @@ def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
     sheet = folder / "flow_sheet.md"
     sheet.write_text(_sheet_text(ctx, row, script, shots, prompts, inbox, still_prompts))
     replace_assets(ctx, content_id, "flow_sheet", [{"path": sheet, "generator": "factory"}])
-
-    voice.render(ctx, content_id, speech)
-    set_status(ctx.conn, content_id, "awaiting_clips")
-    log.info(
-        "#%s: Flow sheet ready (%d clips): %s",
-        content_id,
-        len(shots),
-        sheet.relative_to(ctx.root),
-        extra={"content_id": content_id, "event": "flow_sheet_issued"},
-    )
-    return True
+    return sheet
 
 
-def _shot_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> str:
-    variables = dict(shot["prompt_vars"])
+def _shot_prompt(
+    ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str, previous_end: str | None
+) -> str:
+    """One film shot (D-092): the shared hero_look, a continuation of the previous clip's last
+    frame, the scene, one camera move and this clip's last frame."""
+    variables = {"energy_color_name": None, "energy_word": None, **shot["prompt_vars"]}
     energy = variables.get("energy")
-    if energy:
+    if energy and shot["beat"] == "flow":
         variables["energy_color_name"] = ENERGY_COLORS[energy]
-        variables["energy_hex"] = getattr(ctx.channel.brand.palette, energy)
+        variables["energy_word"] = ENERGY_WORDS[energy]
     rendered = render_prompt(
-        f"flow_shot_{shot['beat']}",
+        "flow_shot",
         ctx.channel,
         prompts_root=ctx.root / ctx.settings.paths.prompts_dir,
         object=row["object_name"],
-        description=shot["description"],
+        beat=shot["beat"],
         aspect=aspect,
         clip_seconds=FLOW_CLIP_SECONDS,
         first=shot["n"] == 1,  # D-090: shot 1 moves from its first frame
+        previous_end=previous_end,
         **variables,
     )
     return rendered.text.strip()
+
+
+# --- restage: new film shots for an approved script (D-092) ------------------------------------
+
+RESTAGE_STATUSES = ("script_approved", "awaiting_clips")
+
+
+def restage(ctx: AppContext, content_id: int, llm: GeminiClient | None = None) -> Path | None:
+    """Ask Gemini for new film shots (hero_look + scene/camera/end_frame per flow_clip) for an
+    approved script whose narration stays as approved. An item waiting for clips gets a new Flow
+    sheet at once (returned); a script_approved item gets it from the next `factory generate`."""
+    row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
+    if row is None or row["status"] not in RESTAGE_STATUSES:
+        raise FactoryError(
+            f"content #{content_id} is not {' or '.join(RESTAGE_STATUSES)}; only approved "
+            "scripts that have no clips yet can get new film shots"
+        )
+    script = current_script(ctx, content_id)
+    shots = json.loads(script["shot_list_json"])
+    clips = tuple(s["n"] for s in shots if s["kind"] == "flow_clip")
+    schema = script_stage.visual_plan_schema(clips)
+    prompts_root = ctx.root / ctx.settings.paths.prompts_dir
+    system = render_prompt("script_system", ctx.channel, prompts_root=prompts_root)
+    user = render_prompt(
+        "restage",
+        ctx.channel,
+        prompts_root=prompts_root,
+        format=row["format"],
+        object=row["object_name"],
+        narration=script["body_text"],
+        shots=shots,
+        clip_numbers=clips,
+        hero_look_words=script_stage.HERO_LOOK_WORDS,
+    )
+    llm = llm or script_stage.gemini_client(ctx)
+    plan = llm.generate_json(
+        system=system.text, prompt=user.text, schema=schema, max_reasks=script_stage.MAX_REASKS
+    )
+    visuals = {v.n: v for v in plan.shots}
+    for shot in shots:
+        if shot["kind"] != "flow_clip":
+            continue
+        v = visuals[shot["n"]]
+        energy = shot["prompt_vars"].get("energy")
+        shot["prompt_vars"] = {
+            "hero_look": plan.hero_look.strip(),
+            "scene": v.scene.strip(),
+            "camera": v.camera.strip(),
+            "end_frame": v.end_frame.strip(),
+            **({"energy": energy} if energy and shot["beat"] == "flow" else {}),
+        }
+    with ctx.conn:
+        ctx.conn.execute(
+            "UPDATE scripts SET shot_list_json = ? WHERE id = ?",
+            (json.dumps(shots, ensure_ascii=False), script["id"]),
+        )
+    log.info("#%s: new film shots for %d clips", content_id, len(clips),
+             extra={"content_id": content_id, "event": "restaged"})  # fmt: skip
+    return _write_sheet(ctx, row) if row["status"] == "awaiting_clips" else None
 
 
 def _still_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> str:

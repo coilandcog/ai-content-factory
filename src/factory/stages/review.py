@@ -267,10 +267,15 @@ def script_report(conn: sqlite3.Connection, content_id: int) -> str:
         f"{note_label}:  {script['engineer_note']}",
         f"LOOP LINE:  {script['loop_line']}",
         "",
-        "SHOTS:",
     ]
+    # The film's hero_look is the same in every clip (D-092): show it once.
+    looks = [s["prompt_vars"]["hero_look"] for s in shots if "hero_look" in s["prompt_vars"]]
+    if looks:
+        lines += ["LOOK:", textwrap.fill(looks[0], width=96, initial_indent="  ",
+                                         subsequent_indent="  "), ""]  # fmt: skip
+    lines.append("SHOTS:")
     for shot in shots:
-        extra = ", ".join(f"{k}={v}" for k, v in shot["prompt_vars"].items())
+        extra = ", ".join(f"{k}={v}" for k, v in shot["prompt_vars"].items() if k != "hero_look")
         if shot.get("labels"):  # diagram label cards (task 1.8): check them before approving
             extra = f"labels: {', '.join(shot['labels'])}; dots: {shot.get('energy') or 'electric'}"
         lines.append(

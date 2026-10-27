@@ -504,11 +504,29 @@ def generate(
     limit: Annotated[
         int | None, typer.Option(help="Handle at most this many items per pass.")
     ] = None,
+    restage: Annotated[
+        int | None,
+        typer.Option(
+            help="New film shots (Gemini) for this approved item's clips; the narration stays."
+        ),
+    ] = None,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
     """Write Flow sheets + voice for approved scripts, then collect finished clips (ROADMAP 1.6)."""
     with _tracked_run("generate", config_dir) as run:
         ctx = _context(run, config_dir)
+        if restage is not None:
+            sheet = generate_stage.restage(ctx, restage)
+            run.tally.processed = 1
+            typer.echo(
+                f"#{restage}: new film shots. "
+                + (
+                    f"Flow sheet: {generate_stage.windows_path(sheet)}"
+                    if sheet
+                    else "Run `factory generate` to write its Flow sheet."
+                )
+            )
+            return
         result = generate_stage.run(ctx, limit=limit)
         run.tally.processed, run.tally.failed = result.processed, result.failed
         typer.echo(

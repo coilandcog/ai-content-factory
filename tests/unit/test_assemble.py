@@ -24,11 +24,13 @@ from factory.stages import assemble, generate
 
 SHOTS = [
     {"n": 1, "beat": "studio", "kind": "flow_clip", "description": "Pedestal", "duration_s": 3,
-     "prompt_vars": {"hero_feature": "the pulley"}},
+     "prompt_vars": {"hero_look": "A car alternator", "scene": "It turns", "camera": "orbit",
+                     "end_frame": "the pulley"}},
     {"n": 2, "beat": "cutaway", "kind": "diagram", "description": "Labels", "duration_s": 2,
      "prompt_vars": {}, "labels": ["Rotor", "Stator"], "energy": "electric"},
     {"n": 3, "beat": "cutaway", "kind": "flow_clip", "description": "Casing opens",
-     "duration_s": 2, "prompt_vars": {"internals": "rotor", "focus_part": "the rotor"}},
+     "duration_s": 2, "prompt_vars": {"hero_look": "A car alternator", "scene": "It opens",
+                                       "camera": "dolly-in", "end_frame": "the rotor"}},
     {"n": 4, "beat": "studio", "kind": "still", "description": "Hero view", "duration_s": 1,
      "prompt_vars": {}},
     {"n": 5, "beat": "studio", "kind": "diagram", "description": "Pulley", "duration_s": 1,

@@ -112,11 +112,11 @@ def test_idea_becomes_scripted_with_script_sources_and_variety_fields(ctx: AppCo
     assert script["body_text"].endswith("why your battery stays alive.")
     assert "+" in script["prompt_version"]
     shots = json.loads(script["shot_list_json"])
-    assert shots[3]["prompt_vars"] == {
-        "energy": "electric",
-        "path": "the stator coils into the diode plate",
-        "process": "alternating current becoming direct current",
-    }
+    assert shots[3]["prompt_vars"]["energy"] == "electric"  # the flow beat's colour
+    assert shots[3]["prompt_vars"]["end_frame"] == "the output terminal glowing steadily"
+    # D-092: the film's hero_look travels with every clip, so Flow draws the same machine
+    looks = {s["prompt_vars"]["hero_look"] for s in shots if s["kind"] == "flow_clip"}
+    assert len(looks) == 1 and looks.pop().startswith("A compact car alternator")
     assert shots[2]["prompt_vars"] == {}  # diagrams carry no Flow prompt fields
     urls = [r["url"] for r in ctx.conn.execute("SELECT url FROM sources ORDER BY id")]
     assert urls == [WIKI_URL, SECOND_SOURCE, THIRD_SOURCE]
@@ -445,7 +445,8 @@ def test_schema_converts_to_a_gemini_schema(fmt: str) -> None:
 def test_flow_clip_longer_than_8_s_is_capped() -> None:
     shot = stage.Shot(
         n=1, beat="in_situ", kind="flow_clip", description="Engine bay, belt spinning",
-        duration_s=10, context="a car engine bay", labels=["ignored"],
+        duration_s=10, scene="The belt spins the pulley", camera="crane down",
+        end_frame="the pulley", labels=["ignored"],
     )  # fmt: skip
 
     assert shot.duration_s == 8.0
@@ -563,7 +564,7 @@ def test_diagram_label_rules(labels: list[str], problem: str) -> None:
     with pytest.raises(ValueError, match=problem):
         stage.Shot(
             n=3, beat="cutaway", kind="diagram", description="Label card", duration_s=4,
-            labels=labels,
+            scene="", camera="", end_frame="", labels=labels,
         )  # fmt: skip
 
 
@@ -676,3 +677,54 @@ def test_too_similar_redo_keeps_the_previous_version(ctx: AppContext) -> None:
         "SELECT version FROM scripts WHERE content_id = ? AND is_current = 1", (content_id,)
     ).fetchone()[0]
     assert (current, content(ctx, content_id)["status"]) == (1, "scripted")
+
+
+# --- film shots (D-092) --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "problem"),
+    [("end_frame", "", "needs ['end_frame']"), ("hero_look", "An alternator.", "hero_look has 2")],
+)
+def test_clip_without_end_frame_or_short_hero_look_is_asked_again(
+    ctx: AppContext, field: str, value: str, problem: str
+) -> None:
+    content_id = new_idea(ctx)
+    broken = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    if field == "hero_look":
+        broken["hero_look"] = value
+    else:
+        broken["shots"][1][field] = value
+    sdk = FakeGenaiClient(reply(json.dumps(broken)), fixture_reply("script_short_alternator"))
+
+    run_stage(ctx, sdk)
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    assert problem in sdk.calls[1]["contents"]
+
+
+def test_script_prompt_asks_for_a_short_film() -> None:
+    rules = (REPO_ROOT / "prompts" / "default" / "visual_rules.j2").read_text()
+
+    assert "one short cinematic film" in rules and "end_frame" in rules
+    assert "three smooth camera angles" in rules  # the owner wants 3 angles per clip
+    assert "a shot that starts underwater stays underwater" in rules  # #11: surfaced mid-clip
+    assert "the hero is the whole machine" in rules  # D-092: no invented "ballast tank" objects
+    assert "Never military" in rules  # the blocklist bans warships, also in the pictures
+    assert "brand-new and flawless" in rules and "no rust, dirt" in rules  # premium look, no wear
+
+
+def test_visual_plan_must_cover_exactly_the_clips() -> None:
+    schema = stage.visual_plan_schema((1, 3))
+    look = " ".join(["steel"] * 25)
+    shot = {
+        "scene": "The hull dives under the waves slowly",
+        "camera": "orbit",
+        "end_frame": "the bow tilts down.",
+    }
+
+    plan = schema.model_validate({"hero_look": look, "shots": [{"n": 1, **shot}, {"n": 3, **shot}]})
+
+    assert [s.n for s in plan.shots] == [1, 3]
+    with pytest.raises(ValueError, match=r"give exactly the flow_clips \[1, 3\]"):
+        schema.model_validate({"hero_look": look, "shots": [{"n": 1, **shot}]})

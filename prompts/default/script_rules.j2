@@ -13,8 +13,8 @@ A formula is a pattern: write the hook in your own words for this machine, never
 Viewers decide in the first two seconds whether to stay: the hook names the machine or states the video's most surprising
 fact (the one the Engineer's Note explains), never a vague "this thing". At most {{ hook_max_words }} words.
 
-Visual beats: Studio (object on a dark pedestal), Cutaway (casing opens to show the inside),
-Flow (glowing energy moves through the parts), In situ (the part installed where it is used).
+Visual beats: Studio (the machine alone on a dark set), Cutaway (its casing opens to show the inside),
+Flow (glowing energy moves through the parts), In situ (the machine working in its real place).
 Pick beat_order from:
 {%- set orders = {
   "classic": "studio, cutaway, flow, in_situ",
@@ -45,14 +45,16 @@ Do the sum before answering (a total that is too short is the most common mistak
 x 8 s = {{ shot_seconds.clip_s }} s, so the diagrams and stills (3-6 s each) must add the other {{ shot_seconds.rest_s }} s.
 Add up every duration_s: about {{ target_total_s }} s, never under {{ shot_seconds.min_total_s }} s; more words need more seconds.
 - kind "flow_clip": an 8-second AI video clip, at most 8 seconds. Use {{ min_clips }} to {{ max_clips }} of them.
-  Every flow_clip needs its beat's fields: studio -> hero_feature; cutaway -> internals and focus_part;
-  flow -> energy (electric, heat or fluid), path and process; in_situ -> context.
+  Every flow_clip needs scene, camera and end_frame (see the visual plan below); a flow-beat clip also needs
+  energy (electric, heat or fluid). Stills and diagrams have scene, camera and end_frame "".
 - kind "still": an AI still image that will be slowly animated.
 - kind "diagram": a label card drawn by code over the picture: "labels" holds 1-4 part names of at most 4 words each
   (e.g. ["Rotor", "Stator Coils", "Diode Bridge"]), and "energy" picks the colour of their dots. At least {{ min_diagrams }} diagrams.
   Every other shot has "labels": [].
 - Shot 1 is always a flow_clip, so the video moves from the first frame (never a still or diagram first).
 - Every one of the four beats appears, and the first appearance of each beat follows the chosen beat_order.
+
+{% include "visual_rules.j2" %}
 
 Sources ("sources"): exactly 3 different real web pages that support the main facts, each with url, title, publisher and the claim it supports.
 {% include "script_source_rules.j2" %}

@@ -25,7 +25,7 @@
 | Channel slug | kebab-case | `coil-and-cog` |
 | Config keys | `snake_case` | `budgets_per_day.gemini_calls` |
 | Status and enum values | `snake_case` strings | `script_approved`, `deep_dive` |
-| Prompt templates | `<purpose>.j2` | `script_deep_dive.j2`, `flow_shot_cutaway.j2` |
+| Prompt templates | `<purpose>.j2` | `script_deep_dive.j2`, `flow_shot.j2` |
 | Migrations | `NNN_description.sql` | `002_add_watch_time.sql` |
 | Git branches | `task/<roadmap-id>-<slug>` | `task/1.3-script-generation` |
 | n8n workflows | `<scope>__<trigger>__<action>` | `factory__nightly__run-pipeline`, `coil-and-cog__webhook__approve` |

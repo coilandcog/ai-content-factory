@@ -263,3 +263,13 @@ def test_cli_interactive_reject_and_redo(cli_db: Path, monkeypatch: pytest.Monke
     assert "Script v2" in result.output  # the new version is shown before the next choice
     assert "#1 rejected." in result.output
     assert db_status(cli_db) == "rejected"
+
+
+def test_gate1_report_shows_the_film_look_once_and_each_shot_scene(ctx: AppContext) -> None:
+    content_id = scripted_item(ctx)
+
+    report = review.script_report(ctx.conn, content_id)
+
+    assert report.count("A compact car alternator") == 1  # D-092: one hero_look per film
+    assert "LOOK:" in report and report.index("LOOK:") < report.index("SHOTS:")
+    assert "camera=slow dolly-in on a 35 mm lens" in report

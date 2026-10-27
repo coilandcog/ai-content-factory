@@ -10,6 +10,7 @@
   "body": "Because a belt from the engine spins a small generator called the alternator. Inside, a spinning rotor carries an electromagnet. Its moving magnetic field sweeps past copper coils in the stator and pushes current through them. That current flips direction constantly, so a set of diodes turns it into one-way current the battery can store. A regulator keeps the voltage near fourteen volts, whether you idle or cruise.",
   "engineer_note_draft": "A few amps flowing in the spinning rotor control more than a hundred amps of output from the stator.",
   "loop_line": "So next time you start the engine, remember why your battery stays alive.",
+  "hero_look": "A compact car alternator about fifteen centimetres across: a ribbed die-cast aluminium housing, a steel pulley with a grooved belt track, copper windings visible through the cooling slots, light oil film and dust from real use.",
   "shots": [
     {
       "n": 1,
@@ -17,8 +18,10 @@
       "kind": "flow_clip",
       "description": "Alternator on the pedestal, slow orbit",
       "duration_s": 6,
-      "hero_feature": "the pulley and cooling fins",
-      "labels": []
+      "labels": [],
+      "scene": "The alternator turns steadily on a dark set as its pulley spins and light slides over the cooling fins and the grooved pulley.",
+      "camera": "slow orbit to the right on a 50 mm lens",
+      "end_frame": "the alternator's front face with the pulley spinning"
     },
     {
       "n": 2,
@@ -26,9 +29,10 @@
       "kind": "flow_clip",
       "description": "Casing opens to reveal rotor and stator",
       "duration_s": 7,
-      "internals": "rotor, stator windings and diode plate",
-      "focus_part": "the rotor",
-      "labels": []
+      "labels": [],
+      "scene": "The aluminium housing splits along a clean cut and the halves slide apart, revealing the spinning rotor inside the copper stator windings and the diode plate behind them.",
+      "camera": "slow dolly-in on a 35 mm lens",
+      "end_frame": "a close view of the rotor spinning inside the stator"
     },
     {
       "n": 3,
@@ -41,7 +45,10 @@
         "Stator",
         "Diodes",
         "Regulator"
-      ]
+      ],
+      "scene": "",
+      "camera": "",
+      "end_frame": ""
     },
     {
       "n": 4,
@@ -50,9 +57,10 @@
       "description": "Cyan current flows from the stator coils",
       "duration_s": 8,
       "energy": "electric",
-      "path": "the stator coils into the diode plate",
-      "process": "alternating current becoming direct current",
-      "labels": []
+      "labels": [],
+      "scene": "Inside the opened alternator the rotor spins and current pulses out of the stator windings into the diode plate, leaving as one steady stream toward the output terminal.",
+      "camera": "steady push along the windings at eye level",
+      "end_frame": "the output terminal glowing steadily"
     },
     {
       "n": 5,
@@ -64,7 +72,10 @@
         "Alternating Current",
         "Direct Current"
       ],
-      "energy": "electric"
+      "energy": "electric",
+      "scene": "",
+      "camera": "",
+      "end_frame": ""
     },
     {
       "n": 6,
@@ -72,8 +83,10 @@
       "kind": "flow_clip",
       "description": "Alternator in an engine bay, belt spinning",
       "duration_s": 6,
-      "context": "a modern car engine bay",
-      "labels": []
+      "labels": [],
+      "scene": "Under the hood of a running car the serpentine belt drives the alternator pulley at speed while the engine idles and the fan blurs behind it.",
+      "camera": "slow crane down from above the engine on a 35 mm lens",
+      "end_frame": "the alternator pulley spinning in the engine bay"
     },
     {
       "n": 7,
@@ -81,7 +94,10 @@
       "kind": "still",
       "description": "Hero three-quarter view for the loop line",
       "duration_s": 5,
-      "labels": []
+      "labels": [],
+      "scene": "",
+      "camera": "",
+      "end_frame": ""
     }
   ],
   "sources": [

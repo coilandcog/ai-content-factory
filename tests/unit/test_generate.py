@@ -6,32 +6,42 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fakes.fake_gemini import FakeGenaiClient, reply
 from fakes.fake_tts import make_fake_tts
 from PIL import Image
 from typer.testing import CliRunner
 
+from factory.budgets import check_and_record
 from factory.cli import app
 from factory.config import REPO_ROOT, EnvSettings, load_channel, load_settings
 from factory.context import AppContext
 from factory.db import add_content, connect, migrate, set_status, upsert_channel
-from factory.errors import BudgetExceededError
+from factory.errors import BudgetExceededError, FactoryError
+from factory.integrations.gemini import GeminiClient
 from factory.media.ffmpeg import probe
 from factory.stages import generate
 
 pytestmark = pytest.mark.slow  # runs ffmpeg
 
+LOOK = "A compact car alternator with a ribbed aluminium housing and a steel pulley"
+FILM = {"hero_look": LOOK}
 SHOTS = [
-    {"n": 1, "beat": "studio", "kind": "flow_clip", "description": "Alternator on the pedestal",
-     "duration_s": 6, "prompt_vars": {"hero_feature": "the pulley and cooling fins"}},
+    {"n": 1, "beat": "studio", "kind": "flow_clip", "description": "Alternator on a dark set",
+     "duration_s": 6, "prompt_vars": {**FILM, "scene": "The alternator turns as its pulley spins",
+                                      "camera": "slow orbit to the right on a 50 mm lens",
+                                      "end_frame": "the front face with the pulley spinning."}},
     {"n": 2, "beat": "cutaway", "kind": "flow_clip", "description": "Casing opens",
-     "duration_s": 7, "prompt_vars": {"internals": "rotor and stator", "focus_part": "the rotor"}},
+     "duration_s": 7, "prompt_vars": {**FILM, "scene": "The housing splits and the rotor spins",
+                                      "camera": "slow dolly-in", "end_frame": "the rotor"}},
     {"n": 3, "beat": "cutaway", "kind": "diagram", "description": "Labels", "duration_s": 4,
      "prompt_vars": {}, "labels": ["rotor", "stator coils"], "energy": "electric"},
     {"n": 4, "beat": "flow", "kind": "flow_clip", "description": "Current flows",
-     "duration_s": 8, "prompt_vars": {"energy": "electric", "path": "the stator coils",
-                                       "process": "AC becoming DC"}},
+     "duration_s": 8, "prompt_vars": {**FILM, "energy": "electric",
+                                      "scene": "Current pulses from the stator coils",
+                                      "camera": "steady push", "end_frame": "the output terminal"}},
     {"n": 5, "beat": "in_situ", "kind": "flow_clip", "description": "Engine bay",
-     "duration_s": 6, "prompt_vars": {"context": "a car engine bay"}},
+     "duration_s": 6, "prompt_vars": {**FILM, "scene": "In a car engine bay the belt drives it",
+                                      "camera": "crane down", "end_frame": "the pulley spinning"}},
     {"n": 6, "beat": "studio", "kind": "still", "description": "Hero view of the alternator",
      "duration_s": 2, "prompt_vars": {}},
 ]  # fmt: skip
@@ -109,15 +119,24 @@ def test_approved_script_gets_flow_sheet_inbox_and_voice(ctx: AppContext) -> Non
     assert "4 × Veo 3.1 - Fast, **80 credits**" in sheet
     assert "you have 50 of 50 left today" in sheet
     assert "make 2 clip(s) today and the rest on the next day(s)" in sheet
-    assert "close-up of the alternator rotating steadily on a matte dark pedestal" in sheet
     assert "Save as: `shot_01.mp4`" in sheet and "Save as: `shot_03.mp4`" not in sheet  # diagram
-    assert "glowing cyan energy surges through the stator coils" in sheet
-    assert "of the alternator, vertical 9:16, with three smooth camera angles" in sheet
     assert "No logos, no text" in sheet and "no extra or distorted components" in sheet
     assert "\\\\wsl$\\" in sheet and "\\data\\inbox\\flow\\000001" in sheet
     prompts = json.loads((folder / "flow_prompts.json").read_text())
-    assert "pedestal" in prompts["1"] and "pedestal" not in prompts["5"]  # in situ: no studio set
-    assert "installed in a car engine bay" in prompts["5"]
+    # D-092: every clip is a film shot of the same machine, continuing from the previous clip
+    assert all(f"The machine: {LOOK}." in prompts[str(n)] for n in CLIPS)
+    assert "cinematic short film that shows how it works inside: alternator." in prompts["1"]
+    assert "The alternator turns as its pulley spins." in prompts["1"]
+    assert "Camera, three smooth angles: slow orbit to the right on a 50 mm lens." in prompts["1"]
+    assert "the place, the machine and the physics stay the same" in prompts["5"]
+    assert "The shot ends on: the front face with the pulley spinning.\n" in prompts["1"]
+    assert "continues" not in prompts["1"]
+    assert "previous shot, which ended on: the front face with the pulley spinning." in prompts["2"]
+    assert "previous shot, which ended on: the rotor." in prompts["4"]  # the diagram is skipped
+    assert "Glowing cyan light traces show the electric current" in prompts["4"]
+    assert "Glowing" not in prompts["5"]
+    assert "cool cyan light on one side and a warm amber light" in prompts["5"]  # signature
+    assert "smooth polished metal" in prompts["5"]  # the premium product look of #5
     assert "already moving in the very first frame" in prompts["1"]  # D-090: shot 1 only
     assert "already moving" not in prompts["5"]
     assert (ctx.root / "data" / "inbox" / "flow" / "000001").is_dir()
@@ -176,7 +195,7 @@ def test_complete_clip_set_is_collected(ctx: AppContext) -> None:
     )
     assert (first["width"], first["height"]) == (108, 192)
     assert first["path"].endswith(f"{content_id:06d}/clips/shot_01.mp4")
-    assert "on a matte dark pedestal" in first["prompt"]
+    assert "The alternator turns as its pulley spins." in first["prompt"]
     assert (inbox / "shot_01.mp4").is_file()  # the original download stays in the inbox
     folder = ctx.root / "data" / "assets" / "coil-and-cog" / f"{content_id:06d}"
     [still] = assets(ctx, "still")
@@ -228,3 +247,91 @@ def test_flow_log_command(config_dir: Path) -> None:
 
     assert ok.exit_code == 0 and "Flow credits today: 20 of 50 (30 left)" in ok.output
     assert over.exit_code == 1 and "would exceed today's limit" in over.output
+
+
+# --- film shots and restage (D-092) ---------------------------------------------------------------
+
+OLD_SHOTS = [
+    {**s, "prompt_vars": {"energy": "electric", "path": "the coils"}}
+    if s["beat"] == "flow" and s["kind"] == "flow_clip"
+    else {**s, "prompt_vars": {"context": "an engine bay"}}
+    if s["kind"] == "flow_clip"
+    else s
+    for s in SHOTS
+]
+VISUALS = {
+    "hero_look": " ".join(["A ribbed aluminium car alternator with a steel pulley"] * 3),
+    "shots": [
+        {"n": n, "scene": f"Shot {n}: the rotor spins inside the stator windings",
+         "camera": "slow dolly-in on a 35 mm lens", "end_frame": f"frame {n}"}
+        for n in CLIPS
+    ],
+}  # fmt: skip
+
+
+def old_script(ctx: AppContext) -> int:
+    content_id = approved_item(ctx)
+    with ctx.conn:
+        ctx.conn.execute("UPDATE scripts SET shot_list_json = ?", (json.dumps(OLD_SHOTS),))
+    return content_id
+
+
+def fake_llm(ctx: AppContext, *answers: str) -> tuple[GeminiClient, FakeGenaiClient]:
+    sdk = FakeGenaiClient(*(reply(a) for a in answers))
+    llm = GeminiClient(
+        "fake-key", "gemini-3.5-flash-lite", sdk=sdk, retry_wait_s=0,
+        before_call=lambda: check_and_record(ctx.conn, ctx.channel, "gemini"),
+    )  # fmt: skip
+    return llm, sdk
+
+
+def test_script_made_before_film_shots_is_refused_with_the_restage_hint(ctx: AppContext) -> None:
+    content_id = old_script(ctx)
+
+    result = run(ctx)
+
+    assert (result.failed, status(ctx, content_id)) == (1, "failed")
+    reason = ctx.conn.execute("SELECT status_reason FROM contents").fetchone()[0]
+    assert f"factory generate --restage {content_id}" in reason
+
+
+def test_restage_gives_a_waiting_item_new_film_shots_and_flow_sheet(ctx: AppContext) -> None:
+    content_id = approved_item(ctx)
+    run(ctx)  # awaiting_clips with a first sheet
+    with ctx.conn:
+        ctx.conn.execute("UPDATE scripts SET shot_list_json = ?", (json.dumps(OLD_SHOTS),))
+    wrong = {**VISUALS, "shots": VISUALS["shots"][:2]}
+    llm, sdk = fake_llm(ctx, json.dumps(wrong), json.dumps(VISUALS))
+
+    sheet = generate.restage(ctx, content_id, llm=llm)
+
+    assert status(ctx, content_id) == "awaiting_clips"  # narration, voice and status stay
+    assert "give exactly the flow_clips [1, 2, 4, 5]" in sdk.calls[1]["contents"]
+    assert "Hello there, this is the alternator." in sdk.calls[0]["contents"]  # the narration
+    shots = json.loads(ctx.conn.execute("SELECT shot_list_json FROM scripts").fetchone()[0])
+    assert shots[3]["prompt_vars"]["energy"] == "electric"  # the flow beat keeps its colour
+    assert "path" not in shots[3]["prompt_vars"] and "context" not in shots[4]["prompt_vars"]
+    assert shots[2] == SHOTS[2]  # diagrams are untouched
+    prompts = json.loads((sheet.parent / "flow_prompts.json").read_text())
+    assert "Shot 2: the rotor spins" in prompts["2"] and "ended on: frame 1." in prompts["2"]
+    assert "Shot 2: the rotor spins" in sheet.read_text()
+
+
+def test_restage_of_an_approved_script_waits_for_generate(ctx: AppContext) -> None:
+    content_id = old_script(ctx)
+    llm, _ = fake_llm(ctx, json.dumps(VISUALS))
+
+    assert generate.restage(ctx, content_id, llm=llm) is None
+
+    assert run(ctx).processed == 1 and status(ctx, content_id) == "awaiting_clips"
+
+
+def test_restage_refuses_an_item_that_already_has_its_clips(ctx: AppContext) -> None:
+    content_id = approved_item(ctx)
+    set_status(ctx.conn, content_id, "awaiting_clips")
+    set_status(ctx.conn, content_id, "generated")
+    llm, sdk = fake_llm(ctx)
+
+    with pytest.raises(FactoryError, match="only approved scripts that have no clips yet"):
+        generate.restage(ctx, content_id, llm=llm)
+    assert sdk.calls == []

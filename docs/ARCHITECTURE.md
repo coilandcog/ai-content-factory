@@ -66,6 +66,7 @@ Helper commands:
 - `factory db init|migrate|backup`
 - `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
 - `factory plan --week next|this`: fills the week's `cadence.weekly_plan` slots with the best unplanned ideas (no pillar 3 days in a row; hook type and beat order differ from the day before) and prints the plan; slots already planned are kept (D-080).
+- `factory generate --restage N`: new film shots (Gemini) for an approved item that has no clips yet: the narration stays, the clip prompts and (for `awaiting_clips`) the Flow sheet are rewritten (D-092).
 - `factory flow-log --credits N`: logs Flow credits you spent (refused above `budgets_per_day.flow_credits`).
 - `factory bot [--find-chat-id]`: the Telegram review bot for both gates, plus alerts (§3, task 2.1). `--find-chat-id` prints the chat id of whoever sent the bot a message, for `TELEGRAM_ALLOWED_CHAT_ID` in `.env`.
 - `factory voice audition [--voices a,b,c] [--text ...|--content-id N]`: the same text read by several Kokoro voices into `data/audition/voice_<id>.wav`, to choose `voice.voice_id`.
@@ -303,7 +304,7 @@ ai-content-factory/
 │   └── channels/
 │       └── coil-and-cog.yaml     # one file per channel/niche
 ├── prompts/
-│   ├── default/                  # Jinja2 templates: ideate, script, metadata, flow_shot_*, still_image, style_block
+│   ├── default/                  # Jinja2 templates: ideate, script, metadata, flow_shot, visual_rules, restage, still_image, style_block
 │   └── coil-and-cog/             # optional per-channel overrides
 ├── migrations/
 │   └── 001_init.sql
