@@ -46,3 +46,8 @@ a detail that belongs to their machine).
   {{ prompt | indent(2) }}
   """
 {% endfor %}{% endfor %}{% endif %}
+{% if references %}
+Reference notes the owner approved (style only, from images and clips they like): use their lighting, camera,
+motion and phrases where they fit this machine and the film rules. The owner's own words count most.
+{% for r in references %}- {{ r.summary }}{% if r.owner_note %} Owner: "{{ r.owner_note }}".{% endif %} Lighting: {{ r.lighting }}. Camera: {{ r.camera }}. Motion: {{ r.motion }}. Phrases: {{ r.phrases | join("; ") }}.
+{% endfor %}{% endif %}

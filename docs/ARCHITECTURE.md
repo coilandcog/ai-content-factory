@@ -77,6 +77,7 @@ Helper commands:
 - `factory music add <file> --title ... [--artist ... --attribution ... --license-url ... --mood ...]` / `factory music list`: the YouTube Audio Library tracks used in YouTube renders (copied into `assets_static/music/youtube_audio_library/`, recorded in `music_tracks`, picked least-used first).
 - `factory brand build`: rebuilds `assets_static/logo/` (logo, avatar, stings) from the channel's `display_name` and `brand.palette`.
 - `factory publish --manual --id N`: prints the upload kit (render paths, YouTube title and description, TikTok caption, the AI-label steps). `factory publish --manual --id N --platform youtube|tiktok --url <link> --ai-label-on` records the live post in `posts`; the first one moves the item to `published` (D-072).
+- `factory references add|list|approve <n> [--note ...]|remove <n>`: the reference library: Gemini writes style notes (lighting, camera, composition, motion, materials, 3–6 prompt phrases) about images and clips you drop into `data/inbox/references/`; the files move to `data/references/` and are never used in a video; only notes you approve (newest 8) join the film rules for new scripts and restages (D-100).
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
 - `factory retry <content_id>`
 - `factory status [<content_id>]`
@@ -323,7 +324,8 @@ ai-content-factory/
 │   ├── default/                  # Jinja2 templates: ideate, script, metadata, flow_shot, visual_rules, restage, still_image, style_block
 │   └── coil-and-cog/             # optional per-channel overrides
 ├── migrations/
-│   └── 001_init.sql
+│   ├── 001_init.sql
+│   └── 002_reference_notes.sql
 ├── src/factory/
 │   ├── __init__.py
 │   ├── cli.py                    # Typer app: one command per stage
@@ -345,6 +347,7 @@ ai-content-factory/
 │   │   ├── voice.py              # voice audition + voice.wav (used by generate)
 │   │   ├── generate.py
 │   │   ├── clip_review.py        # Gemini watches clips and frame images (factory clips review, D-097)
+│   │   ├── references.py         # reference library: style notes from images/clips the owner likes (D-100)
 │   │   ├── assemble.py
 │   │   ├── review.py
 │   │   ├── bot.py                # Telegram review bot: both gates + alerts (factory bot)
@@ -391,6 +394,8 @@ ai-content-factory/
     ├── logs/                     # factory-YYYY-MM-DD.jsonl
     ├── inbox/flow/<content_id>/  # owner drops Flow downloads here
     ├── inbox/trends/             # owner drops Google Trends CSV exports here (moved to imported/ after loading)
+    ├── inbox/references/         # owner drops images/clips they like (factory references add)
+    ├── references/               # the studied reference files, kept for the record (never rendered)
     └── assets/<channel_slug>/<content_id>/
 ```
 

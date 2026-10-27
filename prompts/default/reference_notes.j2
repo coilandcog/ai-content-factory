@@ -1,0 +1,10 @@
+The channel's owner likes this {{ kind }} and wants future AI video shots of machines to learn from its style.
+Describe concretely what makes it look good, so the notes can steer AI video prompts:
+- lighting: the light sources, their colours, direction and mood;
+- camera: the angle, the lens feel (wide, macro, shallow depth of field) and {% if kind == "video" %}how the camera moves{% else %}where a camera move would start{% endif %};
+- composition: where the subject sits in the frame, what fills it, the background;
+- motion: {% if kind == "video" %}what moves, how fast, how smooth{% else %}"none" for a still image{% endif %};
+- materials_colours: surfaces, finishes and the colour palette;
+- prompt_phrases: 3-6 short phrases (a few words each) that could be pasted into a video prompt to get this look;
+- has_people: true if any person, face or hands are visible.
+Describe the style only: never names, brands, logos or text you can read in it.

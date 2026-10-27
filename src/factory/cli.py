@@ -52,6 +52,7 @@ from factory.stages import generate as generate_stage
 from factory.stages import ideate as ideate_stage
 from factory.stages import metadata as metadata_stage
 from factory.stages import publish as publish_stage
+from factory.stages import references as references_stage
 from factory.stages import review as review_stage
 from factory.stages import script as script_stage
 from factory.stages import trends as trends_stage
@@ -78,6 +79,11 @@ music_app = typer.Typer(
 app.add_typer(music_app, name="music")
 trends_app = typer.Typer(help="Google Trends CSV files you downloaded.", no_args_is_help=True)
 clips_app = typer.Typer(help="Check Flow clips and frame images with Gemini.", no_args_is_help=True)
+references_app = typer.Typer(
+    help="Your reference library: style notes from images and clips you like.",
+    no_args_is_help=True,
+)
+app.add_typer(references_app, name="references")
 app.add_typer(clips_app, name="clips")
 app.add_typer(trends_app, name="trends")
 
@@ -949,6 +955,75 @@ def clips_review(
             if e["fix"]:
                 typer.echo(f"  fix: {e['fix']}")
         run.tally.processed = len(entries)
+
+
+@references_app.command("add")
+def references_add(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Gemini studies each image or clip in data/inbox/references/ and writes style notes
+    (pending until you approve them). The files move to data/references/ (D-100)."""
+    with _tracked_run("references add", config_dir) as run:
+        ctx = _context(run, config_dir)
+        results = references_stage.add(ctx)
+        for r in results:
+            if "skipped" in r:
+                typer.echo(f"{r['file']}: skipped, {r['skipped']}")
+                continue
+            typer.echo(f"#{r['id']} {r['file']} (pending): {r['summary']}")
+            typer.echo(f"  phrases: {'; '.join(r['prompt_phrases'])}")
+            if r["has_people"]:
+                typer.echo("  ⚠ people are visible: prefer references without people")
+        run.tally.processed = sum("id" in r for r in results)
+        if run.tally.processed:
+            typer.echo("Read them with `factory references list`, then approve or remove each one.")
+
+
+@references_app.command("list")
+def references_list(
+    all_: Annotated[bool, typer.Option("--all", help="Also show removed ones.")] = False,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Show every reference note with its status (pending, approved, removed)."""
+    with _tracked_run("references list", config_dir) as run:
+        ctx = _context(run, config_dir)
+        rows = references_stage.listing(ctx, include_removed=all_)
+        if not rows:
+            typer.echo("No references yet: save images or clips in data/inbox/references/")
+        for r in rows:
+            typer.echo(f"#{r['id']} {r['status'].upper()} {r['original_name']} ({r['kind']})")
+            typer.echo(f"  {r['summary']}")
+            typer.echo(f"  lighting: {r['lighting']}")
+            typer.echo(f"  camera: {r['camera']}")
+            typer.echo(f"  composition: {r['composition']}")
+            typer.echo(f"  motion: {r['motion']}")
+            typer.echo(f"  materials and colours: {r['materials_colours']}")
+            typer.echo(f"  phrases: {'; '.join(json.loads(r['prompt_phrases_json']))}")
+            if r["owner_note"]:
+                typer.echo(f"  your note: {r['owner_note']}")
+
+
+@references_app.command("approve")
+def references_approve(
+    ref_id: Annotated[int, typer.Argument(help="The reference number from `list`.")],
+    note: Annotated[
+        str | None, typer.Option(help="Your own words about what to learn from it.")
+    ] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Approve a reference: its notes join the film rules for new scripts and restages."""
+    with _tracked_run("references approve", config_dir) as run:
+        references_stage.decide(_context(run, config_dir), ref_id, "approved", note)
+        typer.echo(f"#{ref_id} approved")
+
+
+@references_app.command("remove")
+def references_remove(
+    ref_id: Annotated[int, typer.Argument(help="The reference number from `list`.")],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Remove a reference: its notes no longer reach the prompts (the record is kept)."""
+    with _tracked_run("references remove", config_dir) as run:
+        references_stage.decide(_context(run, config_dir), ref_id, "removed")
+        typer.echo(f"#{ref_id} removed")
 
 
 @voice_app.command("audition")

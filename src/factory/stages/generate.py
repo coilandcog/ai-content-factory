@@ -31,6 +31,7 @@ from factory.integrations.gemini import GeminiClient
 from factory.media import diagrams, stills
 from factory.media.ffmpeg import probe
 from factory.prompts import render_prompt
+from factory.stages import references as references_stage
 from factory.stages import script as script_stage
 from factory.stages import voice
 from factory.stages.voice import Synthesizer, asset_dir
@@ -237,6 +238,7 @@ def restage(
         hero_look=hero_look,
         hero_look_words=script_stage.HERO_LOOK_WORDS,
         benchmarks=script_stage.benchmark_examples(ctx),
+        references=references_stage.approved_for_prompts(ctx),
     )
     llm = llm or script_stage.gemini_client(ctx)
     plan = llm.generate_json(

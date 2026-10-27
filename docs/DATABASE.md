@@ -253,6 +253,21 @@ A manual post (`factory publish --manual`, D-072) is stored as `status = publish
 
 Flow credits are entered manually with `factory flow-log --credits 20`.
 
+### `reference_notes` (migration 002, D-100)
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | The number used by `factory references approve|remove` |
+| channel_id | INTEGER FK | |
+| kind | TEXT | `image` \| `video` |
+| original_name / path | TEXT | The file's name in the inbox; where it was moved (`data/references/NNNN_<name>`) |
+| sha256 | TEXT | UNIQUE per channel: the same file is never studied twice |
+| summary, lighting, camera, composition, motion, materials_colours | TEXT | Gemini's style notes |
+| prompt_phrases_json | TEXT | JSON list of 3–6 phrases for video prompts |
+| has_people | INTEGER | 0/1; the owner is warned |
+| owner_note | TEXT | The owner's own words, set when approving; counts most |
+| status | TEXT | `pending` \| `approved` \| `removed`; only `approved` reaches the prompts (newest 8) |
+| model, added_at, decided_at | TEXT | |
+
 ## 4. Content status lifecycle
 
 | Status | Meaning | Set by | Next |

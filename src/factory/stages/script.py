@@ -34,6 +34,7 @@ from factory.integrations.gemini import GeminiClient
 from factory.integrations.wikimedia import WikiSummary, article_title, page_summary
 from factory.prompts import render_prompt
 from factory.similarity import closest
+from factory.stages import references as references_stage
 from factory.stages.voice import asset_dir
 
 log = logging.getLogger("factory.script")
@@ -606,6 +607,7 @@ def _prompts(
         min_diagrams=schema.min_diagrams,
         hero_look_words=HERO_LOOK_WORDS,
         benchmarks=benchmark_examples(ctx),
+        references=references_stage.approved_for_prompts(ctx),
         reference=reference,
         feedback=feedback,
     )
