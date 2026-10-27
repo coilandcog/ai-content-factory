@@ -35,14 +35,14 @@
 - `factory generate --limit N` takes items in ID order; there is no option to pick one item.
 - Veo 3.1 Fast costs 20 Flow credits per 8 s clip, so 50 credits/day = 2 clips/day. A 4-clip item needs 2 days. Flow images cost 0 credits (owner's plan), so check compositions as images first.
 - Veo keeps one compact machine filling the frame consistent; it loses track of big scenes (whole vehicles, landscapes, flying/diving) — D-095. Head-on views of an inlet make flows run backwards; show flows side-on with a named screen direction — D-096.
-- QA cannot see picture content: #4 was built from FFmpeg test-pattern stand-ins. Check `data/inbox/flow/` holds real Flow clips.
+- QA cannot see picture content: #4 was built from FFmpeg test-pattern stand-ins. Check `data/inbox/flow/` holds real Flow clips. `factory clips review` (Gemini vision, D-097) catches big errors (wrong machine) but missed a subtle soft rotor.
 - VS Code's preview cannot play AAC audio; open renders through Windows Explorer.
 
 ## Current state (Claude rewrites this at the end of every task)
 
 *Updated 2026-10-27 (benchmarks).*
 
-- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093; benchmark list D-094; close framing + image-first Flow sheet D-095; flow direction + `--restage N --shots` D-096 (branch `feat/flow-direction-partial-restage`, awaiting owner "commit"). **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
+- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093; benchmark list D-094; close framing + image-first Flow sheet D-095; flow direction + `--restage N --shots` D-096; clip review `factory clips review` D-097 = ROADMAP 2.13 done early (branch `feat/clip-review`, awaiting owner "commit"). **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
 - **Published:** #5 alternator (YouTube + TikTok), #6 turbocharger (YouTube `shorts/rtzPTV6B0KQ`; TikTok post not recorded yet).
 - **Real items:**
 

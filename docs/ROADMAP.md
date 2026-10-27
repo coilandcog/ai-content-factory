@@ -70,6 +70,7 @@ Before starting Phase 2, re-check OQ-2 (YouTube incentive programs) and §3 of `
 | 2.10 | Nightly Google Drive backup | The newest 14 backups are kept; no secrets in the zip | Download a backup and open the database with `sqlite3` |
 | 2.11 | `factory run-nightly` plus Windows Task Scheduler jobs (01:00, 02:30, 06:00) with how-to steps in `ops/windows/` | Jobs run with the laptop on and WSL closed | Check the next morning's Telegram messages and `runs` table |
 | 2.12 | **[Owner]** Turn on Docker Desktop's WSL integration for Ubuntu; optional n8n container that only calls the CLI | `docker run hello-world` works in WSL | Run that command |
+| 2.13 | Clip review: `factory clips review <id> [--shots N]` — Gemini watches each Flow clip and frame image and checks it against its prompt and the film rules. **Done early on 2026-10-27 (D-097), before 2.2** | A wrong or broken clip gets `fail` with the problems named; reviews are kept in `clip_review.json`; no status changes | Save a clip you know is wrong and one that is good, run the review, compare the verdicts |
 
 ## Phase 3: Fully automated (months 4–6, about 15 h)
 

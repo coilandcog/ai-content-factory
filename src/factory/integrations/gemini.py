@@ -26,6 +26,15 @@ log = logging.getLogger("factory.gemini")
 
 TIMEOUT_MS = 30_000
 MAX_ATTEMPTS = 4  # 1 try + 3 retries, waiting 2 s, 4 s and 8 s (plus up to 1 s of jitter)
+# A file sent inside the request (no upload step) keeps the whole request under Gemini's 20 MB.
+MAX_INLINE_BYTES = 18 * 1024 * 1024
+
+
+class Media(BaseModel):
+    """An image or video sent along with the prompt (clip review, D-097)."""
+
+    data: bytes
+    mime_type: str
 
 
 class GeminiClient:
@@ -54,16 +63,28 @@ class GeminiClient:
         )
 
     def generate_json[M: BaseModel](
-        self, *, system: str, prompt: str, schema: type[M], max_reasks: int = 1
+        self,
+        *,
+        system: str,
+        prompt: str,
+        schema: type[M],
+        max_reasks: int = 1,
+        media: Media | None = None,
     ) -> M:
         """Return Gemini's answer as a `schema` object.
 
         If the JSON doesn't match the schema, ask again (up to `max_reasks` times) with the
-        validation errors appended; still no match raises IntegrationError.
+        validation errors appended; still no match raises IntegrationError. `media` (an image or
+        a short video) is sent with every attempt.
         """
+        if media is not None and len(media.data) > MAX_INLINE_BYTES:
+            raise IntegrationError(
+                f"the file is {len(media.data) / 1e6:.0f} MB; at most "
+                f"{MAX_INLINE_BYTES / 1e6:.0f} MB can be sent to Gemini"
+            )
         request = prompt
         for attempt in range(max_reasks + 1):
-            text = self._send(system, request, schema)
+            text = self._send(system, request, schema, media)
             try:
                 return schema.model_validate_json(text)
             except ValidationError as exc:
@@ -84,7 +105,9 @@ class GeminiClient:
                 )
         raise AssertionError("unreachable")
 
-    def _send(self, system: str, prompt: str, schema: type[BaseModel]) -> str:
+    def _send(
+        self, system: str, prompt: str, schema: type[BaseModel], media: Media | None = None
+    ) -> str:
         """One logical request, retried on RetryableError only (429, 5xx, network)."""
         retrying = Retrying(
             retry=retry_if_exception_type(RetryableError),
@@ -102,17 +125,22 @@ class GeminiClient:
         )
         for attempt in retrying:
             with attempt:
-                return self._attempt(system, prompt, schema)
+                return self._attempt(system, prompt, schema, media)
         raise AssertionError("unreachable: Retrying either returns or raises")
 
-    def _attempt(self, system: str, prompt: str, schema: type[BaseModel]) -> str:
+    def _attempt(
+        self, system: str, prompt: str, schema: type[BaseModel], media: Media | None
+    ) -> str:
         self._before_call()  # may raise BudgetExceededError, which is never retried
         log.debug("Gemini prompt (%s): %s", self.model, prompt)
         started = time.monotonic()
         try:
             response = self._sdk.models.generate_content(
                 model=self.model,
-                contents=prompt,
+                # Text only stays a plain string; a file goes first, then the instructions.
+                contents=prompt
+                if media is None
+                else [types.Part.from_bytes(data=media.data, mime_type=media.mime_type), prompt],
                 config=types.GenerateContentConfig(
                     system_instruction=system,
                     response_mime_type="application/json",

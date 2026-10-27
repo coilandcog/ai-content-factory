@@ -12,8 +12,10 @@
 3. For each shot below, **image first (0 credits), then video (20 credits)**:
    - **Step 1, image:** switch Flow to image (9:16), paste the shot's *Frame* prompt and generate. Check it: is the
      machine whole, in the right place, polished, with no text, logos or people? If not, generate again: images are free.
+     To have Gemini check it too, save it as `frame_NN.png` in the inbox and run `uv run factory clips review {{ item.id }}`.
    - **Step 2, video:** use the good image as the start frame (**Frames to video**), paste the shot's *Video* prompt and
-     generate with {{ flow_model }}. Check the clip (physics look right), then download it.
+     generate with {{ flow_model }}. Check the clip (physics look right), then download it. After saving it,
+     `uv run factory clips review {{ item.id }} --shots NN` checks direction, motion and blur.
 4. Save each download with exactly this name into the inbox folder:
    `{{ inbox_windows }}\shot_NN.mp4` (NN = the shot number below, e.g. `shot_02.mp4`).
 5. Log the credits you spent: `uv run factory flow-log --credits <N>`

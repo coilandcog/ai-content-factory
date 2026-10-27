@@ -1,0 +1,20 @@
+{% if kind == "clip" %}This is an 8-second video clip{% else %}This is the opening frame image of a clip, made to check the composition before the video{% endif %}, the "{{ beat }}" shot of a film about: {{ object }}.
+
+It was made from this prompt:
+"""
+{{ shot_prompt }}
+"""
+
+Check it against the prompt and these rules. Every broken rule is a problem:
+1. The machine is the one described: whole, real proportions, real parts, nothing invented, extra or distorted.
+2. It is in exactly the place the prompt names{% if kind == "clip" %}, and the place never changes during the clip{% endif %}; the machine fills at least half of the frame.
+{% if kind == "clip" %}3. Every flow (air, fluid, current, heat, flames) moves only in the direction the prompt describes; nothing comes out of the wrong opening; flames and hot gas appear only where they really are.
+4. The motion is smooth and physically believable; spinning parts are sharp, not a blur; no morphing or flickering parts.
+5. The camera moves as the prompt describes (several smooth angles), without a cut that breaks the shot.
+{% else %}3. The camera angle matches the first angle the prompt describes.
+4. A cutaway or flow shot shows the machine from the side, cut open along its length, not head-on into an opening.
+{% endif %}6. The finish is brand-new and polished (no rust, dirt or wear).
+7. No text, numbers, logos, brand names, flags, people, hands or faces, and nothing military.
+
+verdict: "fail" if any problem would make a viewer who knows engineering doubt the video, else "pass".
+score: 1-10 for overall quality. fix: the most useful change to the prompt{% if kind == "clip" %} or the frame image{% endif %}, in one or two sentences.

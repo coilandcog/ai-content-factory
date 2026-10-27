@@ -117,7 +117,7 @@ def _write_sheet(ctx: AppContext, row: sqlite3.Row) -> Path:
     prompts = {
         s["n"]: _shot_prompt(ctx, row, s, aspect, end) for s, end in zip(shots, ends, strict=True)
     }
-    frame_prompts = {s["n"]: _frame_prompt(ctx, row, s, aspect) for s in shots}
+    frame_prompts = {s["n"]: frame_prompt(ctx, row, s, aspect) for s in shots}
     still_prompts = {s["n"]: _still_prompt(ctx, row, s, aspect) for s in _shots(script, "still")}
 
     folder = asset_dir(ctx, content_id)
@@ -241,7 +241,7 @@ def restage(
     return _write_sheet(ctx, row) if row["status"] == "awaiting_clips" else None
 
 
-def _frame_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> str:
+def frame_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> str:
     """The clip's opening frame as a Flow image (0 credits): the owner checks the composition
     before spending 20 credits on the video (D-095)."""
     v = shot["prompt_vars"]
@@ -328,9 +328,12 @@ def _collect(ctx: AppContext, row: sqlite3.Row) -> bool:
             problems.append(f"{path.name} {problem}")
         else:
             found[shot["n"]] = (path, info)
-    expected = {f"shot_{s['n']:02d}.mp4" for s in shots} | {
-        f"still_{s['n']:02d}{ext}" for s in _shots(script, "still") for ext in STILL_EXTENSIONS
-    }
+    expected = (
+        {f"shot_{s['n']:02d}.mp4" for s in shots}
+        | {f"still_{s['n']:02d}{ext}" for s in _shots(script, "still") for ext in STILL_EXTENSIONS}
+        # frame images for `factory clips review` (D-097)
+        | {f"frame_{s['n']:02d}{ext}" for s in shots for ext in STILL_EXTENSIONS}
+    )
     extras = sorted(p.name for p in inbox.glob("*") if p.is_file() and p.name not in expected)
     if extras:
         log.warning(

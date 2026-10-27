@@ -16,7 +16,7 @@ Each section is a **contract**: what we call, how we authenticate, the limits, a
 
 ---
 
-## 1. Gemini API (LLM): ideate, script, metadata
+## 1. Gemini API (LLM): ideate, script, metadata, clip review
 
 | Item | Contract | Verified |
 |---|---|---|
@@ -31,6 +31,7 @@ Each section is a **contract**: what we call, how we authenticate, the limits, a
 | Response | JSON validated against a Pydantic model (`IdeaBatch`, `ScriptDraft`, `PostMetadata`). On a validation error, an automatic re-ask with the error message (1 by default, 4 for scripts, D-083), then fail | ✔ |
 | Schema rules | Gemini's schema format rejects `exclusiveMinimum`/`exclusiveMaximum` (use `ge`/`le`, not `gt`/`lt`), and fields with defaults become optional, so Gemini leaves them out: make every field required. A unit test converts each schema with the SDK offline | ✔ 2026-10-23 |
 | Errors | 429, 5xx or network error → retry (§0); other 4xx → `IntegrationError`; empty or blocked answer → `IntegrationError` with the block or finish reason; quota exhausted for the day → `BudgetExceededError` → switch to the Ollama fallback for **metadata only** (scripts wait for the next day) | — |
+| Images and video (D-097) | `generate_json(..., media=Media(data=bytes, mime_type=...))` sends one image or video inside the request, before the prompt (no upload step; the SDK's `types.Part.from_bytes`). At most 18 MB per file (`gemini.MAX_INLINE_BYTES`; the request limit is 20 MB), refused before any call. An 8 s Flow clip is 3–6 MB. Used by `factory clips review`: 1 call per file, counted in `gemini_calls` | ✔ 2026-10-27: `gemini-3.5-flash-lite` watched a real 8 s Flow clip (#5 cutaway) in one call: its true prompt → pass 9/10; the #10 jet-engine flow prompt → fail 3/10, naming the alternator windings it saw. It missed the slightly soft rotor the owner noticed: big errors yes, subtle quality not reliably |
 | Privacy | Free-tier inputs may be used by Google to improve products. Send only public topic material, never secrets or personal data | ✔ (pricing page: "Used to improve our products: Yes") |
 
 **Free-tier limits for project `coil-and-cog` (AI Studio, 2026-10-23):**

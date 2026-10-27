@@ -46,6 +46,7 @@ from factory.media import ffmpeg, subtitles
 from factory.media.brand import build_brand_assets
 from factory.stages import assemble as assemble_stage
 from factory.stages import bot as bot_stage
+from factory.stages import clip_review as clip_review_stage
 from factory.stages import discover as discover_stage
 from factory.stages import generate as generate_stage
 from factory.stages import ideate as ideate_stage
@@ -76,6 +77,8 @@ music_app = typer.Typer(
 )
 app.add_typer(music_app, name="music")
 trends_app = typer.Typer(help="Google Trends CSV files you downloaded.", no_args_is_help=True)
+clips_app = typer.Typer(help="Check Flow clips and frame images with Gemini.", no_args_is_help=True)
+app.add_typer(clips_app, name="clips")
 app.add_typer(trends_app, name="trends")
 
 ConfigDirOption = Annotated[Path, typer.Option(help="Folder holding settings.yaml and channels/.")]
@@ -920,6 +923,27 @@ def flow_log(
 
 
 # --- voice ----------------------------------------------------------------------------------
+
+
+@clips_app.command("review")
+def clips_review(
+    content_id: Annotated[int, typer.Argument(help="The item whose clips to check.")],
+    shots: Annotated[str | None, typer.Option(help="Only these shots, e.g. '3' or '2,4'.")] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Gemini watches each clip (shot_NN.mp4) and frame image (frame_NN.png) and checks it
+    against its prompt and the film rules. Advice only: nothing changes status (D-097)."""
+    with _tracked_run("clips review", config_dir) as run:
+        ctx = _context(run, config_dir)
+        only = _shot_numbers(shots) if shots is not None else None
+        entries = clip_review_stage.review(ctx, content_id, only=only)
+        for e in entries:
+            typer.echo(f"{e['file']:<14} {e['verdict'].upper()} {e['score']}/10")
+            for problem in e["problems"]:
+                typer.echo(f"  - {problem}")
+            if e["fix"]:
+                typer.echo(f"  fix: {e['fix']}")
+        run.tally.processed = len(entries)
 
 
 @voice_app.command("audition")

@@ -67,6 +67,7 @@ Helper commands:
 - `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
 - `factory plan --week next|this`: fills the week's `cadence.weekly_plan` slots with the best unplanned ideas (no pillar 3 days in a row; hook type and beat order differ from the day before) and prints the plan; slots already planned are kept (D-080).
 - `factory generate --restage N [--shots 3|2,4]`: new film shots (Gemini) for an approved item that has no clips yet: the narration stays, the clip prompts and (for `awaiting_clips`) the Flow sheet are rewritten (D-092). With `--shots` only those clips are rewritten; the hero_look and the other clips stay (D-096).
+- `factory clips review <id> [--shots 3|2,4]`: Gemini watches each clip (`shot_NN.mp4`, in the inbox or the project's `clips/`) and frame image (`frame_NN.png/.jpg/.webp`, the free Flow image made first) and checks it against its prompt and the film rules: pass/fail, score 1–10, problems, fix. Advice only, no status change; every review is appended to `clip_review.json` (D-097).
 - `factory drop <id> --reason "..."`: drops an item that is not public yet: it becomes `archived` with the reason, and every stage ignores it (D-093).
 - `factory flow-log --credits N`: logs Flow credits you spent (refused above `budgets_per_day.flow_credits`).
 - `factory bot [--find-chat-id]`: the Telegram review bot for both gates, plus alerts (§3, task 2.1). `--find-chat-id` prints the chat id of whoever sent the bot a message, for `TELEGRAM_ALLOWED_CHAT_ID` in `.env`.
@@ -343,6 +344,7 @@ ai-content-factory/
 │   │   ├── script.py
 │   │   ├── voice.py              # voice audition + voice.wav (used by generate)
 │   │   ├── generate.py
+│   │   ├── clip_review.py        # Gemini watches clips and frame images (factory clips review, D-097)
 │   │   ├── assemble.py
 │   │   ├── review.py
 │   │   ├── bot.py                # Telegram review bot: both gates + alerts (factory bot)
