@@ -26,6 +26,11 @@ The vehicle never flies, drives or dives in a shot.
     Every angle stays close to the machine and in the scene's place.
   - end_frame: the final picture in a few words, e.g. "the pulley spinning in the engine bay" (not "The last frame
     shows..."). The next flow_clip starts from there, like a cut in a film, so the clips flow into each other.
+- Cutaway and Flow shots show the machine from the side, cut open along its length, so the inside and every flow
+  are seen across the screen. A flow names its screen direction ("air enters on the left and leaves on the right")
+  and moves only that way: nothing flows backwards or out of the wrong opening, and flames or hot gas appear only
+  where they really are. In these shots the camera never looks head-on into an inlet or outlet: from the front the
+  AI video model cannot tell in from out (it shot a jet engine's air and fire out of the intake).
 - Spinning parts (rotors, shafts, turbine and compressor wheels, fans) turn in smooth slow motion, so every blade,
   coil and edge stays sharp and detailed: in the channel's past videos the spinning parts came out soft and blurry.
 - Never military: show a civilian, research or commercial version (no weapons, no navy markings or warship look).

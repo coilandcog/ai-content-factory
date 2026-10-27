@@ -164,10 +164,18 @@ def _shot_prompt(
 RESTAGE_STATUSES = ("script_approved", "awaiting_clips")
 
 
-def restage(ctx: AppContext, content_id: int, llm: GeminiClient | None = None) -> Path | None:
+def restage(
+    ctx: AppContext,
+    content_id: int,
+    llm: GeminiClient | None = None,
+    only: tuple[int, ...] | None = None,
+) -> Path | None:
     """Ask Gemini for new film shots (hero_look + scene/camera/end_frame per flow_clip) for an
     approved script whose narration stays as approved. An item waiting for clips gets a new Flow
-    sheet at once (returned); a script_approved item gets it from the next `factory generate`."""
+    sheet at once (returned); a script_approved item gets it from the next `factory generate`.
+
+    `only` rewrites just those clips and keeps the hero_look and the other clips (D-096), so
+    clips the owner already made keep their prompts."""
     row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
     if row is None or row["status"] not in RESTAGE_STATUSES:
         raise FactoryError(
@@ -177,7 +185,19 @@ def restage(ctx: AppContext, content_id: int, llm: GeminiClient | None = None) -
     script = current_script(ctx, content_id)
     shots = json.loads(script["shot_list_json"])
     clips = tuple(s["n"] for s in shots if s["kind"] == "flow_clip")
-    schema = script_stage.visual_plan_schema(clips)
+    hero_look = None
+    if only is not None:
+        if not only or set(only) - set(clips):
+            raise FactoryError(f"--shots must name flow_clips of #{content_id}: {list(clips)}")
+        looks = {s["prompt_vars"].get("hero_look") for s in shots if s["kind"] == "flow_clip"}
+        if None in looks:
+            raise FactoryError(
+                f"#{content_id} has no film shots yet: run `factory generate --restage "
+                f"{content_id}` without --shots first"
+            )
+        hero_look = looks.pop()
+    redo = tuple(sorted(only)) if only is not None else clips
+    schema = script_stage.visual_plan_schema(redo, keep_look=only is not None)
     prompts_root = ctx.root / ctx.settings.paths.prompts_dir
     system = render_prompt("script_system", ctx.channel, prompts_root=prompts_root)
     user = render_prompt(
@@ -188,7 +208,8 @@ def restage(ctx: AppContext, content_id: int, llm: GeminiClient | None = None) -
         object=row["object_name"],
         narration=script["body_text"],
         shots=shots,
-        clip_numbers=clips,
+        clip_numbers=redo,
+        hero_look=hero_look,
         hero_look_words=script_stage.HERO_LOOK_WORDS,
         benchmarks=script_stage.benchmark_examples(ctx),
     )
@@ -197,13 +218,14 @@ def restage(ctx: AppContext, content_id: int, llm: GeminiClient | None = None) -
         system=system.text, prompt=user.text, schema=schema, max_reasks=script_stage.MAX_REASKS
     )
     visuals = {v.n: v for v in plan.shots}
+    look = hero_look or plan.hero_look.strip()
     for shot in shots:
-        if shot["kind"] != "flow_clip":
+        if shot["kind"] != "flow_clip" or shot["n"] not in visuals:
             continue
         v = visuals[shot["n"]]
         energy = shot["prompt_vars"].get("energy")
         shot["prompt_vars"] = {
-            "hero_look": plan.hero_look.strip(),
+            "hero_look": look,
             "scene": v.scene.strip(),
             "camera": v.camera.strip(),
             "end_frame": v.end_frame.strip(),
@@ -214,7 +236,7 @@ def restage(ctx: AppContext, content_id: int, llm: GeminiClient | None = None) -
             "UPDATE scripts SET shot_list_json = ? WHERE id = ?",
             (json.dumps(shots, ensure_ascii=False), script["id"]),
         )
-    log.info("#%s: new film shots for %d clips", content_id, len(clips),
+    log.info("#%s: new film shots for clips %s", content_id, list(redo),
              extra={"content_id": content_id, "event": "restaged"})  # fmt: skip
     return _write_sheet(ctx, row) if row["status"] == "awaiting_clips" else None
 

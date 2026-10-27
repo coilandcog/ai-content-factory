@@ -164,28 +164,40 @@ class ShotVisual(BaseModel):
     end_frame: str = Field(min_length=5)
 
 
-class VisualPlan(BaseModel):
-    """New film shots for an approved script's flow_clips; the narration stays (D-092)."""
+class ShotsPlan(BaseModel):
+    """New film shots for some flow_clips of an approved script; the narration and the
+    hero_look stay (D-096: `--restage N --shots 3`)."""
 
-    hero_look: str
     shots: list[ShotVisual]
 
     clip_numbers: ClassVar[tuple[int, ...]] = ()  # set per call by visual_plan_schema()
 
     @model_validator(mode="after")
-    def _matches_shot_list(self) -> VisualPlan:
-        problems = hero_look_problems(self.hero_look)
-        if (got := tuple(s.n for s in self.shots)) != self.clip_numbers:
-            problems.append(
-                f"shots are {list(got)}; give exactly the flow_clips {list(self.clip_numbers)}"
-            )
-        if problems:
+    def _matches_shot_list(self) -> ShotsPlan:
+        if problems := self._problems():
             raise ValueError("; ".join(problems))
         return self
 
+    def _problems(self) -> list[str]:
+        if (got := tuple(s.n for s in self.shots)) != self.clip_numbers:
+            return [f"shots are {list(got)}; give exactly the flow_clips {list(self.clip_numbers)}"]
+        return []
 
-def visual_plan_schema(clip_numbers: tuple[int, ...]) -> type[VisualPlan]:
-    model = create_model("VisualPlan_clips", __base__=VisualPlan)
+
+class VisualPlan(ShotsPlan):
+    """New film shots for all flow_clips of an approved script; the narration stays (D-092)."""
+
+    hero_look: str
+
+    def _problems(self) -> list[str]:
+        return hero_look_problems(self.hero_look) + super()._problems()
+
+
+def visual_plan_schema(
+    clip_numbers: tuple[int, ...], *, keep_look: bool = False
+) -> type[ShotsPlan]:
+    base = ShotsPlan if keep_look else VisualPlan
+    model = create_model(f"{base.__name__}_clips", __base__=base)
     model.clip_numbers = clip_numbers
     return model
 

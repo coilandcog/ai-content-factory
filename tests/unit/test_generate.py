@@ -384,3 +384,75 @@ def test_spinning_parts_are_asked_to_stay_sharp(ctx: AppContext) -> None:
     folder = voice.asset_dir(ctx, content_id)
     prompts = json.loads((folder / "flow_prompts.json").read_text())
     assert "Spinning parts turn in smooth slow motion, every blade and edge sharp" in prompts["1"]
+
+
+# --- restage only some clips (D-096) -------------------------------------------------------------
+
+
+def test_restage_of_chosen_clips_keeps_the_look_and_the_other_clips(ctx: AppContext) -> None:
+    content_id = approved_item(ctx)
+    run(ctx)
+    before = json.loads(ctx.conn.execute("SELECT shot_list_json FROM scripts").fetchone()[0])
+    redo = {
+        "shots": [
+            {
+                "n": 4,
+                "scene": "Side cutaway: blue air enters on the left and leaves right",
+                "camera": "side tracking shot",
+                "end_frame": "air leaving on the right",
+            }
+        ]
+    }
+    llm, sdk = fake_llm(ctx, json.dumps({"shots": VISUALS["shots"][:1]}), json.dumps(redo))
+
+    sheet = generate.restage(ctx, content_id, llm=llm, only=(4,))
+
+    asked = sdk.calls[0]["contents"]
+    assert "Write new scene, camera and end_frame only for the flow_clips 4" in asked
+    assert f'"""\n{LOOK}\n"""' in asked  # the look is given, not asked for
+    assert (
+        "- clip 2 (cutaway): The housing splits and the rotor spins It ends on: the rotor" in asked
+    )
+    assert "give exactly the flow_clips [4]" in sdk.calls[1]["contents"]
+    after = json.loads(ctx.conn.execute("SELECT shot_list_json FROM scripts").fetchone()[0])
+    assert [s for s in after if s["n"] != 4] == [s for s in before if s["n"] != 4]
+    assert after[3]["prompt_vars"] == {
+        "hero_look": LOOK, "scene": redo["shots"][0]["scene"], "camera": "side tracking shot",
+        "end_frame": "air leaving on the right", "energy": "electric",
+    }  # fmt: skip
+    prompts = json.loads((sheet.parent / "flow_prompts.json").read_text())
+    assert "nothing flows backwards or out of the wrong opening" in prompts["4"]  # flow beat
+    assert "nothing flows backwards" not in prompts["5"]
+    assert "ended on: air leaving on the right." in prompts["5"]  # the next clip follows it
+
+
+@pytest.mark.parametrize(
+    ("only", "problem"), [((3,), "--shots must name flow_clips"), ((), "--shots must name")]
+)
+def test_restage_refuses_shots_that_are_not_clips(
+    ctx: AppContext, only: tuple[int, ...], problem: str
+) -> None:
+    content_id = approved_item(ctx)
+    llm, sdk = fake_llm(ctx)
+
+    with pytest.raises(FactoryError, match=problem):
+        generate.restage(ctx, content_id, llm=llm, only=only)
+    assert sdk.calls == []
+
+
+def test_restage_of_chosen_clips_needs_film_shots_first(ctx: AppContext) -> None:
+    content_id = old_script(ctx)
+    llm, _ = fake_llm(ctx)
+
+    with pytest.raises(FactoryError, match="without --shots first"):
+        generate.restage(ctx, content_id, llm=llm, only=(4,))
+
+
+def test_shots_option_needs_restage(config_dir: Path) -> None:
+    opts = ["--config-dir", str(config_dir)]
+    CliRunner().invoke(app, ["db", "init", *opts])
+
+    result = CliRunner().invoke(app, ["generate", "--shots", "3", *opts])
+
+    assert result.exit_code == 1
+    assert "--shots only works together with --restage" in result.output

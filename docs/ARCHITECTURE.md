@@ -66,7 +66,7 @@ Helper commands:
 - `factory db init|migrate|backup`
 - `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
 - `factory plan --week next|this`: fills the week's `cadence.weekly_plan` slots with the best unplanned ideas (no pillar 3 days in a row; hook type and beat order differ from the day before) and prints the plan; slots already planned are kept (D-080).
-- `factory generate --restage N`: new film shots (Gemini) for an approved item that has no clips yet: the narration stays, the clip prompts and (for `awaiting_clips`) the Flow sheet are rewritten (D-092).
+- `factory generate --restage N [--shots 3|2,4]`: new film shots (Gemini) for an approved item that has no clips yet: the narration stays, the clip prompts and (for `awaiting_clips`) the Flow sheet are rewritten (D-092). With `--shots` only those clips are rewritten; the hero_look and the other clips stay (D-096).
 - `factory drop <id> --reason "..."`: drops an item that is not public yet: it becomes `archived` with the reason, and every stage ignores it (D-093).
 - `factory flow-log --credits N`: logs Flow credits you spent (refused above `budgets_per_day.flow_credits`).
 - `factory bot [--find-chat-id]`: the Telegram review bot for both gates, plus alerts (§3, task 2.1). `--find-chat-id` prints the chat id of whoever sent the bot a message, for `TELEGRAM_ALLOWED_CHAT_ID` in `.env`.

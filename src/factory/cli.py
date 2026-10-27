@@ -512,13 +512,20 @@ def generate(
             help="New film shots (Gemini) for this approved item's clips; the narration stays."
         ),
     ] = None,
+    shots: Annotated[
+        str | None,
+        typer.Option(help="With --restage: only these clips, e.g. '3' or '2,4'; the rest stay."),
+    ] = None,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
     """Write Flow sheets + voice for approved scripts, then collect finished clips (ROADMAP 1.6)."""
     with _tracked_run("generate", config_dir) as run:
         ctx = _context(run, config_dir)
+        if shots is not None and restage is None:
+            raise FactoryError("--shots only works together with --restage")
         if restage is not None:
-            sheet = generate_stage.restage(ctx, restage)
+            only = _shot_numbers(shots) if shots is not None else None
+            sheet = generate_stage.restage(ctx, restage, only=only)
             run.tally.processed = 1
             typer.echo(
                 f"#{restage}: new film shots. "
@@ -535,6 +542,13 @@ def generate(
             f"Moved forward: {result.processed}, waiting for clips: {result.skipped}, "
             f"failed: {result.failed}"
         )
+
+
+def _shot_numbers(text: str) -> tuple[int, ...]:
+    try:
+        return tuple(int(part) for part in text.split(",") if part.strip())
+    except ValueError:
+        raise FactoryError(f"--shots must be numbers like '3' or '2,4', not '{text}'") from None
 
 
 def assemble(

@@ -718,6 +718,9 @@ def test_script_prompt_asks_for_a_short_film() -> None:
     # D-095: Veo lost track of big scenes (#10's engine left its wing): close, parked, frame-filling
     assert "the machine fills at least half of the frame" in rules
     assert "The vehicle never flies, drives or dives in a shot." in rules
+    # D-096: from the front Veo shot a jet engine's air and fire out of the intake
+    assert "never looks head-on into an inlet or outlet" in rules
+    assert "nothing flows backwards or out of the wrong opening" in rules
     assert (
         "brand-new and\n  flawless" in rules and "no rust, dirt" in rules
     )  # premium look, no wear
