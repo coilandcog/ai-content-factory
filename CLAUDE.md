@@ -33,7 +33,8 @@
 - Source checks: 401/403/429 count as "page exists" only on Wikipedia (D-086); Gemini's guessed Wikipedia titles are replaced via Wikipedia search (D-087).
 - `factory status <id> --show script` NARRATION includes the Engineer's Note itself.
 - `factory generate --limit N` takes items in ID order; there is no option to pick one item.
-- Veo 3.1 Fast costs 20 Flow credits per 8 s clip, so 50 credits/day = 2 clips/day. A 4-clip item needs 2 days.
+- Veo 3.1 Fast costs 20 Flow credits per 8 s clip, so 50 credits/day = 2 clips/day. A 4-clip item needs 2 days. Flow images cost 0 credits (owner's plan), so check compositions as images first.
+- Veo keeps one compact machine filling the frame consistent; it loses track of big scenes (whole vehicles, landscapes, flying/diving) — D-095.
 - QA cannot see picture content: #4 was built from FFmpeg test-pattern stand-ins. Check `data/inbox/flow/` holds real Flow clips.
 - VS Code's preview cannot play AAC audio; open renders through Windows Explorer.
 
@@ -41,7 +42,7 @@
 
 *Updated 2026-10-27 (benchmarks).*
 
-- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093; benchmark list D-094 (branch `feat/benchmarks`, awaiting owner "commit"). **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
+- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093; benchmark list D-094; close framing + image-first Flow sheet D-095 (branch `feat/close-in-situ-frames`, awaiting owner "commit"). **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
 - **Published:** #5 alternator (YouTube + TikTok), #6 turbocharger (YouTube `shorts/rtzPTV6B0KQ`; TikTok post not recorded yet).
 - **Real items:**
 
@@ -49,7 +50,7 @@
 |---|---|---|---|---|
 | 5, 6 | alternator, turbocharger | short | published | `benchmarks` in the YAML (D-094); #6 TikTok link still to record |
 | 8 | CVT gearbox | short | awaiting_clips | old prompts: run `factory generate --restage 8` first; 4 clips |
-| 10 | jet engine | deep_dive | awaiting_clips | old prompts: `--restage 10` first; 3 clips; recommended next video |
+| 10 | jet engine | deep_dive | awaiting_clips | restaged 2026-10-27 (D-095); 3 clips (shots 2-4), image first; next video |
 | 9, 12, 13, 14 | differential, landing gear, tower crane, e-car motor | | idea | |
 | 1, 2, 3, 4, 7, 11 | | | rejected / failed / archived | history only (#4 zipper and #11 submarine dropped, D-093) |
 

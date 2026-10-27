@@ -711,10 +711,16 @@ def test_script_prompt_asks_for_a_short_film() -> None:
 
     assert "one short cinematic film" in rules and "end_frame" in rules
     assert "three smooth camera angles" in rules  # the owner wants 3 angles per clip
-    assert "a shot that starts underwater stays underwater" in rules  # #11: surfaced mid-clip
+    assert "The place never changes inside a clip." in rules  # #11: surfaced mid-clip
+    assert "Only the machine itself, never a place" in rules  # #10: studio look vs under the wing
     assert "the hero is the whole machine" in rules  # D-092: no invented stand-alone parts
     assert "Never military" in rules  # the blocklist bans warships, also in the pictures
-    assert "brand-new and flawless" in rules and "no rust, dirt" in rules  # premium look, no wear
+    # D-095: Veo lost track of big scenes (#10's engine left its wing): close, parked, frame-filling
+    assert "the machine fills at least half of the frame" in rules
+    assert "The vehicle never flies, drives or dives in a shot." in rules
+    assert (
+        "brand-new and\n  flawless" in rules and "no rust, dirt" in rules
+    )  # premium look, no wear
 
 
 def test_visual_plan_must_cover_exactly_the_clips() -> None:

@@ -117,6 +117,7 @@ def _write_sheet(ctx: AppContext, row: sqlite3.Row) -> Path:
     prompts = {
         s["n"]: _shot_prompt(ctx, row, s, aspect, end) for s, end in zip(shots, ends, strict=True)
     }
+    frame_prompts = {s["n"]: _frame_prompt(ctx, row, s, aspect) for s in shots}
     still_prompts = {s["n"]: _still_prompt(ctx, row, s, aspect) for s in _shots(script, "still")}
 
     folder = asset_dir(ctx, content_id)
@@ -126,7 +127,9 @@ def _write_sheet(ctx: AppContext, row: sqlite3.Row) -> Path:
     inbox = inbox_dir(ctx, content_id)
     inbox.mkdir(parents=True, exist_ok=True)
     sheet = folder / "flow_sheet.md"
-    sheet.write_text(_sheet_text(ctx, row, script, shots, prompts, inbox, still_prompts))
+    sheet.write_text(
+        _sheet_text(ctx, row, script, shots, prompts, frame_prompts, inbox, still_prompts)
+    )
     replace_assets(ctx, content_id, "flow_sheet", [{"path": sheet, "generator": "factory"}])
     return sheet
 
@@ -216,6 +219,22 @@ def restage(ctx: AppContext, content_id: int, llm: GeminiClient | None = None) -
     return _write_sheet(ctx, row) if row["status"] == "awaiting_clips" else None
 
 
+def _frame_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> str:
+    """The clip's opening frame as a Flow image (0 credits): the owner checks the composition
+    before spending 20 credits on the video (D-095)."""
+    v = shot["prompt_vars"]
+    return render_prompt(
+        "flow_frame",
+        ctx.channel,
+        prompts_root=ctx.root / ctx.settings.paths.prompts_dir,
+        object=row["object_name"],
+        aspect=aspect,
+        hero_look=v["hero_look"],
+        scene=v["scene"],
+        camera=v["camera"],
+    ).text.strip()
+
+
 def _still_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> str:
     return render_prompt(
         "still_image",
@@ -234,6 +253,7 @@ def _sheet_text(
     script: sqlite3.Row,
     shots: list[dict],
     prompts: dict[int, str],
+    frame_prompts: dict[int, str],
     inbox: Path,
     still_prompts: dict[int, str],
 ) -> str:
@@ -245,7 +265,9 @@ def _sheet_text(
         prompts_root=ctx.root / ctx.settings.paths.prompts_dir,
         item=row,
         narration_s=round(script["est_duration_s"] or 0),
-        shots=[{**s, "prompt": prompts[s["n"]]} for s in shots],
+        shots=[
+            {**s, "prompt": prompts[s["n"]], "frame_prompt": frame_prompts[s["n"]]} for s in shots
+        ],
         flow_model=FLOW_MODEL,
         credits_needed=len(shots) * FLOW_CREDITS_PER_CLIP,
         credits_left=max(budget - used, 0),

@@ -9,7 +9,11 @@
 
 1. Open flow.google.com with the channel account. In **Agent settings**, set video to **9:16** and **x1** (x2 makes two clips and costs double).
 2. Choose the model **{{ flow_model }}**.
-3. For each shot below: copy the prompt, generate, check it (no text, logos, hands or faces; physics look right), then download it.
+3. For each shot below, **image first (0 credits), then video (20 credits)**:
+   - **Step 1, image:** switch Flow to image (9:16), paste the shot's *Frame* prompt and generate. Check it: is the
+     machine whole, in the right place, polished, with no text, logos or people? If not, generate again: images are free.
+   - **Step 2, video:** use the good image as the start frame (**Frames to video**), paste the shot's *Video* prompt and
+     generate with {{ flow_model }}. Check the clip (physics look right), then download it.
 4. Save each download with exactly this name into the inbox folder:
    `{{ inbox_windows }}\shot_NN.mp4` (NN = the shot number below, e.g. `shot_02.mp4`).
 5. Log the credits you spent: `uv run factory flow-log --credits <N>`
@@ -22,6 +26,14 @@ Flow makes {{ clip_seconds }}-second clips; the edit uses the first seconds of e
 
 Save as: `shot_{{ "%02d" | format(shot.n) }}.mp4`
 
+**Frame (image, 0 credits):**
+
+```text
+{{ shot.frame_prompt }}
+```
+
+**Video ({{ flow_model }}, start frame = the image above):**
+
 ```text
 {{ shot.prompt }}
 ```
@@ -30,9 +42,9 @@ Save as: `shot_{{ "%02d" | format(shot.n) }}.mp4`
 
 ## Optional: still images ({{ stills | length }})
 
-These shots are slow zooms over a still picture. **You don't have to make them:** if no image is in the
-inbox, the factory uses the sharpest frame of one of your clips. If you have spare credits, generate an
-image in Flow (9:16) and save it as `still_NN.png` (or .jpg/.webp) next to the clips.
+These shots are slow zooms over a still picture. Images cost **0 credits** in Flow, so make them: generate the
+image in Flow (9:16) and save it as `still_NN.png` (or .jpg/.webp) next to the clips. If no image is in the
+inbox, the factory uses the sharpest frame of one of your clips instead.
 {% for still in stills %}
 
 ### Still {{ "%02d" | format(still.n) }}: {{ still.beat }} ({{ still.duration_s }} s in the edit)

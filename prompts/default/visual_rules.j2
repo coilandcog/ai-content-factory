@@ -1,22 +1,29 @@
 Visual plan: the flow_clips are the shots of one short cinematic film about the machine, in the order of the
 beats: Studio = the machine alone on a dark set; Cutaway = its casing or hull opens along a clean cut to show the real
 inner parts working; Flow = glowing light traces show how electricity (cyan), heat (amber) or fluid and air (blue)
-move through the real parts; In situ = the machine working in its real place (a road, a runway, the ocean, a factory).
+move through the real parts; In situ = the machine where it is mounted, on a vehicle or in a plant that stands still
+(the engine pod under a parked airliner's wing at dusk, the alternator in an open engine bay, a crane on a quiet building
+site), as a tight cinematic close-up with mood (runway lights, haze, reflections) where the machine fills the frame.
+The vehicle never flies, drives or dives in a shot.
+- Frame every shot like a product film: the machine fills at least half of the frame in every camera angle. Never a
+  whole vehicle in a big landscape, never a wide establishing shot: the AI video model loses track of where the parts
+  of a big scene are (it drew an engine away from its wing and a submarine that surfaced mid-shot).
 - hero_look ({{ hero_look_words[0] }}-{{ hero_look_words[1] }} words): exactly how this machine looks, written once and repeated in every clip
   so the AI video model draws the same machine every time: a real, typical example (type and size), its shape,
-  materials, colours and its setting. Never a fantasy design. The finish is brand-new and flawless, like a premium
-  product film: smooth, polished surfaces with crisp reflections; no rust, dirt, stains, salt, weathering or wear. Describe the setting precisely
-  and only one setting (e.g. "fully submerged in deep water, no water surface in view"); never mix in details from
-  another place (a waterline, salt spray, a dock) that the model could draw instead.
+  materials and colours. Only the machine itself, never a place, a pedestal or a background: each scene names its own
+  place, and a place in the hero_look would contradict it. Never a fantasy design. The finish is brand-new and
+  flawless, like a premium product film: smooth, polished surfaces with crisp reflections; no rust, dirt, stains,
+  salt, weathering or wear.
   When the topic is a system inside a bigger machine (a cooling circuit, a gearbox), the hero is the whole machine
   (the engine, the car) and the cutaway shots go inside it. A pedestal is only for a part small enough to carry.
 - every flow_clip has:
   - scene (40-80 words): one film shot in concrete physical detail: what we see, what moves and how, with real parts
-    and real proportions, and exactly where it is (underwater, on a road, in an engine bay). The place never changes
-    inside a clip: a shot that starts underwater stays underwater. The first flow_clip opens on motion.
+    and real proportions, and exactly one place, named precisely ("on a dark studio set", "under the wing of a parked
+    airliner at dusk", "in an open engine bay"). Never mix in details of another place that the model could draw
+    instead. The place never changes inside a clip. The first flow_clip opens on motion.
   - camera: three smooth camera angles that flow into each other, each with its lens, e.g. "opens on a wide shot on a
-    24 mm lens, glides into a low orbit around the hull, finishes on a close-up of the vents on an 85 mm lens".
-    Every angle stays in the scene's place.
+    35 mm lens, glides into a low orbit around the housing, finishes on a close-up of the pulley on an 85 mm lens".
+    Every angle stays close to the machine and in the scene's place.
   - end_frame: the final picture in a few words, e.g. "the pulley spinning in the engine bay" (not "The last frame
     shows..."). The next flow_clip starts from there, like a cut in a film, so the clips flow into each other.
 - Spinning parts (rotors, shafts, turbine and compressor wheels, fans) turn in smooth slow motion, so every blade,

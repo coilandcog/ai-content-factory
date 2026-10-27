@@ -143,7 +143,16 @@ def test_approved_script_gets_flow_sheet_inbox_and_voice(ctx: AppContext) -> Non
     assert (ctx.root / "data" / "inbox" / "flow" / "000001").is_dir()
     assert (folder / "voice.wav").is_file()
     assert len(assets(ctx, "flow_sheet")) == 1 and len(assets(ctx, "voiceover")) == 1
-    assert "You don't have to make them" in sheet and "Save as: `still_06.png`" in sheet
+    assert "Images cost **0 credits** in Flow, so make them" in sheet
+    assert "Save as: `still_06.png`" in sheet
+    # D-095: every clip gets a free opening-frame image to check before the 20-credit video
+    assert (
+        "image first (0 credits), then video (20 credits)" in sheet and "Frames to video" in sheet
+    )
+    assert sheet.count("**Frame (image, 0 credits):**") == len(CLIPS)
+    assert "the opening frame of a shot from a cinematic short film" in sheet
+    assert "Framing: the first camera angle of this shot: slow orbit to the right" in sheet
+    assert "The machine fills at least half of the frame." in sheet
     assert "product image of the alternator, vertical 9:16.\nHero view" in prompts["6"]
 
 
