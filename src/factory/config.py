@@ -215,6 +215,16 @@ class Gates(StrictModel):
     final: Literal["required"]
 
 
+class Benchmark(StrictModel):
+    """One of the owner's best videos: its Flow prompts are examples for new film shots (D-094)."""
+
+    content_id: PositiveInt
+    name: Text
+    good_shots: list[PositiveInt] = Field(min_length=1)
+    liked: Text
+    improve: Text | None = None
+
+
 class ChannelConfig(StrictModel):
     slug: KebabSlug
     display_name: Text
@@ -231,6 +241,8 @@ class ChannelConfig(StrictModel):
     budgets_per_day: Budgets
     scoring: Scoring
     gates: Gates
+    # Optional: the owner's best videos, newest additions last (D-094).
+    benchmarks: list[Benchmark] = Field(default_factory=list)
     prompts_dir: Path = Path("prompts/default")
 
     @model_validator(mode="after")

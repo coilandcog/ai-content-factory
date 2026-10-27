@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import shutil
 import subprocess
@@ -13,13 +14,13 @@ from typer.testing import CliRunner
 
 from factory.budgets import check_and_record
 from factory.cli import app
-from factory.config import REPO_ROOT, EnvSettings, load_channel, load_settings
+from factory.config import REPO_ROOT, Benchmark, EnvSettings, load_channel, load_settings
 from factory.context import AppContext
 from factory.db import add_content, connect, migrate, set_status, upsert_channel
 from factory.errors import BudgetExceededError, FactoryError
 from factory.integrations.gemini import GeminiClient
 from factory.media.ffmpeg import probe
-from factory.stages import generate
+from factory.stages import generate, voice
 
 pytestmark = pytest.mark.slow  # runs ffmpeg
 
@@ -335,3 +336,42 @@ def test_restage_refuses_an_item_that_already_has_its_clips(ctx: AppContext) -> 
     with pytest.raises(FactoryError, match="only approved scripts that have no clips yet"):
         generate.restage(ctx, content_id, llm=llm)
     assert sdk.calls == []
+
+
+# --- benchmarks (D-094) --------------------------------------------------------------------------
+
+
+def test_restage_shows_gemini_the_benchmark_prompts_and_notes(ctx: AppContext) -> None:
+    bench = Benchmark(content_id=5, name="alternator", good_shots=[1, 3], liked="the copper coils",
+                      improve="the rotor was blurry")  # fmt: skip
+    missing = Benchmark(content_id=6, name="turbocharger", good_shots=[1], liked="clean look")
+    ctx = dataclasses.replace(
+        ctx, channel=ctx.channel.model_copy(update={"benchmarks": [bench, missing]})
+    )
+    folder = voice.asset_dir(ctx, 5)
+    folder.mkdir(parents=True)
+    issued = {"1": "Create a premium 8-second video of the alternator", "2": "skip me",
+              "3": "Glowing cyan current surges\nthrough the stator"}  # fmt: skip
+    (folder / "flow_prompts.json").write_text(json.dumps(issued))
+    content_id = old_script(ctx)
+    llm, sdk = fake_llm(ctx, json.dumps(VISUALS))
+
+    generate.restage(ctx, content_id, llm=llm)
+
+    prompt = sdk.calls[0]["contents"]
+    assert "Benchmarks: the owner's best videos so far" in prompt
+    assert "- alternator. The owner liked: the copper coils. Do better than it: the rotor" in prompt
+    assert "Create a premium 8-second video of the alternator" in prompt
+    assert "Glowing cyan current surges\n  through the stator" in prompt  # indented example
+    assert "skip me" not in prompt  # only the good shots are examples
+    assert "- turbocharger. The owner liked: clean look." in prompt  # notes without a file
+
+
+def test_spinning_parts_are_asked_to_stay_sharp(ctx: AppContext) -> None:
+    content_id = approved_item(ctx)
+
+    run(ctx)
+
+    folder = voice.asset_dir(ctx, content_id)
+    prompts = json.loads((folder / "flow_prompts.json").read_text())
+    assert "Spinning parts turn in smooth slow motion, every blade and edge sharp" in prompts["1"]

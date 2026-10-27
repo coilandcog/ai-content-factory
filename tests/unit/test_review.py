@@ -59,7 +59,9 @@ def scripted_item(ctx: AppContext) -> int:
 def make_ctx(db_path: Path) -> AppContext:
     conn = connect(db_path)
     migrate(conn)
-    channel = load_channel("coil-and-cog")
+    channel = load_channel("coil-and-cog").model_copy(
+        update={"benchmarks": []}
+    )  # the repo root is the prompt root: never read the owner's real benchmark clips' prompts
     upsert_channel(conn, channel)
     env = EnvSettings(
         dry_run=True,

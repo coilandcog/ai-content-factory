@@ -108,6 +108,8 @@ These templates live in `prompts/default/` as Jinja2 files (a text-template form
 - The setting is named precisely and only once ("fully submerged in deep water, no water surface in view"): no details from another place (a waterline, a dock) that Veo could draw instead, because #11's first film shot surfaced mid-clip when the look mentioned "the waterline".
 - Per `flow_clip`: **`scene`** (40–80 words, one shot in concrete physical detail, in one place that never changes inside the clip), **`camera`** (**three smooth camera angles** that flow into each other, each with a lens; the owner's choice), **`end_frame`** (the final picture). The next clip's prompt starts with "This shot continues the film from the previous shot, which ended on: …", so the clips cut together like a film.
 - The beats still give the story order: Studio (the machine alone on a dark set) → Cutaway (the casing opens) → Flow (glowing energy) → In situ (the machine at work), in the script's `beat_order`.
+- **Benchmarks (D-094):** `benchmarks` in the channel YAML lists the owner's best videos (now #5 alternator and #6 turbocharger), with the shot numbers that worked, what the owner liked and what to do better. When Gemini writes film shots (new scripts and `--restage`), it gets those notes plus the **exact Flow prompts** of the good shots (read from each item's `flow_prompts.json`) as examples of the detail, motion and polish to match. Gemini can't watch the videos; the prompts that made them and the owner's notes are what it learns from. To add a benchmark, add an entry to the YAML (no code); a missing prompts file only gives a warning.
+- **Spinning parts** (rotors, shafts, turbine and compressor wheels, fans) turn in smooth slow motion so every blade stays sharp: in #5 and #6 the spinning parts were the weakest shots.
 - Approved scripts from before D-092 get their film shots with `factory generate --restage <id>`: the narration stays as approved, and only the clip prompts (and, for an item waiting for clips, the Flow sheet) are rewritten.
 
 ### 10.1 Shared closing block (`style_block.j2`), added to the end of every clip prompt
@@ -115,7 +117,7 @@ These templates live in `prompts/default/` as Jinja2 files (a text-template form
 The cyan and amber lights stay as the channel's signature, as accents on top of the scene's own realistic light (the owner's choice, D-092):
 
 ```
-Lighting: the scene's own realistic light plus the channel's signature accents, a cool cyan light on one side and a warm amber light on the other. Brand-new, flawless surfaces: smooth polished metal and clean paint with crisp, glossy reflections, no rust, dirt or wear, like a premium product film. Real proportions, shallow depth of field, sharp detail, photorealistic.
+Lighting: the scene's own realistic light plus the channel's signature accents, a cool cyan light on one side and a warm amber light on the other. Brand-new, flawless surfaces: smooth polished metal and clean paint with crisp, glossy reflections, no rust, dirt or wear, like a premium product film. Spinning parts turn in smooth slow motion, every blade and edge sharp, no motion blur. Real proportions, shallow depth of field, sharp detail, photorealistic.
 No logos, no text, no brand names, no people, no hands, no faces, no extra or distorted components.
 Sound: realistic mechanical sounds of the machine only; no music, no voices, no narration.
 ```

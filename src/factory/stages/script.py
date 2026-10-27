@@ -34,6 +34,7 @@ from factory.integrations.gemini import GeminiClient
 from factory.integrations.wikimedia import WikiSummary, article_title, page_summary
 from factory.prompts import render_prompt
 from factory.similarity import closest
+from factory.stages.voice import asset_dir
 
 log = logging.getLogger("factory.script")
 
@@ -62,6 +63,7 @@ CLIP_FIELDS: dict[str, tuple[str, ...]] = {
 }
 # The hero_look is repeated word for word in every clip prompt so Veo draws the same machine.
 HERO_LOOK_WORDS = (20, 80)
+FLOW_PROMPTS_FILE = "flow_prompts.json"  # the exact Flow prompts of an item (generate stage)
 MIN_DIAGRAMS = {"short": 2, "deep_dive": 4, "episode": 4}  # TESTING.md §4 QA rule
 MIN_CLIPS, MAX_CLIPS = 3, 5  # DESIGN_SYSTEM.md §10.5
 # Ask for 3 sources, keep the item if at least 2 open: one invented URL then costs nothing.
@@ -506,6 +508,28 @@ def _script_one(
                  f"{system.version}+{user.version}", match.score)  # fmt: skip
 
 
+def benchmark_examples(ctx: AppContext) -> list[dict[str, Any]]:
+    """The channel's benchmark videos with the exact Flow prompts of their good shots, for the
+    film rules (D-094). A benchmark whose prompts file is missing keeps only the owner's notes."""
+    examples = []
+    for bench in ctx.channel.benchmarks:
+        path = asset_dir(ctx, bench.content_id) / FLOW_PROMPTS_FILE
+        try:
+            issued = json.loads(path.read_text())
+        except (OSError, ValueError):
+            log.warning("benchmark #%s has no readable %s; using the notes only",
+                        bench.content_id, FLOW_PROMPTS_FILE,
+                        extra={"event": "benchmark_missing"})  # fmt: skip
+            issued = {}
+        examples.append({
+            "name": bench.name,
+            "liked": bench.liked,
+            "improve": bench.improve,
+            "prompts": [issued[str(n)] for n in bench.good_shots if str(n) in issued],
+        })  # fmt: skip
+    return examples
+
+
 def _eligible_ideas(ctx: AppContext, limit: int | None) -> list[sqlite3.Row]:
     # Items created by hand (factory new) have no score; the owner chose them, so they count.
     # Scored ideas from `factory ideate` wait until the weekly plan picks them (D-080).
@@ -569,6 +593,7 @@ def _prompts(
         max_clips=MAX_CLIPS,
         min_diagrams=schema.min_diagrams,
         hero_look_words=HERO_LOOK_WORDS,
+        benchmarks=benchmark_examples(ctx),
         reference=reference,
         feedback=feedback,
     )

@@ -19,5 +19,18 @@ move through the real parts; In situ = the machine working in its real place (a 
     Every angle stays in the scene's place.
   - end_frame: the final picture in a few words, e.g. "the pulley spinning in the engine bay" (not "The last frame
     shows..."). The next flow_clip starts from there, like a cut in a film, so the clips flow into each other.
+- Spinning parts (rotors, shafts, turbine and compressor wheels, fans) turn in smooth slow motion, so every blade,
+  coil and edge stays sharp and detailed: in the channel's past videos the spinning parts came out soft and blurry.
 - Never military: show a civilian, research or commercial version (no weapons, no navy markings or warship look).
 - No text, numbers, logos, brand names, flags, people, hands or faces in any shot.
+{% if benchmarks %}
+Benchmarks: the owner's best videos so far. Write every hero_look, scene and camera with the same level of concrete
+detail, motion and polish as their Flow prompts below, adapted to this machine and to the film rules above (never copy
+a detail that belongs to their machine).
+{% for b in benchmarks %}
+- {{ b.name }}. The owner liked: {{ b.liked }}.{% if b.improve %} Do better than it: {{ b.improve }}.{% endif %}
+{% for prompt in b.prompts %}  Example Flow prompt:
+  """
+  {{ prompt | indent(2) }}
+  """
+{% endfor %}{% endfor %}{% endif %}

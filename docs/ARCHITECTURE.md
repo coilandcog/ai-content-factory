@@ -131,7 +131,7 @@ Helper commands:
 Everything niche-specific is configuration. Code reads `config/settings.yaml` (global) plus one `config/channels/<slug>.yaml` per channel. Both are validated with Pydantic, a library that checks data against declared types. A new niche or channel means a new YAML file, a new set of prompt overrides (optional), new accounts, and `secrets/<slug>/` tokens. **No code changes.**
 
 `uv run factory config check` validates both files and prints a summary, or one readable error line per problem (file, key, reason). The models in `src/factory/config.py` enforce these rules (D-053):
-- Unknown keys are errors, so typos are caught. Every key in the shapes below is required except `prompts_dir` and `niche.wikipedia_articles` (whose keys must be seed topics).
+- Unknown keys are errors, so typos are caught. Every key in the shapes below is required except `prompts_dir`, `niche.wikipedia_articles` (whose keys must be seed topics) and `benchmarks` (each entry needs `content_id`, `name`, at least one `good_shots` number and `liked`; `improve` is optional).
 - The channel `slug` must match its file name; `timezone` must be a real time zone; times are `HH:MM`; colors are `#RRGGBB`; each format has `min_s < max_s`; `weekly_plan` may only use enabled formats.
 - **Policy guards:** `gates.final` only accepts `required` (Gate 2 is never removed) and `platforms.*.ai_disclosure` only accepts `true`. Loosening either needs a code change and a new decision, not a YAML edit.
 
@@ -234,6 +234,18 @@ scoring:
 gates:
   script: required             # required | batch_weekly (Phase 3 only; still a human decision)
   final: required              # always required
+
+benchmarks:                    # optional: the owner's best videos; their Flow prompts guide new film shots (D-094)
+  - content_id: 5
+    name: alternator
+    good_shots: [1, 2, 3, 4]
+    liked: "the whole video: current flowing through the copper coils, the engine-bay shot, smooth motion throughout"
+    improve: "the rotor spinning in the centre of the coils could be sharper and more detailed"
+  - content_id: 6
+    name: turbocharger
+    good_shots: [1, 2, 3, 4]
+    liked: "clean polished look, clear glowing heat and air flow"
+    improve: "the spinning turbine and compressor wheels were blurry"
 
 prompts_dir: prompts/coil-and-cog   # optional overrides; falls back to prompts/default
 ```

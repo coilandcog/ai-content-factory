@@ -52,7 +52,9 @@ def wiki_and_sources(dead: set[str] = frozenset(), found: bool = True) -> Callab
 def ctx(tmp_path: Path) -> AppContext:
     conn = connect(tmp_path / "test.db")
     migrate(conn)
-    channel = load_channel("coil-and-cog")
+    channel = load_channel("coil-and-cog").model_copy(
+        update={"benchmarks": []}
+    )  # the repo root is the prompt root: never read the owner's real benchmark clips' prompts
     upsert_channel(conn, channel)
     env = EnvSettings(
         dry_run=True,
@@ -405,7 +407,8 @@ def test_show_script_prints_every_part(config_dir: Path) -> None:
         factory_channel="coil-and-cog",
         wikimedia_user_agent="CoilAndCogTest/0.1 (https://example.org)",
     )
-    tmp_ctx = AppContext(load_settings(), env, load_channel("coil-and-cog"), conn, REPO_ROOT)
+    channel = load_channel("coil-and-cog").model_copy(update={"benchmarks": []})
+    tmp_ctx = AppContext(load_settings(), env, channel, conn, REPO_ROOT)
     run_stage(tmp_ctx, FakeGenaiClient(fixture_reply("script_short_alternator")))
     conn.close()
 

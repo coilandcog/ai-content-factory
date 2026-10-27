@@ -39,16 +39,15 @@
 
 ## Current state (Claude rewrites this at the end of every task)
 
-*Updated 2026-10-27.*
+*Updated 2026-10-27 (benchmarks).*
 
-- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093. **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
-- **Proposed, not started:** a benchmark list of the owner's best videos (#5 alternator, #6 turbo) fed into the film-shot prompts; waiting for the owner's go.
+- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093; benchmark list D-094 (branch `feat/benchmarks`, awaiting owner "commit"). **Next ROADMAP task: 2.2** (YouTube OAuth + one unlisted test upload).
 - **Published:** #5 alternator (YouTube + TikTok), #6 turbocharger (YouTube `shorts/rtzPTV6B0KQ`; TikTok post not recorded yet).
 - **Real items:**
 
 | # | Machine | Format | Status | Note |
 |---|---|---|---|---|
-| 5, 6 | alternator, turbocharger | short | published | owner's quality benchmarks; #6 TikTok link still to record |
+| 5, 6 | alternator, turbocharger | short | published | `benchmarks` in the YAML (D-094); #6 TikTok link still to record |
 | 8 | CVT gearbox | short | awaiting_clips | old prompts: run `factory generate --restage 8` first; 4 clips |
 | 10 | jet engine | deep_dive | awaiting_clips | old prompts: `--restage 10` first; 3 clips; recommended next video |
 | 9, 12, 13, 14 | differential, landing gear, tower crane, e-car motor | | idea | |

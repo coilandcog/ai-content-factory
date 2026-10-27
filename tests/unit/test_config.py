@@ -36,6 +36,7 @@ def test_real_config_is_valid() -> None:
     assert channel.llm.model == "gemini-3.5-flash-lite"
     assert len(channel.niche.seed_topics) == 26  # submarine ballast tanks dropped (D-093)
     assert channel.gates.final == "required"
+    assert [b.content_id for b in channel.benchmarks] == [5, 6]  # alternator, turbocharger (D-094)
 
 
 def test_missing_key_names_file_and_key(config_dir: Path) -> None:
@@ -66,6 +67,14 @@ def test_broken_yaml_reports_line_number(config_dir: Path) -> None:
         ({"cadence.weekly_plan.sat": "episode"}, "uses 'episode', which is not enabled"),
         ({"timezone": "Mars/Olympus"}, "unknown time zone 'Mars/Olympus'"),
         ({"brand.palette.bg": "blue"}, "brand.palette.bg"),
+        (
+            {"benchmarks": [{"content_id": 5, "name": "x", "good_shots": [], "liked": "y"}]},
+            "benchmarks[0].good_shots: List should have at least 1 item",
+        ),
+        (
+            {"benchmarks": [{"content_id": 5, "name": "x", "good_shots": [1], "likes": "y"}]},
+            "benchmarks[0].likes: Extra inputs are not permitted",
+        ),
     ],
 )
 def test_invalid_values_are_rejected(

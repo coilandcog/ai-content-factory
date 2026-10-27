@@ -43,7 +43,7 @@ FLOW_CLIP_SECONDS = 8
 MIN_CLIP_SECONDS = 3.0  # shorter files are almost certainly failed downloads
 ENERGY_COLORS = {"electric": "cyan", "heat": "amber", "fluid": "blue"}  # DESIGN_SYSTEM.md §3
 ENERGY_WORDS = {"electric": "electric current", "heat": "heat", "fluid": "fluid and air"}
-PROMPTS_FILE = "flow_prompts.json"  # the exact prompts issued, read back when clips arrive
+PROMPTS_FILE = script_stage.FLOW_PROMPTS_FILE  # the prompts issued, read back when clips arrive
 STILL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")  # optional owner images: still_NN.<ext>
 STILL_SAFE_AREA = "upper third and the lower quarter"  # where labels and subtitles go
 
@@ -187,6 +187,7 @@ def restage(ctx: AppContext, content_id: int, llm: GeminiClient | None = None) -
         shots=shots,
         clip_numbers=clips,
         hero_look_words=script_stage.HERO_LOOK_WORDS,
+        benchmarks=script_stage.benchmark_examples(ctx),
     )
     llm = llm or script_stage.gemini_client(ctx)
     plan = llm.generate_json(
