@@ -80,6 +80,10 @@ music_app = typer.Typer(
 app.add_typer(music_app, name="music")
 trends_app = typer.Typer(help="Google Trends CSV files you downloaded.", no_args_is_help=True)
 clips_app = typer.Typer(help="Check Flow clips and frame images with Gemini.", no_args_is_help=True)
+auth_app = typer.Typer(
+    help="Sign the channel in to YouTube (and later TikTok).", no_args_is_help=True
+)
+app.add_typer(auth_app, name="auth")
 metrics_app = typer.Typer(help="Video results: views, stayed-to-watch, ...", no_args_is_help=True)
 app.add_typer(metrics_app, name="metrics")
 references_app = typer.Typer(
@@ -958,6 +962,27 @@ def clips_review(
             if e["fix"]:
                 typer.echo(f"  fix: {e['fix']}")
         run.tally.processed = len(entries)
+
+
+@auth_app.command("youtube")
+def auth_youtube(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Sign in to YouTube as the channel: prints a link for your Windows browser, checks that the
+    account is the channel's own and saves the token in secrets/<channel>/ (D-102)."""
+    with _tracked_run("auth youtube", config_dir) as run:
+        channel = publish_stage.connect_youtube(_context(run, config_dir))
+        typer.echo(f"Signed in as {channel.title} ({channel.handle}). Token saved.")
+        run.tally.processed = 1
+
+
+@auth_app.command("test-upload")
+def auth_test_upload(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Upload the 1 s brand sting as an UNLISTED, AI-labelled test video (needs DRY_RUN=false).
+    Delete it in YouTube Studio afterwards."""
+    with _tracked_run("auth test-upload", config_dir) as run:
+        link = publish_stage.test_upload(_context(run, config_dir))
+        typer.echo(f"Uploaded (unlisted): {link}")
+        typer.echo("Check it in YouTube Studio > Content, then delete it there.")
+        run.tally.processed = 1
 
 
 @metrics_app.command("add")

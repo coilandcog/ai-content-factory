@@ -77,6 +77,7 @@ Helper commands:
 - `factory music add <file> --title ... [--artist ... --attribution ... --license-url ... --mood ...]` / `factory music list`: the YouTube Audio Library tracks used in YouTube renders (copied into `assets_static/music/youtube_audio_library/`, recorded in `music_tracks`, picked least-used first).
 - `factory brand build`: rebuilds `assets_static/logo/` (logo, avatar, stings) from the channel's `display_name` and `brand.palette`.
 - `factory publish --manual --id N`: prints the upload kit (render paths, YouTube title and description, TikTok caption, the AI-label steps). `factory publish --manual --id N --platform youtube|tiktok --url <link> --ai-label-on` records the live post in `posts`; the first one moves the item to `published` (D-072).
+- `factory auth youtube`: signs the channel in to YouTube (link for the Windows browser), checks the account is `@coilandcog` and saves the token in `secrets/<slug>/google_token.json`. `factory auth test-upload` (with `DRY_RUN=false`) uploads the brand sting **unlisted** and AI-labelled to prove the upload path; delete it in Studio afterwards (D-102).
 - `factory metrics add <id> --platform youtube|tiktok --checkpoint 24h|72h|7d|28d [--views --stayed --avd-pct --avd-s --likes --comments --shares --subs --watch-min]` / `factory metrics show <id>`: numbers copied by hand from YouTube Studio or TikTok into `metrics` (`source = manual`); entering a checkpoint again replaces only the numbers given. Learning from results starts before the Analytics API (D-101).
 - `factory references add|list|approve <n> [--note ...]|remove <n>`: the reference library: Gemini writes style notes (lighting, camera, composition, motion, materials, 3–6 prompt phrases) about images and clips you drop into `data/inbox/references/`; the files move to `data/references/` and are never used in a video; only notes you approve (newest 8) join the film rules for new scripts and restages (D-100).
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
@@ -299,7 +300,7 @@ From any non-terminal status, an item can move to `failed`. `factory retry` retu
 | Word timing | Kokoro's token timestamps, aligned to the script with `difflib` (D-065). `faster-whisper` (MIT, `small.en`, int8 on CPU) is the documented fallback for audio Kokoro didn't make (e.g. an owner-recorded Engineer's Note, D-040) | Exact for Kokoro audio by construction; no extra model or recognition errors |
 | Video | FFmpeg only (system; the binary is set in settings.yaml `tools`, Ubuntu's build with libass). MoviePy is not used (D-068) | One FFmpeg filter graph does the whole edit; libass burns the ASS subtitles |
 | Images | Pillow | Diagrams, logo, thumbnails |
-| Google APIs | `google-api-python-client`, `google-auth-oauthlib` | Official clients |
+| Google APIs | `google-api-python-client`, `google-auth-oauthlib` (added in task 2.2, D-102) for signed-in calls; discover's read-only calls stay plain httpx with the API key | Official clients |
 | Telegram | Bot API over `httpx` (`integrations/telegram_bot.py`; `python-telegram-bot` is not used, D-082) | Five plain calls with long polling, so no public server; the same retry rules and fakes as our other clients |
 | Tests and lint | pytest, ruff | Standard |
 
@@ -360,7 +361,8 @@ ai-content-factory/
 │   │   ├── ollama.py
 │   │   ├── http_json.py          # GET JSON with the shared retry rules; URLs never in errors
 │   │   ├── wikimedia.py
-│   │   ├── youtube.py            # Data API: search, upload, schedule
+│   │   ├── youtube.py            # Data API: search (API key); channel check, upload (OAuth)
+│   │   ├── youtube_auth.py       # Google sign-in: token in secrets/<slug>/ (D-102)
 │   │   ├── youtube_analytics.py
 │   │   ├── tiktok.py             # inbox upload + display API
 │   │   ├── telegram_bot.py

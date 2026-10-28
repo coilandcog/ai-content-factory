@@ -87,13 +87,13 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 | Item | Contract | Verified |
 |---|---|---|
 | Auth (discover) | API key `YOUTUBE_API_KEY` for public read-only calls (`search.list`, `videos.list`). This is available from Phase 1 without OAuth | ✔ |
-| Auth (publish) | OAuth 2.0 "Desktop app" client from the channel's Google Cloud project. The client file goes in `secrets/<slug>/google_client_secret.json`; the token is stored in `secrets/<slug>/google_token.json`. Scopes: `youtube.upload`, `youtube.readonly`, `yt-analytics.readonly`, `drive.file` | ✔ |
+| Auth (publish) | OAuth 2.0 "Desktop app" client from the channel's Google Cloud project. The client file goes in `secrets/<slug>/google_client_secret.json`; the token is stored in `secrets/<slug>/google_token.json` (chmod 600, never printed). Scopes: `youtube.upload`, `youtube.readonly`, `yt-analytics.readonly`, asked once. **`drive.file` can't be asked together with YouTube scopes** (Google: "This request contains scopes that cannot be requested together", Error 400, 2026-10-28), so the Drive backup (§10, task 2.10) needs its own sign-in and token file. `factory auth youtube` (`integrations/youtube_auth.sign_in`, `google-auth-oauthlib` `InstalledAppFlow.run_local_server(port=8765, open_browser=False)`) prints the link for the Windows browser; WSL forwards `localhost:8765`. Before saving, `channels.list(mine=true)` must return the YAML handle (`@coilandcog`, case-insensitive), else the token is not saved. An expired token is renewed and saved again; a missing scope or a refused renewal asks to sign in again (D-102) | ✔ 2026-10-28: owner signed in from the Windows browser through WSL's localhost forwarding; token saved for @coilandcog |
 | Consent screen | User type "External". Branding needs app name, support email, **homepage URL and privacy-policy URL** (`https://coilandcog.github.io/`, `/privacy.html`; authorized domain `coilandcog.github.io`) before publishing. **Publishing status "In production"** (an unverified app is fine for the owner's own account: click through the "unverified app" warning). While in "Testing", refresh tokens expire after 7 days | Confirm in task 2.2 |
 | Quota | Default project quota is 10,000 units/day. `videos.insert` costs **1 unit in the separate "Video Uploads" bucket**. `search.list` costs 100 units; `videos.list` costs 1 unit | Upload cost ✔; others: confirm in Cloud Console in task 2.2 |
 | Unverified projects | The official page currently says uploads from unverified API projects are **not** forced to private | ✔ |
 | Discover calls (task 1.14, D-078) | `integrations/youtube.recent_popular_videos()`: `search.list(part=snippet, q=<topic>, type=video, order=viewCount, publishedAfter=<now−30d>, relevanceLanguage=en, maxResults=25)` (100 units), then `videos.list(part=statistics, id=<the 25 ids>)` (1 unit) for the view counts. Plain httpx with the API key as a query parameter; error messages and logs never contain the URL. Stored per topic: `video_views_median_30d` plus the top 5 titles in `raw_json`, as **inspiration signals** only. A topic is searched again when its data is older than ~7 days, oldest first, until `youtube_units` would be passed; Google's `quotaExceeded` also stops the YouTube part for the day. The `mostPopular` chart is not used yet | ✔ 2026-10-25: 27 searches, 2,727 units |
 | Upload | `videos.insert(part="snippet,status")`, resumable upload. Body: `snippet.title`, `snippet.description`, `snippet.tags`, `snippet.categoryId="28"`, `snippet.defaultLanguage="en"`; `status.privacyStatus="private"`, `status.publishAt=<UTC ISO>`, `status.selfDeclaredMadeForKids=false`, `status.containsSyntheticMedia=true` | `containsSyntheticMedia` ✔ |
-| Test uploads | Always `privacyStatus="unlisted"` or `"private"` without `publishAt` | — |
+| Test uploads | Always `privacyStatus="unlisted"` or `"private"` without `publishAt`. `factory auth test-upload` (needs `DRY_RUN=false` for that run) uploads `assets_static/logo/sting_1080x1920.mp4` with the privacy fixed in code to `unlisted` (`publish.TEST_PRIVACY`) and `containsSyntheticMedia=true`, via `youtube.upload()` (`google-api-python-client`, resumable `MediaFileUpload`). Quota errors (`quotaExceeded`, `uploadLimitExceeded`, `rateLimitExceeded`) → `BudgetExceededError`; other HTTP errors → `IntegrationError` with the reason; no automatic retry yet (2.3) | ✔ 2026-10-28: unlisted upload `dlkuQmBbQzA`, deleted by the owner |
 | Thumbnails | `thumbnails.set` for Episodes only. Needs a phone-verified channel | Confirm in task 2.8 |
 | Response stored | `posts.external_id = video.id`, `posts.url = https://youtu.be/<id>`, `posts.status = scheduled` | — |
 | Errors | `quotaExceeded` (403) → `BudgetExceededError`; `uploadLimitExceeded` → stop for the day and alert; 5xx → resumable retry | — |
@@ -102,7 +102,7 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 
 | Item | Contract | Verified |
 |---|---|---|
-| Auth | Same OAuth token, scope `yt-analytics.readonly` | ✔ |
+| Auth | Same OAuth token as uploads, scope `yt-analytics.readonly` (asked in `factory auth youtube`, D-102) | ✔ |
 | Call | `reports.query(ids="channel==MINE", startDate, endDate, metrics="views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained", dimensions="video", filters="video==<id>")` | Metric names: confirm in task 2.5 |
 | Stayed to watch | May not be available through the API. If not, it's read in YouTube Studio and entered with `factory metrics add --manual` | OQ-4 |
 | Schedule | Checkpoints at 24 h, 72 h, 7 days and 28 days after `published_at` | — |
@@ -164,7 +164,7 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 
 | Item | Contract |
 |---|---|
-| Auth | Same Google OAuth token, scope `drive.file` (only files the app created) |
+| Auth | A **separate** Google sign-in and token (e.g. `secrets/<slug>/google_drive_token.json`), scope `drive.file` (only files the app created): Google refuses it together with the YouTube scopes (D-102) |
 | Call | `files.create` (multipart) into folder `coil-and-cog-backups/`. Keeps the newest 14 and deletes older ones |
 | Payload | A `factory.db` snapshot made with SQLite's backup API (a consistent copy even while in use), plus a zip of `config/` and `prompts/`. **Never** `secrets/` or `.env` |
 

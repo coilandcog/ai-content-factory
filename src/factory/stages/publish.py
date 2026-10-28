@@ -1,8 +1,11 @@
 """Manual publishing (ROADMAP 1.12, D-072): the owner uploads by hand, the factory records it.
 
 `upload_kit()` prints what to paste into YouTube Studio and TikTok. `record_manual_post()` stores
-the live post in `posts` and moves the item to `published`. Nothing here calls a platform, so it
+the live post in `posts` and moves the item to `published`. Nothing there calls a platform, so it
 works with DRY_RUN on; API publishing comes in tasks 2.3 and 2.6.
+
+`connect_youtube()` signs the channel in (ROADMAP 2.2, D-102) and `test_upload()` proves the
+upload path with the brand sting, always unlisted.
 """
 
 from __future__ import annotations
@@ -10,13 +13,18 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from factory.budgets import check_and_record
 from factory.config import TikTokPlatform, YouTubePlatform
 from factory.context import AppContext
 from factory.db import set_status, upsert_platform_account
 from factory.errors import FactoryError
+from factory.integrations import youtube, youtube_auth
 from factory.stages import metadata
 from factory.stages.generate import windows_path
 from factory.stages.voice import asset_dir
@@ -204,3 +212,75 @@ def _account(ctx: AppContext, platform: str) -> YouTubePlatform | TikTokPlatform
     if not account.enabled:
         raise FactoryError(f"{platform} is disabled in the channel YAML")
     return account
+
+
+# --- YouTube sign-in and test upload (ROADMAP 2.2, D-102) ---------------------------------------
+
+# A test upload can never be public (CLAUDE.md rule 5): the privacy is fixed here, not passed in.
+TEST_PRIVACY = "unlisted"
+TEST_TITLE = "Coil & Cog API test - delete me"
+TEST_VIDEO = "logo/sting_1080x1920.mp4"
+
+
+def connect_youtube(
+    ctx: AppContext,
+    *,
+    sign_in: Callable[[Path], Any] = youtube_auth.sign_in,
+    builder: Callable[..., Any] = youtube.build,
+) -> youtube.Channel:
+    """Sign in, check that the account is the channel's own, then save the token. A token for
+    another channel (a personal account picked by mistake) is never saved."""
+    secrets = ctx.root / ctx.settings.paths.secrets_dir
+    credentials = sign_in(youtube_auth.client_path(secrets, ctx.channel.slug))
+    channel = _signed_in_channel(ctx, credentials, builder)
+    youtube_auth.save_token(credentials, youtube_auth.token_path(secrets, ctx.channel.slug))
+    log.info("YouTube signed in as %s", channel.handle, extra={"event": "youtube_signed_in"})
+    return channel
+
+
+def test_upload(
+    ctx: AppContext,
+    *,
+    load: Callable[[Path], Any] = youtube_auth.load_credentials,
+    builder: Callable[..., Any] = youtube.build,
+) -> str:
+    """Upload the 1 s brand sting as an unlisted, AI-labelled test video; returns its link.
+    Needs DRY_RUN=false: it really changes the channel (the owner deletes the video after)."""
+    if ctx.env.dry_run:
+        raise FactoryError(
+            "DRY_RUN is on, so nothing is uploaded. For this one test run: "
+            "DRY_RUN=false uv run factory auth test-upload"
+        )
+    secrets = ctx.root / ctx.settings.paths.secrets_dir
+    credentials = load(youtube_auth.token_path(secrets, ctx.channel.slug))
+    api = youtube.service(credentials, builder=builder)
+    _signed_in_channel(ctx, credentials, builder, api=api)
+    video = ctx.root / ctx.settings.paths.assets_static_dir / TEST_VIDEO
+    if not video.is_file():
+        raise FactoryError(f"{video} is missing: run `uv run factory brand build`")
+    video_id = youtube.upload(
+        api, video,
+        title=TEST_TITLE,
+        description="Automatic upload test of the Coil & Cog factory. Made with AI.",
+        category_id=ctx.channel.platforms.youtube.category_id,
+        privacy=TEST_PRIVACY,
+        before_call=lambda units: check_and_record(ctx.conn, ctx.channel, "youtube_data", units),
+    )  # fmt: skip
+    log.info("test upload %s (%s)", video_id, TEST_PRIVACY, extra={"event": "youtube_test_upload"})
+    return f"https://youtu.be/{video_id}"
+
+
+def _signed_in_channel(
+    ctx: AppContext, credentials: Any, builder: Callable[..., Any], *, api: Any = None
+) -> youtube.Channel:
+    api = api or youtube.service(credentials, builder=builder)
+    channel = youtube.my_channel(
+        api, before_call=lambda u: check_and_record(ctx.conn, ctx.channel, "youtube_data", u)
+    )
+    expected = ctx.channel.platforms.youtube.handle.lower()
+    if channel.handle != expected:
+        raise FactoryError(
+            f"signed in as {channel.handle or channel.title!r}, not {expected}: the token was "
+            "not saved. Run `uv run factory auth youtube` again and choose the Coil & Cog channel"
+        )
+    return channel
