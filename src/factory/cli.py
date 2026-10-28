@@ -50,6 +50,7 @@ from factory.stages import clip_review as clip_review_stage
 from factory.stages import discover as discover_stage
 from factory.stages import generate as generate_stage
 from factory.stages import ideate as ideate_stage
+from factory.stages import learn as learn_stage
 from factory.stages import metadata as metadata_stage
 from factory.stages import publish as publish_stage
 from factory.stages import references as references_stage
@@ -79,6 +80,8 @@ music_app = typer.Typer(
 app.add_typer(music_app, name="music")
 trends_app = typer.Typer(help="Google Trends CSV files you downloaded.", no_args_is_help=True)
 clips_app = typer.Typer(help="Check Flow clips and frame images with Gemini.", no_args_is_help=True)
+metrics_app = typer.Typer(help="Video results: views, stayed-to-watch, ...", no_args_is_help=True)
+app.add_typer(metrics_app, name="metrics")
 references_app = typer.Typer(
     help="Your reference library: style notes from images and clips you like.",
     no_args_is_help=True,
@@ -955,6 +958,50 @@ def clips_review(
             if e["fix"]:
                 typer.echo(f"  fix: {e['fix']}")
         run.tally.processed = len(entries)
+
+
+@metrics_app.command("add")
+def metrics_add(
+    content_id: Annotated[int, typer.Argument(help="The published item.")],
+    platform: Annotated[str, typer.Option(help="youtube | tiktok")],
+    checkpoint: Annotated[str, typer.Option(help="24h | 72h | 7d | 28d after publishing")],
+    views: Annotated[int | None, typer.Option(help="Views.")] = None,
+    stayed: Annotated[
+        float | None, typer.Option(help="Stayed to watch %, e.g. 56.8 (YouTube Shorts).")
+    ] = None,
+    avd_pct: Annotated[
+        float | None, typer.Option(help="Average percentage viewed, e.g. 133 (can pass 100).")
+    ] = None,
+    avd_s: Annotated[float | None, typer.Option(help="Average view duration in seconds.")] = None,
+    likes: Annotated[int | None, typer.Option()] = None,
+    comments: Annotated[int | None, typer.Option()] = None,
+    shares: Annotated[int | None, typer.Option()] = None,
+    subs: Annotated[int | None, typer.Option(help="Subscribers gained (YouTube).")] = None,
+    watch_min: Annotated[float | None, typer.Option(help="Watch time in minutes.")] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Store numbers you copied from YouTube Studio or TikTok for one checkpoint (D-101).
+    Entering the same checkpoint again replaces only the numbers you give."""
+    with _tracked_run("metrics add", config_dir) as run:
+        ctx = _context(run, config_dir)
+        numbers = learn_stage.Numbers(
+            views=views, stayed_to_watch_pct=stayed, avg_view_pct=avd_pct,
+            avg_view_duration_s=avd_s, likes=likes, comments=comments, shares=shares,
+            subscribers_gained=subs, watch_time_min=watch_min,
+        )  # fmt: skip
+        learn_stage.add_manual(ctx, content_id, platform, checkpoint, numbers)
+        typer.echo(learn_stage.show(ctx, content_id))
+        run.tally.processed = 1
+
+
+@metrics_app.command("show")
+def metrics_show(
+    content_id: Annotated[int, typer.Argument(help="The item.")],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Show every stored checkpoint of an item, per platform."""
+    with _tracked_run("metrics show", config_dir) as run:
+        typer.echo(learn_stage.show(_context(run, config_dir), content_id))
 
 
 @references_app.command("add")

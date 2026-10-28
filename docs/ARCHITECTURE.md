@@ -77,6 +77,7 @@ Helper commands:
 - `factory music add <file> --title ... [--artist ... --attribution ... --license-url ... --mood ...]` / `factory music list`: the YouTube Audio Library tracks used in YouTube renders (copied into `assets_static/music/youtube_audio_library/`, recorded in `music_tracks`, picked least-used first).
 - `factory brand build`: rebuilds `assets_static/logo/` (logo, avatar, stings) from the channel's `display_name` and `brand.palette`.
 - `factory publish --manual --id N`: prints the upload kit (render paths, YouTube title and description, TikTok caption, the AI-label steps). `factory publish --manual --id N --platform youtube|tiktok --url <link> --ai-label-on` records the live post in `posts`; the first one moves the item to `published` (D-072).
+- `factory metrics add <id> --platform youtube|tiktok --checkpoint 24h|72h|7d|28d [--views --stayed --avd-pct --avd-s --likes --comments --shares --subs --watch-min]` / `factory metrics show <id>`: numbers copied by hand from YouTube Studio or TikTok into `metrics` (`source = manual`); entering a checkpoint again replaces only the numbers given. Learning from results starts before the Analytics API (D-101).
 - `factory references add|list|approve <n> [--note ...]|remove <n>`: the reference library: Gemini writes style notes (lighting, camera, composition, motion, materials, 3–6 prompt phrases) about images and clips you drop into `data/inbox/references/`; the files move to `data/references/` and are never used in a video; only notes you approve (newest 8) join the film rules for new scripts and restages (D-100).
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
 - `factory retry <content_id>`
@@ -325,7 +326,8 @@ ai-content-factory/
 │   └── coil-and-cog/             # optional per-channel overrides
 ├── migrations/
 │   ├── 001_init.sql
-│   └── 002_reference_notes.sql
+│   ├── 002_reference_notes.sql
+│   └── 003_metrics_view_pct.sql
 ├── src/factory/
 │   ├── __init__.py
 │   ├── cli.py                    # Typer app: one command per stage

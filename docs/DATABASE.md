@@ -211,8 +211,8 @@ A manual post (`factory publish --manual`, D-072) is stored as `status = publish
 | source | TEXT | `api` \| `csv` \| `manual` |
 | views | INTEGER | |
 | avg_view_duration_s | REAL | |
-| avg_view_pct | REAL | 0–100 |
-| stayed_to_watch_pct | REAL | 0–100, NULL if unavailable |
+| avg_view_pct | REAL | 0–1000: YouTube Shorts pass 100 % when viewers rewatch (#5: 133 %; migration 003, D-101) |
+| stayed_to_watch_pct | REAL | 0–100, NULL if unavailable. Counts (views, likes, comments, shares, watch time) can't be negative |
 | likes / comments / shares | INTEGER | |
 | subscribers_gained | INTEGER | YouTube only |
 | watch_time_min | REAL | |
