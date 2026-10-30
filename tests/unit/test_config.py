@@ -37,6 +37,7 @@ def test_real_config_is_valid() -> None:
     assert len(channel.niche.seed_topics) == 26  # submarine ballast tanks dropped (D-093)
     assert channel.gates.final == "required"
     assert [b.content_id for b in channel.benchmarks] == [5, 6]  # alternator, turbocharger (D-094)
+    assert channel.video_prompts == "brief"  # the alternator-style prompts by default (D-105)
 
 
 def test_missing_key_names_file_and_key(config_dir: Path) -> None:

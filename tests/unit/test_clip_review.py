@@ -19,19 +19,25 @@ from factory.integrations.gemini import GeminiClient
 from factory.stages import clip_review, generate
 from factory.stages.voice import asset_dir
 
+STORY = {"style": "product", "start_picture": "the machine at rest", "continues": False}
+
 LOOK = "A compact car alternator with a ribbed aluminium housing and a steel pulley"
 SHOTS = [
     {"n": 1, "beat": "studio", "kind": "flow_clip", "description": "On a dark set",
      "duration_s": 8, "prompt_vars": {"hero_look": LOOK, "scene": "It turns on a dark set",
-                                      "camera": "orbit on a 50 mm lens", "end_frame": "pulley"}},
+                                      "camera": "orbit on a 50 mm lens",
+                                      **STORY, "end_frame": "pulley"}},
     {"n": 2, "beat": "cutaway", "kind": "diagram", "description": "Labels", "duration_s": 4,
      "prompt_vars": {}, "labels": ["Rotor"], "energy": "electric"},
     {"n": 3, "beat": "flow", "kind": "flow_clip", "description": "Current flows",
      "duration_s": 8, "prompt_vars": {"hero_look": LOOK, "energy": "electric",
                                       "scene": "Seen from the side, current flows left to right",
-                                      "camera": "side track", "end_frame": "the terminal"}},
+                                      "camera": "side track",
+                                      **STORY, "end_frame": "the terminal"}},
 ]  # fmt: skip
-ISSUED = {"1": "VIDEO PROMPT ONE", "3": "VIDEO PROMPT THREE: current flows left to right"}
+# images (D-104): shot 1 starts on image 1 and ends on image 2; shot 3 on images 3 and 4
+ISSUED = {"1": "VIDEO PROMPT ONE", "3": "VIDEO PROMPT THREE: current flows left to right",
+          "image_3": "IMAGE PROMPT THREE: the cutaway seen from the side"}  # fmt: skip
 PASS = {"verdict": "pass", "score": 8, "problems": [], "fix": ""}
 FAIL = {
     "verdict": "fail",
@@ -46,7 +52,9 @@ def ctx(tmp_path: Path) -> AppContext:
     shutil.copytree(REPO_ROOT / "prompts", tmp_path / "prompts")
     conn = connect(tmp_path / "test.db")
     migrate(conn)
-    channel = load_channel("coil-and-cog").model_copy(update={"benchmarks": []})
+    channel = load_channel("coil-and-cog").model_copy(
+        update={"benchmarks": [], "video_prompts": "story"}  # image chains (D-104)
+    )
     upsert_channel(conn, channel)
     env = EnvSettings(dry_run=True, factory_channel="coil-and-cog")
     yield AppContext(load_settings(), env, channel, conn, tmp_path)
@@ -93,7 +101,7 @@ def sent(call: dict) -> tuple[str, str]:
 
 def test_frame_and_clip_are_checked_against_their_prompts_and_kept(ctx: AppContext) -> None:
     content_id = waiting_item(ctx)
-    save(ctx, content_id, "frame_03.png")
+    save(ctx, content_id, "image_03.png")
     save(ctx, content_id, "shot_03.mp4")
     save(ctx, content_id, "shot_01.mp4")
     llm, sdk = fake_llm(ctx, PASS, PASS, FAIL)
@@ -101,14 +109,13 @@ def test_frame_and_clip_are_checked_against_their_prompts_and_kept(ctx: AppConte
     entries = clip_review.review(ctx, content_id, llm=llm)
 
     assert [(e["file"], e["verdict"]) for e in entries] == [
-        ("shot_01.mp4", "pass"), ("frame_03.png", "pass"), ("shot_03.mp4", "fail"),
-    ]  # fmt: skip  # shot order, the frame before its clip
+        ("shot_01.mp4", "pass"), ("image_03.png", "pass"), ("shot_03.mp4", "fail"),
+    ]  # fmt: skip  # shot order, a clip's images before the clip
     mime, text = sent(sdk.calls[2])
     assert mime == "video/mp4" and "VIDEO PROMPT THREE" in text
     assert "moves only in the direction the prompt describes" in text  # clip rules
     mime, text = sent(sdk.calls[1])
-    assert mime == "image/png" and "opening frame image" in text
-    assert "Framing: the first camera angle of this shot: side track" in text  # frame prompt
+    assert mime == "image/png" and "IMAGE PROMPT THREE" in text  # the image's own prompt
     assert "not head-on into an opening" in text  # frame rules
     assert entries[2]["problems"] == ["current flows out of the wrong end"]
     assert usage_today(ctx.conn, ctx.channel)["gemini"][0] == 3
@@ -119,7 +126,7 @@ def test_frame_and_clip_are_checked_against_their_prompts_and_kept(ctx: AppConte
     clip_review.review(ctx, content_id, only=(1,), llm=llm)
 
     history = json.loads((asset_dir(ctx, content_id) / "clip_review.json").read_text())
-    assert [e["file"] for e in history] == ["shot_01.mp4", "frame_03.png", "shot_03.mp4",
+    assert [e["file"] for e in history] == ["shot_01.mp4", "image_03.png", "shot_03.mp4",
                                             "shot_01.mp4"]  # fmt: skip
     assert len(history[0]["sha256"]) == 64 and history[0]["model"] == "gemini-3.5-flash-lite"
 
@@ -140,7 +147,9 @@ def test_nothing_to_review_names_the_files_to_save(ctx: AppContext) -> None:
     content_id = waiting_item(ctx)
     llm, sdk = fake_llm(ctx)
 
-    with pytest.raises(FactoryError, match="save frame_01.png / shot_01.mp4, frame_03.png"):
+    with pytest.raises(
+        FactoryError, match="save image_01.png / image_02.png / shot_01.mp4, image_03"
+    ):
         clip_review.review(ctx, content_id, llm=llm)
     assert sdk.calls == []
 
@@ -173,13 +182,13 @@ def test_frame_images_are_not_reported_as_unexpected_inbox_files(
     ctx: AppContext, caplog: pytest.LogCaptureFixture
 ) -> None:
     content_id = waiting_item(ctx)
-    save(ctx, content_id, "frame_01.png")
+    save(ctx, content_id, "image_01.png")
     save(ctx, content_id, "notes.txt")
 
     generate.run(ctx, tts=lambda: None)
 
     warning = next(r.message for r in caplog.records if "unexpected files" in r.message)
-    assert "notes.txt" in warning and "frame_01.png" not in warning
+    assert "notes.txt" in warning and "image_01.png" not in warning
 
 
 # --- prompt versions (D-098) ----------------------------------------------------------------------

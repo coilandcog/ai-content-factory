@@ -17,6 +17,7 @@ import os
 import shutil
 import sqlite3
 from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -31,6 +32,7 @@ from factory.integrations.gemini import GeminiClient
 from factory.media import diagrams, stills
 from factory.media.ffmpeg import probe
 from factory.prompts import render_prompt
+from factory.stages import lessons as lessons_stage
 from factory.stages import references as references_stage
 from factory.stages import script as script_stage
 from factory.stages import voice
@@ -45,6 +47,27 @@ FLOW_CLIP_SECONDS = 8
 MIN_CLIP_SECONDS = 3.0  # shorter files are almost certainly failed downloads
 ENERGY_COLORS = {"electric": "cyan", "heat": "amber", "fluid": "blue"}  # DESIGN_SYSTEM.md §3
 ENERGY_WORDS = {"electric": "electric current", "heat": "heat", "fluid": "fluid and air"}
+# Story shots (D-104): the camera rule of each style; None = Gemini's own camera moves (angles).
+STYLE_CAMERA = {
+    "product": None,
+    "open": "almost still: one slow, small move while the casing opens",
+    "explain": "locked off and completely still, like a tripod",
+    "close": "almost still: one slow, small move while the casing closes",
+    "installed": None,
+    "moving": (
+        "fixed to the vehicle and pointing at the part: the part stays still and large in the "
+        "frame while only the surroundings move past"
+    ),
+}
+STYLE_ANGLES = {"product": "three", "installed": "two or three gentle"}
+IMAGE_FILE = "image_{:02d}.png"  # the free Flow images the clips start and end on
+# Brief prompts (D-105): what each beat's clip is called in the alternator-style prompt.
+BRIEF_KIND = {
+    "studio": "product video",
+    "cutaway": "technical cutaway video",
+    "flow": "technical animation",
+    "in_situ": "video",
+}
 PROMPTS_FILE = script_stage.FLOW_PROMPTS_FILE  # the prompts issued, read back when clips arrive
 # Per prompt: its fingerprint and when it was first issued in this form, so a clip made from an
 # older prompt can be spotted (D-098). Keys: clip "3", frame image "frame_3".
@@ -111,33 +134,70 @@ def _write_sheet(ctx: AppContext, row: sqlite3.Row) -> Path:
             f"diagram shots {unlabelled} have no labels (script made before task 1.8): redo the "
             "script at Gate 1"
         )
-    if any("scene" not in s["prompt_vars"] for s in shots):
+    if any("style" not in s["prompt_vars"] for s in shots):
         raise FactoryError(
-            f"the script's clips have no film shots (made before D-092): run "
+            f"the script's clips have no story shots (made before D-104): run "
             f"`factory generate --restage {content_id}`"
         )
     aspect = getattr(ctx.channel.formats, row["format"]).aspect
-    # Each clip continues from the previous clip's last frame, like a cut in a film (D-092).
-    ends = [None] + [s["prompt_vars"]["end_frame"] for s in shots[:-1]]
+    brief = ctx.channel.video_prompts == "brief"
+    shots = _with_chained_starts(shots)
+    pictures, frames = images_for(ctx, shots)
+    images = [
+        {"number": p.number, "used_by": p.used_by,
+         "prompt": image_prompt(ctx, row, p.description, p.style, shots[0], aspect)}
+        for p in pictures
+    ]  # fmt: skip
     prompts = {
-        s["n"]: _shot_prompt(ctx, row, s, aspect, end) for s, end in zip(shots, ends, strict=True)
+        s["n"]: (_brief_prompt if brief else _shot_prompt)(ctx, row, s, aspect) for s in shots
     }
-    frame_prompts = {s["n"]: frame_prompt(ctx, row, s, aspect) for s in shots}
     still_prompts = {s["n"]: _still_prompt(ctx, row, s, aspect) for s in _shots(script, "still")}
 
     folder = asset_dir(ctx, content_id)
     folder.mkdir(parents=True, exist_ok=True)
-    all_prompts = {**prompts, **still_prompts}
+    image_prompts = {f"image_{i['number']}": i["prompt"] for i in images}
+    all_prompts = {**prompts, **still_prompts, **image_prompts}
     (folder / PROMPTS_FILE).write_text(json.dumps(all_prompts, indent=2, ensure_ascii=False))
-    _record_issued(folder, {**prompts, **{f"frame_{n}": p for n, p in frame_prompts.items()}})
+    _record_issued(folder, {**prompts, **image_prompts})
     inbox = inbox_dir(ctx, content_id)
     inbox.mkdir(parents=True, exist_ok=True)
     sheet = folder / "flow_sheet.md"
+    clips = [{**s, "start_image": frames[s["n"]][0], "end_image": frames[s["n"]][1]} for s in shots]
     sheet.write_text(
-        _sheet_text(ctx, row, script, shots, prompts, frame_prompts, inbox, still_prompts)
+        _sheet_text(ctx, row, script, clips, prompts, images, inbox, still_prompts, brief=brief)
     )
     replace_assets(ctx, content_id, "flow_sheet", [{"path": sheet, "generator": "factory"}])
     return sheet
+
+
+def _reopen_for_clips(ctx: AppContext, content_id: int, redo: tuple[int, ...]) -> None:
+    """Reshoot (D-107): the kept clips go back to the inbox, the redone ones are kept there as
+    old_shot_NN.mp4, renders and the QA report are removed, and the item waits for clips again."""
+    from factory.stages.review import REDO_REMOVES  # here: review imports this module's users
+
+    folder, inbox = asset_dir(ctx, content_id), inbox_dir(ctx, content_id)
+    inbox.mkdir(parents=True, exist_ok=True)
+    for clip in sorted((folder / "clips").glob("shot_*.mp4")):
+        n = int(clip.stem.split("_")[1])
+        target = inbox / (f"old_{clip.name}" if n in redo else clip.name)
+        if n in redo or not target.exists():
+            shutil.move(clip, target)
+    stale = [inbox / f"shot_{n:02d}.mp4" for n in redo]  # a redone shot's earlier inbox copy
+    for path in stale:
+        if path.exists():
+            path.replace(inbox / f"old_{path.name}")
+    with ctx.conn:
+        for kind, name in REDO_REMOVES.items():
+            ctx.conn.execute(
+                "DELETE FROM assets WHERE content_id = ? AND kind = ?", (content_id, kind)
+            )
+            (folder / name).unlink(missing_ok=True)
+        ctx.conn.execute(
+            "DELETE FROM assets WHERE content_id = ? AND kind = 'flow_clip'", (content_id,)
+        )
+        (folder / "qa_report.json").unlink(missing_ok=True)
+        set_status(ctx.conn, content_id, "awaiting_clips",
+                   reason=f"reshoot of shots {', '.join(map(str, redo))}")  # fmt: skip
 
 
 def _record_issued(folder: Path, prompts: dict) -> None:
@@ -160,12 +220,99 @@ def issued_prompts(ctx: AppContext, content_id: int) -> dict[str, dict]:
     return json.loads(path.read_text()) if path.is_file() else {}
 
 
-def _shot_prompt(
-    ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str, previous_end: str | None
-) -> str:
-    """One film shot (D-092): the shared hero_look, a continuation of the previous clip's last
-    frame, the scene, one camera move and this clip's last frame."""
+@dataclass(frozen=True)
+class Picture:
+    number: int
+    description: str
+    style: str
+    used_by: str
+
+
+def _with_chained_starts(shots: list[dict]) -> list[dict]:
+    """A clip that continues the story starts on the previous clip's end picture, so its own
+    start_picture is replaced by that end picture (the video prompt then names the same image)."""
+    out: list[dict] = []
+    for shot in shots:
+        v = shot["prompt_vars"]
+        if v.get("continues") and out:
+            v = {**v, "start_picture": out[-1]["prompt_vars"]["end_frame"]}
+        out.append({**shot, "prompt_vars": v})
+    return out
+
+
+def images_for(
+    ctx: AppContext, shots: list[dict]
+) -> tuple[list[Picture], dict[int, tuple[int, int]]]:
+    """The images to make and each clip's (start, end) image. Brief prompts (D-105) only use one
+    optional check image per clip (its start picture); story shots chain start and end images."""
+    if ctx.channel.video_prompts == "story":
+        return image_chain(shots)
+    pictures = [
+        Picture(i, s["prompt_vars"]["start_picture"], s["prompt_vars"]["style"],
+                f"check image for shot {s['n']}")
+        for i, s in enumerate(shots, 1)
+    ]  # fmt: skip
+    return pictures, {s["n"]: (i, i) for i, s in enumerate(shots, 1)}
+
+
+def image_chain(shots: list[dict]) -> tuple[list[Picture], dict[int, tuple[int, int]]]:
+    """The images to make (numbered 1, 2, ...) and each clip's (start, end) image (D-104).
+    A clip that continues the story starts on the previous clip's end image, so the machine
+    stays the same from clip to clip."""
+    pictures: list[Picture] = []
+    frames: dict[int, tuple[int, int]] = {}
+    previous_end: int | None = None
+    for shot in shots:
+        v, n = shot["prompt_vars"], shot["n"]
+        if v.get("continues") and previous_end is not None:
+            start = previous_end
+            pictures[start - 1] = replace(
+                pictures[start - 1], used_by=f"{pictures[start - 1].used_by}, start of shot {n}"
+            )
+        else:
+            pictures.append(Picture(len(pictures) + 1, v["start_picture"], v["style"],
+                                    f"start of shot {n}"))  # fmt: skip
+            start = len(pictures)
+        pictures.append(Picture(len(pictures) + 1, v["end_frame"], v["style"], f"end of shot {n}"))
+        frames[n] = (start, len(pictures))
+        previous_end = len(pictures)
+    return pictures, frames
+
+
+def _rules(ctx: AppContext, kind: str) -> list[str]:
+    """The owner's approved lessons for clips or images, written into the prompt Flow reads, so
+    the video model itself sees them, not only Gemini while it writes (D-108)."""
+    return [lesson.rstrip(".") for lesson in lessons_stage.approved_for_prompts(ctx, kind)]
+
+
+def _brief_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> str:
+    """The short product-film prompt of the alternator and turbo videos (D-105): one machine, one
+    clear action in three sentences, three smooth angles, plus the shared closing block."""
+    v = shot["prompt_vars"]
+    energy = v.get("energy") if shot["beat"] == "flow" else None
+    return render_prompt(
+        "flow_brief",
+        ctx.channel,
+        prompts_root=ctx.root / ctx.settings.paths.prompts_dir,
+        object=row["object_name"],
+        kind=BRIEF_KIND[shot["beat"]],
+        at_work=shot["beat"] == "in_situ",
+        aspect=aspect,
+        clip_seconds=FLOW_CLIP_SECONDS,
+        scene=v["scene"],
+        energy_color_name=ENERGY_COLORS[energy] if energy else None,
+        energy_word=ENERGY_WORDS[energy] if energy else None,
+        first=shot["n"] == 1,
+        rules=_rules(ctx, "clip"),
+    ).text.strip()
+
+
+def _shot_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> str:
+    """One story shot (D-092, D-104): the shared hero_look, the start image, the scene, the
+    style's camera rule and the end image."""
     variables = {"energy_color_name": None, "energy_word": None, **shot["prompt_vars"]}
+    style = variables.pop("style")
+    variables.pop("continues", None)
     energy = variables.get("energy")
     if energy and shot["beat"] == "flow":
         variables["energy_color_name"] = ENERGY_COLORS[energy]
@@ -179,7 +326,10 @@ def _shot_prompt(
         aspect=aspect,
         clip_seconds=FLOW_CLIP_SECONDS,
         first=shot["n"] == 1,  # D-090: shot 1 moves from its first frame
-        previous_end=previous_end,
+        explain=style == "explain",
+        rules=_rules(ctx, "clip"),
+        style_camera=STYLE_CAMERA[style],
+        angles=STYLE_ANGLES.get(style, "three"),
         **variables,
     )
     return rendered.text.strip()
@@ -188,6 +338,9 @@ def _shot_prompt(
 # --- restage: new film shots for an approved script (D-092) ------------------------------------
 
 RESTAGE_STATUSES = ("script_approved", "awaiting_clips")
+# A reshoot (D-107) also redoes chosen clips of an item whose clips are already in: it goes back to
+# awaiting_clips with its good clips back in the inbox.
+RESHOOT_STATUSES = ("generated", "assembled")
 
 
 def restage(
@@ -203,10 +356,16 @@ def restage(
     `only` rewrites just those clips and keeps the hero_look and the other clips (D-096), so
     clips the owner already made keep their prompts."""
     row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
-    if row is None or row["status"] not in RESTAGE_STATUSES:
+    reshoot = row is not None and row["status"] in RESHOOT_STATUSES
+    if reshoot and only is None:
         raise FactoryError(
-            f"content #{content_id} is not {' or '.join(RESTAGE_STATUSES)}; only approved "
-            "scripts that have no clips yet can get new film shots"
+            f"#{content_id} already has its clips: name the clips to redo, e.g. "
+            f"`factory generate --restage {content_id} --shots 2,3` (the others stay)"
+        )
+    if row is None or (row["status"] not in RESTAGE_STATUSES and not reshoot):
+        raise FactoryError(
+            f"content #{content_id} is not {' or '.join(RESTAGE_STATUSES + RESHOOT_STATUSES)}; "
+            "only approved scripts that are not public yet can get new film shots"
         )
     script = current_script(ctx, content_id)
     shots = json.loads(script["shot_list_json"])
@@ -237,8 +396,10 @@ def restage(
         clip_numbers=redo,
         hero_look=hero_look,
         hero_look_words=script_stage.HERO_LOOK_WORDS,
+        visual_rules=script_stage.visual_rules_template(ctx),
         benchmarks=script_stage.benchmark_examples(ctx),
-        references=references_stage.approved_for_prompts(ctx),
+        references=references_stage.approved_for_prompts(ctx, content_id),
+        lessons=lessons_stage.approved_for_prompts(ctx),
     )
     llm = llm or script_stage.gemini_client(ctx)
     plan = llm.generate_json(
@@ -253,9 +414,12 @@ def restage(
         energy = shot["prompt_vars"].get("energy")
         shot["prompt_vars"] = {
             "hero_look": look,
+            "style": v.style,
+            "start_picture": v.start_picture.strip(),
             "scene": v.scene.strip(),
             "camera": v.camera.strip(),
             "end_frame": v.end_frame.strip(),
+            "continues": v.continues,
             **({"energy": energy} if energy and shot["beat"] == "flow" else {}),
         }
     with ctx.conn:
@@ -263,24 +427,29 @@ def restage(
             "UPDATE scripts SET shot_list_json = ? WHERE id = ?",
             (json.dumps(shots, ensure_ascii=False), script["id"]),
         )
+    if reshoot:
+        _reopen_for_clips(ctx, content_id, redo)
+        row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
     log.info("#%s: new film shots for clips %s", content_id, list(redo),
              extra={"content_id": content_id, "event": "restaged"})  # fmt: skip
     return _write_sheet(ctx, row) if row["status"] == "awaiting_clips" else None
 
 
-def frame_prompt(ctx: AppContext, row: sqlite3.Row, shot: dict, aspect: str) -> str:
-    """The clip's opening frame as a Flow image (0 credits): the owner checks the composition
-    before spending 20 credits on the video (D-095)."""
-    v = shot["prompt_vars"]
+def image_prompt(
+    ctx: AppContext, row: sqlite3.Row, picture: str, style: str, shot: dict, aspect: str
+) -> str:
+    """One image of the chain as a free Flow image: the owner checks it before any clip is
+    made from it (D-095, D-104)."""
     return render_prompt(
-        "flow_frame",
+        "flow_image",
         ctx.channel,
         prompts_root=ctx.root / ctx.settings.paths.prompts_dir,
         object=row["object_name"],
         aspect=aspect,
-        hero_look=v["hero_look"],
-        scene=v["scene"],
-        camera=v["camera"],
+        hero_look=shot["prompt_vars"]["hero_look"],
+        picture=picture,
+        explain=style == "explain",
+        rules=_rules(ctx, "frame"),
     ).text.strip()
 
 
@@ -302,9 +471,11 @@ def _sheet_text(
     script: sqlite3.Row,
     shots: list[dict],
     prompts: dict[int, str],
-    frame_prompts: dict[int, str],
+    images: list[dict],
     inbox: Path,
     still_prompts: dict[int, str],
+    *,
+    brief: bool = False,
 ) -> str:
     used, budget = usage_today(ctx.conn, ctx.channel).get("flow", (0, None))
     budget = budget or 0
@@ -314,9 +485,9 @@ def _sheet_text(
         prompts_root=ctx.root / ctx.settings.paths.prompts_dir,
         item=row,
         narration_s=round(script["est_duration_s"] or 0),
-        shots=[
-            {**s, "prompt": prompts[s["n"]], "frame_prompt": frame_prompts[s["n"]]} for s in shots
-        ],
+        shots=[{**s, "prompt": prompts[s["n"]]} for s in shots],
+        images=images,
+        brief=brief,
         flow_model=FLOW_MODEL,
         credits_needed=len(shots) * FLOW_CREDITS_PER_CLIP,
         credits_left=max(budget - used, 0),
@@ -358,8 +529,8 @@ def _collect(ctx: AppContext, row: sqlite3.Row) -> bool:
     expected = (
         {f"shot_{s['n']:02d}.mp4" for s in shots}
         | {f"still_{s['n']:02d}{ext}" for s in _shots(script, "still") for ext in STILL_EXTENSIONS}
-        # frame images for `factory clips review` (D-097)
-        | {f"frame_{s['n']:02d}{ext}" for s in shots for ext in STILL_EXTENSIONS}
+        # the chain's images for `factory clips review` (D-104)
+        | {p.name for p in inbox.glob("image_*") if p.suffix.lower() in STILL_EXTENSIONS}
     )
     extras = sorted(p.name for p in inbox.glob("*") if p.is_file() and p.name not in expected)
     if extras:

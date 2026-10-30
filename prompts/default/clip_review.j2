@@ -15,6 +15,8 @@ Check it against the prompt and these rules. Every broken rule is a problem:
 4. A cutaway or flow shot shows the machine from the side, cut open along its length, not head-on into an opening.
 {% endif %}6. The finish is brand-new and polished (no rust, dirt or wear).
 7. No text, numbers, logos, brand names, flags, people, hands or faces, and nothing military.
-
+{% if lessons %}Lessons from earlier failures (each one broken is a problem too):
+{% for lesson in lessons %}- {{ lesson }}
+{% endfor %}{% endif %}
 verdict: "fail" if any problem would make a viewer who knows engineering doubt the video, else "pass".
 score: 1-10 for overall quality. fix: the most useful change to the prompt{% if kind == "clip" %} or the frame image{% endif %}, in one or two sentences.

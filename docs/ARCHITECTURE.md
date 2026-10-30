@@ -66,8 +66,8 @@ Helper commands:
 - `factory db init|migrate|backup`
 - `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
 - `factory plan --week next|this`: fills the week's `cadence.weekly_plan` slots with the best unplanned ideas (no pillar 3 days in a row; hook type and beat order differ from the day before) and prints the plan; slots already planned are kept (D-080).
-- `factory generate --restage N [--shots 3|2,4]`: new film shots (Gemini) for an approved item that has no clips yet: the narration stays, the clip prompts and (for `awaiting_clips`) the Flow sheet are rewritten (D-092). With `--shots` only those clips are rewritten; the hero_look and the other clips stay (D-096).
-- `factory clips review <id> [--shots 3|2,4]`: Gemini watches each clip (`shot_NN.mp4`, in the inbox or the project's `clips/`) and frame image (`frame_NN.png/.jpg/.webp`, the free Flow image made first) and checks it against its prompt and the film rules: pass/fail, score 1–10, problems, fix. Advice only, no status change; every review is appended to `clip_review.json` (D-097). A file saved before its current prompt was issued (`flow_issued.json`) is flagged ⚠ (D-098).
+- `factory generate --restage N [--shots 3|2,4]`: new film shots (Gemini) for an approved item that has no clips yet: the narration stays, the clip prompts and (for `awaiting_clips`) the Flow sheet are rewritten (D-092). With `--shots` only those clips are rewritten; the hero_look and the other clips stay (D-096). On a `generated` or `assembled` item `--shots` is a **reshoot** (D-107): the kept clips go back to the inbox, the redone ones stay there as `old_shot_NN.mp4`, renders and the QA report are removed and the item waits for clips again.
+- `factory clips review <id> [--shots 3|2,4]`: Gemini watches each clip (`shot_NN.mp4`, in the inbox or the project's `clips/`) and frame image (`frame_NN.png/.jpg/.webp`, the free Flow image made first) and checks it against its prompt and the film rules: pass/fail, score 1–10, problems, fix. Since D-104 it reviews the chain's images (`image_NN.png`, each once) and the clips. Advice only, no status change; every review is appended to `clip_review.json` (D-097). A file saved before its current prompt was issued (`flow_issued.json`) is flagged ⚠ (D-098).
 - `factory drop <id> --reason "..."`: drops an item that is not public yet: it becomes `archived` with the reason, and every stage ignores it (D-093).
 - `factory flow-log --credits N`: logs Flow credits you spent (refused above `budgets_per_day.flow_credits`).
 - `factory bot [--find-chat-id]`: the Telegram review bot for both gates, plus alerts (§3, task 2.1). `--find-chat-id` prints the chat id of whoever sent the bot a message, for `TELEGRAM_ALLOWED_CHAT_ID` in `.env`.
@@ -79,7 +79,8 @@ Helper commands:
 - `factory publish --manual --id N`: prints the upload kit (render paths, YouTube title and description, TikTok caption, the AI-label steps). `factory publish --manual --id N --platform youtube|tiktok --url <link> --ai-label-on` records the live post in `posts`; the first one moves the item to `published` (D-072).
 - `factory auth youtube`: signs the channel in to YouTube (link for the Windows browser), checks the account is `@coilandcog` and saves the token in `secrets/<slug>/google_token.json`. `factory auth test-upload` (with `DRY_RUN=false`) uploads the brand sting **unlisted** and AI-labelled to prove the upload path; delete it in Studio afterwards (D-102).
 - `factory metrics add <id> --platform youtube|tiktok --checkpoint 24h|72h|7d|28d [--views --stayed --avd-pct --avd-s --likes --comments --shares --subs --watch-min]` / `factory metrics show <id>`: numbers copied by hand from YouTube Studio or TikTok into `metrics` (`source = manual`); entering a checkpoint again replaces only the numbers given. Learning from results starts before the Analytics API (D-101).
-- `factory references add|list|approve <n> [--note ...]|remove <n>`: the reference library: Gemini writes style notes (lighting, camera, composition, motion, materials, 3–6 prompt phrases) about images and clips you drop into `data/inbox/references/`; the files move to `data/references/` and are never used in a video; only notes you approve (newest 8) join the film rules for new scripts and restages (D-100).
+- `factory lessons learn|list|approve <n> [--text ...]|remove <n>`: Gemini turns failed clip reviews (every item's `clip_review.json`, each failure once) into short general lessons; only lessons you approve go into the film rules (new scripts, restages) and into `clips review`'s checks (clip lessons for clips, frame lessons for frames) (D-103).
+- `factory references add [--for N]|list|approve <n> [--note ...]|remove <n>`: the reference library: Gemini writes style notes (lighting, camera, composition, motion, materials, 3–6 prompt phrases) about images and clips you drop into `data/inbox/references/`; the files move to `data/references/` and are never used in a video; only notes you approve (newest 8) join the film rules for new scripts and restages (D-100); with `--for N` a note only shapes item N (D-104).
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
 - `factory retry <content_id>`
 - `factory status [<content_id>]`
@@ -135,7 +136,7 @@ Helper commands:
 Everything niche-specific is configuration. Code reads `config/settings.yaml` (global) plus one `config/channels/<slug>.yaml` per channel. Both are validated with Pydantic, a library that checks data against declared types. A new niche or channel means a new YAML file, a new set of prompt overrides (optional), new accounts, and `secrets/<slug>/` tokens. **No code changes.**
 
 `uv run factory config check` validates both files and prints a summary, or one readable error line per problem (file, key, reason). The models in `src/factory/config.py` enforce these rules (D-053):
-- Unknown keys are errors, so typos are caught. Every key in the shapes below is required except `prompts_dir`, `niche.wikipedia_articles` (whose keys must be seed topics) and `benchmarks` (each entry needs `content_id`, `name`, at least one `good_shots` number and `liked`; `improve` is optional).
+- Unknown keys are errors, so typos are caught. Every key in the shapes below is required except `prompts_dir`, `video_prompts` (`brief` by default, D-105), `niche.wikipedia_articles` (whose keys must be seed topics) and `benchmarks` (each entry needs `content_id`, `name`, at least one `good_shots` number and `liked`; `improve` is optional).
 - The channel `slug` must match its file name; `timezone` must be a real time zone; times are `HH:MM`; colors are `#RRGGBB`; each format has `min_s < max_s`; `weekly_plan` may only use enabled formats.
 - **Policy guards:** `gates.final` only accepts `required` (Gate 2 is never removed) and `platforms.*.ai_disclosure` only accepts `true`. Loosening either needs a code change and a new decision, not a YAML edit.
 
@@ -251,6 +252,8 @@ benchmarks:                    # optional: the owner's best videos; their Flow p
     liked: "clean polished look, clear glowing heat and air flow"
     improve: "the spinning turbine and compressor wheels were blurry"
 
+video_prompts: brief             # optional: brief (alternator-style product prompts, default) | story (D-104/D-105)
+
 prompts_dir: prompts/coil-and-cog   # optional overrides; falls back to prompts/default
 ```
 
@@ -270,6 +273,7 @@ stateDiagram-v2
     generated --> assembled : assemble + QA pass
     assembled --> approved : Gate 2 approve
     assembled --> generated : Gate 2 redo
+    assembled --> awaiting_clips : reshoot (--restage N --shots)
     assembled --> rejected : Gate 2 reject
     approved --> scheduled : publish
     approved --> published : manual post recorded
@@ -328,7 +332,9 @@ ai-content-factory/
 ├── migrations/
 │   ├── 001_init.sql
 │   ├── 002_reference_notes.sql
-│   └── 003_metrics_view_pct.sql
+│   ├── 003_metrics_view_pct.sql
+│   ├── 004_lessons.sql
+│   └── 005_reference_topic.sql
 ├── src/factory/
 │   ├── __init__.py
 │   ├── cli.py                    # Typer app: one command per stage
@@ -351,6 +357,7 @@ ai-content-factory/
 │   │   ├── generate.py
 │   │   ├── clip_review.py        # Gemini watches clips and frame images (factory clips review, D-097)
 │   │   ├── references.py         # reference library: style notes from images/clips the owner likes (D-100)
+│   │   ├── lessons.py            # lessons from failed clip reviews, owner-approved (D-103)
 │   │   ├── assemble.py
 │   │   ├── review.py
 │   │   ├── bot.py                # Telegram review bot: both gates + alerts (factory bot)

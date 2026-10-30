@@ -21,7 +21,10 @@
       "labels": [],
       "scene": "The alternator turns steadily on a dark set as its pulley spins and light slides over the cooling fins and the grooved pulley.",
       "camera": "slow orbit to the right on a 50 mm lens",
-      "end_frame": "the alternator's front face with the pulley spinning"
+      "end_frame": "the alternator's front face with the pulley spinning",
+      "style": "product",
+      "start_picture": "the closed alternator on a dark set",
+      "continues": false
     },
     {
       "n": 2,
@@ -32,7 +35,10 @@
       "labels": [],
       "scene": "The aluminium housing splits along a clean cut and the halves slide apart, revealing the spinning rotor inside the copper stator windings and the diode plate behind them.",
       "camera": "slow dolly-in on a 35 mm lens",
-      "end_frame": "a close view of the rotor spinning inside the stator"
+      "end_frame": "a close view of the rotor spinning inside the stator",
+      "style": "open",
+      "start_picture": "the front face with the pulley",
+      "continues": true
     },
     {
       "n": 3,
@@ -48,7 +54,10 @@
       ],
       "scene": "",
       "camera": "",
-      "end_frame": ""
+      "end_frame": "",
+      "style": "",
+      "start_picture": "",
+      "continues": false
     },
     {
       "n": 4,
@@ -60,7 +69,10 @@
       "labels": [],
       "scene": "Inside the opened alternator the rotor spins and current pulses out of the stator windings into the diode plate, leaving as one steady stream toward the output terminal.",
       "camera": "steady push along the windings at eye level",
-      "end_frame": "the output terminal glowing steadily"
+      "end_frame": "the output terminal glowing steadily",
+      "style": "explain",
+      "start_picture": "the opened alternator standing upright",
+      "continues": false
     },
     {
       "n": 5,
@@ -75,7 +87,10 @@
       "energy": "electric",
       "scene": "",
       "camera": "",
-      "end_frame": ""
+      "end_frame": "",
+      "style": "",
+      "start_picture": "",
+      "continues": false
     },
     {
       "n": 6,
@@ -86,7 +101,10 @@
       "labels": [],
       "scene": "Under the hood of a running car the serpentine belt drives the alternator pulley at speed while the engine idles and the fan blurs behind it.",
       "camera": "slow crane down from above the engine on a 35 mm lens",
-      "end_frame": "the alternator pulley spinning in the engine bay"
+      "end_frame": "the alternator pulley spinning in the engine bay",
+      "style": "installed",
+      "start_picture": "the alternator in an open engine bay",
+      "continues": false
     },
     {
       "n": 7,
@@ -97,7 +115,10 @@
       "labels": [],
       "scene": "",
       "camera": "",
-      "end_frame": ""
+      "end_frame": "",
+      "style": "",
+      "start_picture": "",
+      "continues": false
     }
   ],
   "sources": [

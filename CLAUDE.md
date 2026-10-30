@@ -34,6 +34,8 @@
 - `factory status <id> --show script` NARRATION includes the Engineer's Note itself.
 - `factory generate --limit N` takes items in ID order; there is no option to pick one item.
 - Veo 3.1 Fast costs 20 Flow credits per 8 s clip, so 50 credits/day = 2 clips/day. A 4-clip item needs 2 days. Flow images cost 0 credits (owner's plan), so check compositions as images first.
+- What works: compact car parts + short alternator-style prompts (D-105). Big or complex machines (submarine, jet engine) fail whatever the prompt.
+- A roaming camera makes Veo re-imagine complex machines (exhaust at the intake, rings appearing): story shots keep cameras still except product shots and chain clips through approved images (D-104).
 - Veo keeps one compact machine filling the frame consistent; it loses track of big scenes (whole vehicles, landscapes, flying/diving) — D-095. Head-on views of an inlet make flows run backwards; show flows side-on with a named screen direction — D-096.
 - QA cannot see picture content: #4 was built from FFmpeg test-pattern stand-ins. Check `data/inbox/flow/` holds real Flow clips. `factory clips review` (Gemini vision, D-097) catches big errors (wrong machine) but missed a subtle soft rotor.
 - VS Code's preview cannot play AAC audio; open renders through Windows Explorer.
@@ -42,15 +44,15 @@
 
 *Updated 2026-10-27 (after D-097).*
 
-- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093; benchmark list D-094; close framing + image-first Flow sheet D-095; flow direction + `--restage N --shots` D-096; clip review `factory clips review` D-097 = ROADMAP 2.13 done early; prompt versions D-098 = 2.14; 2.15 code-drawn flows **parked** (D-099: looks like a diagram, owner stays on Flow; if ever built, keep only forward points). Reference library D-100 = 2.20 (5 pending references from the owner's own stills). Manual metrics D-101 = first part of 2.5 (on main, migration 003 applied). **2.2 done (D-102)**: token for @coilandcog in `secrets/coil-and-cog/google_token.json` (YouTube scopes only; Drive needs its own sign-in in 2.10); test upload worked and was deleted. Learning from results = 2.5 API → 2.9 → 3.1. New roadmap tasks 2.14–2.21 cover all of the owner's A–O ideas except L (paid model). **Next ROADMAP task after 2.2: 2.3** (scheduled publishing).
+- **Phase:** Phase 1 complete; Phase 2 started. Task 2.1 (Telegram bot) done. Script fixes D-083 to D-090; CLAUDE.md knowledge D-091; film-shot Flow prompts D-092; `factory drop` + submarines blocklisted D-093; benchmark list D-094; close framing + image-first Flow sheet D-095; flow direction + `--restage N --shots` D-096; clip review `factory clips review` D-097 = ROADMAP 2.13 done early; prompt versions D-098 = 2.14; 2.15 code-drawn flows **parked** (D-099: looks like a diagram, owner stays on Flow; if ever built, keep only forward points). Reference library D-100 = 2.20 (5 pending references from the owner's own stills). Manual metrics D-101 = first part of 2.5 (on main, migration 003 applied). **2.2 done (D-102)**: token for @coilandcog in `secrets/coil-and-cog/google_token.json` (YouTube scopes only; Drive needs its own sign-in in 2.10); test upload worked and was deleted. **2.18 lessons (D-103), story shots 2.16 (D-104) and brief prompts as default (D-105), variety fix (D-106), reshoot (D-107) and lessons in Flow prompts (D-108) on branch `feat/story-shots`, awaiting owner test + "commit"**; 4 lessons approved in the real DB. **#10 jet engine paused** (Veo can't draw it); **#8 CVT restaged in the alternator style = next video**. Next code: 2.22 prompt pre-check, then 2.3. Car-parts switch recommended (owner said go to car parts as next videos). Car-parts switch proposed, on hold (owner: don't drop anything for now). Learning from results = 2.5 API → 2.9 → 3.1. New roadmap tasks 2.14–2.21 cover all of the owner's A–O ideas except L (paid model). **Next ROADMAP task after 2.2: 2.3** (scheduled publishing).
 - **Published:** #5 alternator (YouTube + TikTok), #6 turbocharger (YouTube `shorts/rtzPTV6B0KQ`; TikTok post not recorded yet).
 - **Real items:**
 
 | # | Machine | Format | Status | Note |
 |---|---|---|---|---|
 | 5, 6 | alternator, turbocharger | short | published | `benchmarks` in the YAML (D-094); #6 TikTok link still to record |
-| 8 | CVT gearbox | short | awaiting_clips | old prompts: run `factory generate --restage 8` first; 4 clips |
-| 10 | jet engine | deep_dive | awaiting_clips | restaged (D-095), shot 3 redone side-on (D-096); 3 clips (shots 2-4), image first + `clips review`; next video. Owner to test the review with the failed shot 3 clip |
+| 8 | CVT gearbox | short | awaiting_clips | reshoot of shots 1-3 (D-107), shot 4 kept; prompts carry lessons 1-7 (D-108); owner makes new images + shots 1-3 |
+| 10 | jet engine | deep_dive | awaiting_clips | **paused**: every Flow attempt failed (D-104/D-105); not dropped (owner) |
 | 9, 12, 13, 14 | differential, landing gear, tower crane, e-car motor | | idea | |
 | 1, 2, 3, 4, 7, 11 | | | rejected / failed / archived | history only (#4 zipper and #11 submarine dropped, D-093) |
 

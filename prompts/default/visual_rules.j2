@@ -16,18 +16,35 @@ The vehicle never flies, drives or dives in a shot.
   salt, weathering or wear.
   When the topic is a system inside a bigger machine (a cooling circuit, a gearbox), the hero is the whole machine
   (the engine, the car) and the cutaway shots go inside it. A pedestal is only for a part small enough to carry.
+- The film is a story told in styles. Every flow_clip has a style, which fixes its camera:
+  - product: the whole machine on a dark set, three smooth camera angles (the opening "look at it" shot);
+  - open: the casing opens to show the inside; the camera is almost still, one slow small move;
+  - explain: how it works: the machine stands upright as a clean vertical cutaway, intake at the top and outlet at
+    the bottom; the camera is locked and still; air, fluid, current or heat flows only from top to bottom
+    (cool blue at the top changing slowly through amber to red heat at the bottom, where heat is involved);
+  - close: the casing closes again; almost still, one slow small move;
+  - installed: the machine where it is mounted, on a vehicle that stands still; two or three gentle angles;
+  - moving: the vehicle moves, but the camera is fixed to it and points at the part, so the part stays still and
+    large in the frame and only the surroundings move past.
+  A typical story: product or open, then explain, then close or installed, then moving. Shorts use 3 of them.
 - every flow_clip has:
-  - scene (40-80 words): one film shot in concrete physical detail: what we see, what moves and how, with real parts
-    and real proportions, and exactly one place, named precisely ("on a dark studio set", "under the wing of a parked
-    airliner at dusk", "in an open engine bay"). Never mix in details of another place that the model could draw
-    instead. The place never changes inside a clip. The first flow_clip opens on motion.
-  - camera: three smooth camera angles that flow into each other, each with its lens, e.g. "opens on a wide shot on a
-    35 mm lens, glides into a low orbit around the housing, finishes on a close-up of the pulley on an 85 mm lens".
-    Every angle stays close to the machine and in the scene's place.
-  - end_frame: the final picture in a few words, e.g. "the pulley spinning in the engine bay" (not "The last frame
-    shows..."). The next flow_clip starts from there, like a cut in a film, so the clips flow into each other.
-- Cutaway and Flow shots show the machine from the side, cut open along its length, so the inside and every flow
-  are seen across the screen. A flow names its screen direction ("air enters on the left and leaves on the right")
+  - style: one of product, open, explain, close, installed, moving.
+  - start_picture: the first frame in a few words (e.g. "the closed engine seen from below on a dark set").
+  - end_frame: the last frame in a few words (e.g. "the engine with its casing open"), not "The last frame shows...".
+  - continues: true when the clip starts exactly where the previous flow_clip ended (its start picture is that
+    end_frame); false when the story cuts to a new view. Chained clips keep the machine identical between shots.
+  - scene (40-80 words): what happens between the start and end picture, in concrete physical detail, with real
+    parts and real proportions, in exactly one place named precisely ("on a dark studio set", "in an open engine
+    bay"). The place never changes inside a clip. The first flow_clip opens on motion.
+  - camera: for product and installed, the smooth angles with lenses (e.g. "opens on a wide shot on a 35 mm lens,
+    glides into a low orbit, finishes on a close-up of the pulley on an 85 mm lens"); for the other styles a short
+    note, since their camera rule is fixed. Every angle stays close to the machine.
+- No invented physics: parts never swap ends (no exhaust or outlet at the intake), never appear, disappear, float
+  away or change shape; a machine keeps one shape from the first frame to the last; nothing changes place in a shot
+  (nothing dives and then surfaces); flows go one way only. The AI video model invents such things when the camera
+  roams or the shot asks for too much, so keep each clip to one clear change between its start and end picture.
+- Open and close shots show the machine from the side or from below, cut open along its length; explain shots
+  stand it upright so every flow runs top to bottom. A flow names its screen direction ("air enters on the left and leaves on the right")
   and moves only that way: nothing flows backwards or out of the wrong opening, and flames or hot gas appear only
   where they really are. In these shots the camera never looks head-on into an inlet or outlet: from the front the
   AI video model cannot tell in from out (it shot a jet engine's air and fire out of the intake).
@@ -49,5 +66,9 @@ a detail that belongs to their machine).
 {% if references %}
 Reference notes the owner approved (style only, from images and clips they like): use their lighting, camera,
 motion and phrases where they fit this machine and the film rules. The owner's own words count most.
-{% for r in references %}- {{ r.summary }}{% if r.owner_note %} Owner: "{{ r.owner_note }}".{% endif %} Lighting: {{ r.lighting }}. Camera: {{ r.camera }}. Motion: {{ r.motion }}. Phrases: {{ r.phrases | join("; ") }}.
+{% for r in references %}- {% if r.for_item %}(made for this video) {% endif %}{{ r.summary }}{% if r.owner_note %} Owner: "{{ r.owner_note }}".{% endif %} Lighting: {{ r.lighting }}. Camera: {{ r.camera }}. Motion: {{ r.motion }}. Phrases: {{ r.phrases | join("; ") }}.
+{% endfor %}{% endif %}
+{% if lessons %}
+Lessons from earlier clips that failed (the owner approved each one): follow every one of them.
+{% for lesson in lessons %}- {{ lesson }}
 {% endfor %}{% endif %}

@@ -1,0 +1,17 @@
+These AI video clips and frame images for the channel failed their review. Turn the failures into short, general
+lessons for writing future video prompts, so the same mistakes don't happen on other machines.
+
+Failures (number. item, file: problems | suggested fix):
+{% for f in failures %}{{ loop.index }}. #{{ f.item }}, {{ f.file }}: {{ f.problems | join(" / ") }} | {{ f.fix }}
+{% endfor %}
+{% if known %}Lessons that already exist (don't repeat them, even in other words; a "removed" one was rejected by the owner):
+{% for k in known %}- [{{ k.status }}] {{ k.text }}
+{% endfor %}{% endif %}
+Rules for each lesson:
+- One rule a prompt writer can follow, at most {{ max_words }} words, written as an instruction
+  (e.g. "The camera stops at the outer surface and never passes into solid parts").
+- General: about cameras, motion, framing, cutaways, flows or finishes, never about one machine's parts.
+- Only what the failures really show; merge failures with the same cause into one lesson.
+- applies_to: "clip" for motion and camera problems, "frame" for picture problems, "both" for either.
+- evidence: the numbers of the failures it comes from.
+Give 1-6 lessons; fewer, stronger lessons are better than many.

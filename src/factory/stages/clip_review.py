@@ -21,6 +21,7 @@ from factory.errors import FactoryError
 from factory.integrations.gemini import GeminiClient, Media
 from factory.prompts import render_prompt
 from factory.stages import generate
+from factory.stages import lessons as lessons_stage
 from factory.stages import script as script_stage
 from factory.stages.voice import asset_dir
 
@@ -46,18 +47,20 @@ def review(
     only: tuple[int, ...] | None = None,
     llm: GeminiClient | None = None,
 ) -> list[dict]:
-    """Review the item's clips (shot_NN.mp4) and frame images (frame_NN.png/.jpg/.webp) that
-    exist, in shot order: frame first, then clip. Returns the new report entries."""
+    """Review the item's clips (shot_NN.mp4) and the images they start and end on
+    (image_NN.png/.jpg/.webp, D-104) that exist, in shot order: images first, then the clip.
+    Returns the new report entries."""
     row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
     if row is None:
         raise FactoryError(f"content #{content_id} does not exist")
     script = generate.current_script(ctx, content_id)
     shots = [s for s in json.loads(script["shot_list_json"]) if s["kind"] == "flow_clip"]
-    if any("scene" not in s["prompt_vars"] for s in shots):
+    if any("style" not in s["prompt_vars"] for s in shots):
         raise FactoryError(
-            f"#{content_id} has no film shots (made before D-092): run "
+            f"#{content_id} has no story shots (made before D-104): run "
             f"`factory generate --restage {content_id}` first"
         )
+    _, frames = generate.images_for(ctx, shots)
     if only is not None:
         unknown = set(only) - {s["n"] for s in shots}
         if unknown:
@@ -65,18 +68,24 @@ def review(
         shots = [s for s in shots if s["n"] in only]
     issued = _issued_prompts(ctx, content_id)
     versions = generate.issued_prompts(ctx, content_id)
-    aspect = getattr(ctx.channel.formats, row["format"]).aspect
-    todo = []
+    todo, queued = [], set()
     for shot in shots:
         n = shot["n"]
-        frame = _find(_folders(ctx, content_id), f"frame_{n:02d}", IMAGE_TYPES)
+        for image in frames[n]:  # its start and end image, each reviewed once
+            path = _find(_folders(ctx, content_id), f"image_{image:02d}", IMAGE_TYPES)
+            if path and image not in queued:
+                queued.add(image)
+                todo.append((shot, "frame", path, issued.get(f"image_{image}", ""),
+                             f"image_{image}"))  # fmt: skip
         clip = _find(_folders(ctx, content_id), f"shot_{n:02d}", VIDEO_TYPES)
-        if frame:
-            todo.append((shot, "frame", frame, generate.frame_prompt(ctx, row, shot, aspect)))
         if clip:
-            todo.append((shot, "clip", clip, issued.get(str(n), "")))
+            todo.append((shot, "clip", clip, issued.get(str(n), ""), str(n)))
     if not todo:
-        names = ", ".join(f"frame_{s['n']:02d}.png / shot_{s['n']:02d}.mp4" for s in shots)
+        names = ", ".join(
+            f"image_{frames[s['n']][0]:02d}.png / image_{frames[s['n']][1]:02d}.png / "
+            f"shot_{s['n']:02d}.mp4"
+            for s in shots
+        )
         raise FactoryError(
             f"nothing to review for #{content_id}: save {names} in "
             f"{generate.windows_path(generate.inbox_dir(ctx, content_id))}"
@@ -85,8 +94,7 @@ def review(
     prompts_root = ctx.root / ctx.settings.paths.prompts_dir
     system = render_prompt("clip_review_system", ctx.channel, prompts_root=prompts_root).text
     entries = []
-    for shot, kind, path, shot_prompt in todo:
-        key = f"frame_{shot['n']}" if kind == "frame" else str(shot["n"])
+    for shot, kind, path, shot_prompt, key in todo:
         version = versions.get(key, {})
         made = datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         user = render_prompt(
@@ -97,6 +105,7 @@ def review(
             object=row["object_name"],
             beat=shot["beat"],
             shot_prompt=shot_prompt,
+            lessons=lessons_stage.approved_for_prompts(ctx, kind),
         )
         data = path.read_bytes()
         types = VIDEO_TYPES if kind == "clip" else IMAGE_TYPES

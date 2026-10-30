@@ -9,32 +9,42 @@
 
 1. Open flow.google.com with the channel account. In **Agent settings**, set video to **9:16** and **x1** (x2 makes two clips and costs double).
 2. Choose the model **{{ flow_model }}**.
-3. For each shot below, **image first (0 credits), then video (20 credits)**:
-   - **Step 1, image:** switch Flow to image (9:16), paste the shot's *Frame* prompt and generate. Check it: is the
-     machine whole, in the right place, polished, with no text, logos or people? If not, generate again: images are free.
-     To have Gemini check it too, save it as `frame_NN.png` in the inbox and run `uv run factory clips review {{ item.id }}`.
-   - **Step 2, video:** use the good image as the start frame (**Frames to video**), paste the shot's *Video* prompt and
-     generate with {{ flow_model }}. Check the clip (physics look right), then download it. After saving it,
-     `uv run factory clips review {{ item.id }} --shots NN` checks direction, motion and blur.
-4. Save each download with exactly this name into the inbox folder:
+{% if brief %}3. **Check image first (0 credits, recommended):** for each shot, make its check image (*Images* below, Flow
+   image mode, 9:16), save it as `image_NN.png` and run `uv run factory clips review {{ item.id }}`; regenerate (free)
+   until it passes. **Then the video (20 credits):** **Frames to video** with that image (or plain text to video),
+   paste the shot's *Video* prompt, generate with {{ flow_model }}, download it, then
+   `uv run factory clips review {{ item.id }} --shots NN`.
+{% else %}3. **Images first (0 credits):** make every image in *Images* below (Flow image mode, 9:16), save each as
+   `image_NN.png` in the inbox and check them: `uv run factory clips review {{ item.id }}`. Images are free, so
+   generate again until each one passes. Shots share images: the end image of one shot is the start image of the next.
+   **Then each video (20 credits):** **Frames to video** with the shot's start image (and its end image, if Flow
+   offers an end-frame slot), paste the shot's *Video* prompt, generate with {{ flow_model }}, download it, then
+   `uv run factory clips review {{ item.id }} --shots NN` checks direction, motion and blur.
+{% endif %}4. Save each download with exactly this name into the inbox folder:
    `{{ inbox_windows }}\shot_NN.mp4` (NN = the shot number below, e.g. `shot_02.mp4`).
 5. Log the credits you spent: `uv run factory flow-log --credits <N>`
 6. Run `uv run factory generate` again. It moves the clips into the project once all of them are there.
 
 Flow makes {{ clip_seconds }}-second clips; the edit uses the first seconds of each, as listed.
-{% for shot in shots %}
 
-## Shot {{ "%02d" | format(shot.n) }}: {{ shot.beat }} ({{ shot.duration_s }} s in the edit)
+## Images (0 credits)
+{% for image in images %}
 
-Save as: `shot_{{ "%02d" | format(shot.n) }}.mp4`
+### Image {{ "%02d" | format(image.number) }}{% if image.used_by %} ({{ image.used_by }}){% endif %}
 
-**Frame (image, 0 credits):**
+Save as: `image_{{ "%02d" | format(image.number) }}.png`
 
 ```text
-{{ shot.frame_prompt }}
+{{ image.prompt }}
 ```
+{% endfor %}
+{% for shot in shots %}
 
-**Video ({{ flow_model }}, start frame = the image above):**
+## Shot {{ "%02d" | format(shot.n) }}: {{ shot.beat }}, {{ shot.prompt_vars.style }} ({{ shot.duration_s }} s in the edit)
+
+Save as: `shot_{{ "%02d" | format(shot.n) }}.mp4` | {% if brief %}Check image: `image_{{ "%02d" | format(shot.start_image) }}.png`{% else %}Start image: `image_{{ "%02d" | format(shot.start_image) }}.png` | End image: `image_{{ "%02d" | format(shot.end_image) }}.png`{% endif %}
+
+**Video ({{ flow_model }}, Frames to video):**
 
 ```text
 {{ shot.prompt }}

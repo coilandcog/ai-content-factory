@@ -1,8 +1,10 @@
 Vertical {{ aspect }}, {{ clip_seconds }}-second shot from a cinematic short film that shows how it works inside: {{ object }}. Photorealistic, like a high-end documentary.
 The machine: {{ hero_look.rstrip(".") }}.
-{% if previous_end %}This shot continues the film from the previous shot, which ended on: {{ previous_end.rstrip(".") }}.
-{% endif %}{{ scene.rstrip(".") }}.
+{% if explain %}The machine stands upright as a clean vertical cutaway: its intake at the top, its outlet at the bottom. Everything flows only from top to bottom.
+{% endif %}The clip starts exactly on the start image: {{ start_picture.rstrip(".") }}.
+{{ scene.rstrip(".") }}.
 {% if energy_color_name %}Glowing {{ energy_color_name }} light traces show the {{ energy_word }} moving through the parts, clear and readable, not chaotic. Everything flows only in the direction described; nothing flows backwards or out of the wrong opening.
-{% endif %}Camera, three smooth angles: {{ camera.rstrip(".") }}. Smooth, fluid transitions between the angles; the place, the machine and the physics stay the same from the first to the last frame{% if first %}; the camera and the machine are already moving in the very first frame, no fade-in{% endif %}.
-The shot ends on: {{ end_frame.rstrip(".") }}.
-{% include "style_block.j2" %}
+{% endif %}{% if style_camera %}Camera: {{ style_camera }}.{% else %}Camera, {{ angles }} smooth angles: {{ camera.rstrip(".") }}. Smooth, fluid transitions between the angles.{% endif %} The place, the machine and its parts stay the same from the first to the last frame: nothing appears, disappears, separates, floats or changes shape{% if first %}; the motion has already begun in the very first frame, no fade-in{% endif %}.
+The clip ends exactly on the end image: {{ end_frame.rstrip(".") }}.
+{% if rules %}Rules from earlier clips: {{ rules | join('; ') }}.
+{% endif %}{% include "style_block.j2" %}

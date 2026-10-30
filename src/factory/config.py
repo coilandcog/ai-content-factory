@@ -243,6 +243,9 @@ class ChannelConfig(StrictModel):
     gates: Gates
     # Optional: the owner's best videos, newest additions last (D-094).
     benchmarks: list[Benchmark] = Field(default_factory=list)
+    # Optional: how Flow video prompts are written (D-105). "brief" = the short product-film
+    # prompts that made the alternator and turbo videos; "story" = story shots with chained images.
+    video_prompts: Literal["brief", "story"] = "brief"
     prompts_dir: Path = Path("prompts/default")
 
     @model_validator(mode="after")

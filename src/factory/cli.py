@@ -51,6 +51,7 @@ from factory.stages import discover as discover_stage
 from factory.stages import generate as generate_stage
 from factory.stages import ideate as ideate_stage
 from factory.stages import learn as learn_stage
+from factory.stages import lessons as lessons_stage
 from factory.stages import metadata as metadata_stage
 from factory.stages import publish as publish_stage
 from factory.stages import references as references_stage
@@ -86,6 +87,10 @@ auth_app = typer.Typer(
 app.add_typer(auth_app, name="auth")
 metrics_app = typer.Typer(help="Video results: views, stayed-to-watch, ...", no_args_is_help=True)
 app.add_typer(metrics_app, name="metrics")
+lessons_app = typer.Typer(
+    help="Lessons from failed clips: proposed by Gemini, approved by you.", no_args_is_help=True
+)
+app.add_typer(lessons_app, name="lessons")
 references_app = typer.Typer(
     help="Your reference library: style notes from images and clips you like.",
     no_args_is_help=True,
@@ -1029,13 +1034,71 @@ def metrics_show(
         typer.echo(learn_stage.show(_context(run, config_dir), content_id))
 
 
+@lessons_app.command("learn")
+def lessons_learn(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Gemini reads every failed clip review not learned from yet and proposes general lessons
+    (pending until you approve them, D-103)."""
+    with _tracked_run("lessons learn", config_dir) as run:
+        ctx = _context(run, config_dir)
+        ids = lessons_stage.learn(ctx)
+        rows = {r["id"]: r for r in lessons_stage.listing(ctx)}
+        for lesson_id in ids:
+            typer.echo(f"#{lesson_id} ({rows[lesson_id]['applies_to']}): {rows[lesson_id]['text']}")
+        typer.echo("Approve the good ones with `factory lessons approve <n>` (or remove them).")
+        run.tally.processed = len(ids)
+
+
+@lessons_app.command("list")
+def lessons_list(
+    all_: Annotated[bool, typer.Option("--all", help="Also show removed ones.")] = False,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Show every lesson with its status (pending, approved, removed)."""
+    with _tracked_run("lessons list", config_dir) as run:
+        rows = lessons_stage.listing(_context(run, config_dir), include_removed=all_)
+        if not rows:
+            typer.echo("No lessons yet: `factory lessons learn` turns failed reviews into lessons")
+        for r in rows:
+            typer.echo(f"#{r['id']} {r['status'].upper()} ({r['applies_to']}): {r['text']}")
+            typer.echo(f"  from: {', '.join(json.loads(r['evidence_json']))}")
+
+
+@lessons_app.command("approve")
+def lessons_approve(
+    lesson_id: Annotated[int, typer.Argument(help="The lesson number from `list`.")],
+    text: Annotated[str | None, typer.Option(help="Your own wording instead.")] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Approve a lesson: it goes into new prompts and into the clip review's checks."""
+    with _tracked_run("lessons approve", config_dir) as run:
+        lessons_stage.decide(_context(run, config_dir), lesson_id, "approved", text)
+        typer.echo(f"#{lesson_id} approved")
+
+
+@lessons_app.command("remove")
+def lessons_remove(
+    lesson_id: Annotated[int, typer.Argument(help="The lesson number from `list`.")],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Remove a lesson: it no longer reaches the prompts and isn't proposed again."""
+    with _tracked_run("lessons remove", config_dir) as run:
+        lessons_stage.decide(_context(run, config_dir), lesson_id, "removed")
+        typer.echo(f"#{lesson_id} removed")
+
+
 @references_app.command("add")
-def references_add(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+def references_add(
+    for_item: Annotated[
+        int | None, typer.Option("--for", help="Only for this item's prompts (e.g. 10).")
+    ] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
     """Gemini studies each image or clip in data/inbox/references/ and writes style notes
-    (pending until you approve them). The files move to data/references/ (D-100)."""
+    (pending until you approve them). The files move to data/references/ (D-100). With
+    --for N they only shape item N's prompts (D-104)."""
     with _tracked_run("references add", config_dir) as run:
         ctx = _context(run, config_dir)
-        results = references_stage.add(ctx)
+        results = references_stage.add(ctx, for_item=for_item)
         for r in results:
             if "skipped" in r:
                 typer.echo(f"{r['file']}: skipped, {r['skipped']}")
@@ -1061,7 +1124,10 @@ def references_list(
         if not rows:
             typer.echo("No references yet: save images or clips in data/inbox/references/")
         for r in rows:
-            typer.echo(f"#{r['id']} {r['status'].upper()} {r['original_name']} ({r['kind']})")
+            topic = f", for #{r['content_id']}" if r["content_id"] else ""
+            typer.echo(
+                f"#{r['id']} {r['status'].upper()} {r['original_name']} ({r['kind']}{topic})"
+            )
             typer.echo(f"  {r['summary']}")
             typer.echo(f"  lighting: {r['lighting']}")
             typer.echo(f"  camera: {r['camera']}")

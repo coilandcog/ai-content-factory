@@ -20,6 +20,8 @@ from factory.errors import BudgetExceededError, ConfigError, PolicyBlockedError
 from factory.integrations.gemini import GeminiClient
 from factory.stages import script as stage
 
+STORY = {"style": "product", "start_picture": "the machine at rest", "continues": False}
+
 WIKI_URL = "https://en.wikipedia.org/wiki/Alternator"
 SECOND_SOURCE = "https://www.example-university.edu/ee/alternator-basics"
 THIRD_SOURCE = "https://www.example-standards.org/charging-systems"
@@ -449,7 +451,8 @@ def test_flow_clip_longer_than_8_s_is_capped() -> None:
     shot = stage.Shot(
         n=1, beat="in_situ", kind="flow_clip", description="Engine bay, belt spinning",
         duration_s=10, scene="The belt spins the pulley", camera="crane down",
-        end_frame="the pulley", labels=["ignored"],
+        end_frame="the pulley", start_picture="the engine bay", style="installed", continues=False,
+        labels=["ignored"],
     )  # fmt: skip
 
     assert shot.duration_s == 8.0
@@ -567,7 +570,8 @@ def test_diagram_label_rules(labels: list[str], problem: str) -> None:
     with pytest.raises(ValueError, match=problem):
         stage.Shot(
             n=3, beat="cutaway", kind="diagram", description="Label card", duration_s=4,
-            scene="", camera="", end_frame="", labels=labels,
+            scene="", camera="", end_frame="", start_picture="", style="", continues=False,
+            labels=labels,
         )  # fmt: skip
 
 
@@ -732,6 +736,7 @@ def test_visual_plan_must_cover_exactly_the_clips() -> None:
     shot = {
         "scene": "The hull dives under the waves slowly",
         "camera": "orbit",
+        **STORY,
         "end_frame": "the bow tilts down.",
     }
 
@@ -740,3 +745,40 @@ def test_visual_plan_must_cover_exactly_the_clips() -> None:
     assert [s.n for s in plan.shots] == [1, 3]
     with pytest.raises(ValueError, match=r"give exactly the flow_clips \[1, 3\]"):
         schema.model_validate({"hero_look": look, "shots": [{"n": 1, **shot}]})
+
+
+def test_story_rules_and_styles_are_in_the_film_rules() -> None:
+    rules = (REPO_ROOT / "prompts" / "default" / "visual_rules.j2").read_text()
+
+    for style in stage.STYLES:
+        assert f"  - {style}:" in rules
+    assert "No invented physics: parts never swap ends" in rules  # #10's exhaust at the intake
+    assert "nothing dives and then surfaces" in rules  # #11's submarine
+
+
+def test_clip_style_must_be_one_of_the_styles() -> None:
+    with pytest.raises(ValueError, match="style must be one of product, open"):
+        stage.Shot(
+            n=1, beat="studio", kind="flow_clip", description="Hero shot", duration_s=8,
+            scene="It turns on a dark set", camera="orbit", end_frame="the pulley",
+            start_picture="the closed part", style="zoom", continues=False, labels=[],
+        )  # fmt: skip
+
+
+def test_dropped_rejected_or_failed_items_are_not_the_previous_video(ctx: AppContext) -> None:
+    channel_id = ctx.conn.execute("SELECT id FROM channels").fetchone()[0]
+    rows = [
+        ("published", "reveal", "2026-10-27T00:00:00Z"),
+        ("archived", "why_question", "2026-10-28T09:00:00Z"),
+        ("failed", "what_if", "2026-10-28T10:00:00Z"),
+        ("rejected", "myth_bust", "2026-10-28T11:00:00Z"),
+    ]
+    with ctx.conn:
+        for status, hook, updated in rows:
+            ctx.conn.execute(
+                "INSERT INTO contents (channel_id, format, object_name, status, hook_type, "
+                "beat_order, updated_at) VALUES (?, 'short', 'x', ?, ?, 'classic', ?)",
+                (channel_id, status, hook, updated),
+            )
+
+    assert stage.previous_variety(ctx.conn, channel_id, 999) == ("reveal", "classic")

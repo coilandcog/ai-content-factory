@@ -1,0 +1,39 @@
+Visual plan: every flow_clip is one short premium product video of the machine, like the channel's best videos
+(the alternator and the turbocharger). Keep it simple: one compact machine, one clear action, plain words.
+- hero_look ({{ hero_look_words[0] }}-{{ hero_look_words[1] }} words): how this machine looks: a real, typical example, its shape, materials
+  and colours, brand-new and flawless (smooth polished metal, crisp reflections, no rust, dirt or wear). Only the
+  machine, never a place. Never a fantasy design, never military.
+- every flow_clip has:
+  - style: product for a studio beat, open for a cutaway beat, explain for a flow beat, installed for an in-situ beat.
+  - start_picture: the first frame in a few words. continues: false.
+  - scene (30-60 words), written like the best videos' prompts, in three short sentences:
+    "Start close on the <machine> as <one clear action>. Then the camera <one smooth move> while <the part that moves>
+    moves as it does in operation. The shot finishes on a <close-up> of <that part>."
+    Studio beat: the machine turns on a matte dark pedestal against a deep graphite background. Cutaway beat: its
+    casing splits apart along a clean cut plane, cut surfaces clean brushed metal. Flow beat: a clean cutaway against
+    a dark studio background while glowing energy surges through the real parts, clear and readable, not chaotic.
+    In-situ beat: the machine mounted where it works, in a tight close-up from the first frame (an open engine
+    bay); never open on a wide view of a vehicle or a whole drivetrain.
+  - camera: three smooth camera angles, e.g. "close-up, then a low orbit, finishing on a macro close-up".
+  - end_frame: the final picture in a few words.
+- The machine fills most of the frame; one place per clip; the machine keeps one shape; nothing appears, floats away
+  or swaps ends; a flow moves only one way. Spinning parts turn in smooth slow motion and stay sharp.
+- No text, numbers, logos, brand names, flags, people, hands or faces.
+{% if benchmarks %}
+Benchmarks: the owner's best videos. Write each scene with the same simplicity, motion and polish as these prompts,
+adapted to this machine (never copy a detail that belongs to their machine).
+{% for b in benchmarks %}
+- {{ b.name }}. The owner liked: {{ b.liked }}.{% if b.improve %} Do better than it: {{ b.improve }}.{% endif %}
+{% for prompt in b.prompts %}  Example Flow prompt:
+  """
+  {{ prompt | indent(2) }}
+  """
+{% endfor %}{% endfor %}{% endif %}
+{% if references %}
+Reference notes the owner approved (style only): use their lighting, camera and phrases where they fit.
+{% for r in references %}- {% if r.for_item %}(made for this video) {% endif %}{{ r.summary }}{% if r.owner_note %} Owner: "{{ r.owner_note }}".{% endif %} Phrases: {{ r.phrases | join("; ") }}.
+{% endfor %}{% endif %}
+{% if lessons %}
+Lessons from earlier clips that failed (the owner approved each one): follow every one of them.
+{% for lesson in lessons %}- {{ lesson }}
+{% endfor %}{% endif %}

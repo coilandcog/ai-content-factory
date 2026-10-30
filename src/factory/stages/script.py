@@ -34,6 +34,7 @@ from factory.integrations.gemini import GeminiClient
 from factory.integrations.wikimedia import WikiSummary, article_title, page_summary
 from factory.prompts import render_prompt
 from factory.similarity import closest
+from factory.stages import lessons as lessons_stage
 from factory.stages import references as references_stage
 from factory.stages.voice import asset_dir
 
@@ -55,7 +56,10 @@ BEAT_ORDERS: dict[str, tuple[str, ...]] = {
 }
 # Every flow_clip is one shot of a short film: what happens, one camera move and the last frame,
 # which the next clip continues from (D-092). The flow beat also names its energy colour.
-SCENE_FIELDS = ("scene", "camera", "end_frame")
+# Story shots (D-104): every clip has a style (its camera rule), a first and a last picture, and
+# may start on the previous clip's last picture, so clips chain through images the owner approved.
+STYLES = ("product", "open", "explain", "close", "installed", "moving")
+SCENE_FIELDS = ("scene", "camera", "start_picture", "end_frame", "style")
 CLIP_FIELDS: dict[str, tuple[str, ...]] = {
     "studio": SCENE_FIELDS,
     "cutaway": SCENE_FIELDS,
@@ -116,6 +120,11 @@ class Shot(BaseModel):
     scene: str = Field(description="flow_clip only: what happens in this film shot; else ''")
     camera: str = Field(description="flow_clip only: one smooth camera move and lens; else ''")
     end_frame: str = Field(description="flow_clip only: what the last frame shows; else ''")
+    start_picture: str = Field(description="flow_clip only: what the first frame shows; else ''")
+    style: str = Field(description=f"flow_clip only: one of {', '.join(STYLES)}; else ''")
+    continues: bool = Field(
+        description="flow_clip only: true if it starts on the previous flow_clip's last picture"
+    )
     energy: Literal["electric", "heat", "fluid"] | None = None
     # Required (Gemini leaves out optional fields): the diagram's part labels, [] for other kinds.
     labels: list[str] = Field(description="diagram only: 1-4 labels of at most 4 words; else []")
@@ -136,13 +145,16 @@ class Shot(BaseModel):
             missing = [f for f in CLIP_FIELDS[self.beat] if not str(getattr(self, f) or "").strip()]
             if missing:
                 raise ValueError(f"shot {self.n} ({self.beat} flow_clip) needs {missing}")
+            if self.style not in STYLES:
+                raise ValueError(f"shot {self.n}: style must be one of {', '.join(STYLES)}")
             # A Veo clip is at most 8 s long, so cap the plan instead of rejecting the script;
             # the coverage rule in ScriptDraft still catches a resulting gap.
             self.duration_s = min(self.duration_s, CLIP_MAX_S)
         return self
 
-    def prompt_vars(self) -> dict[str, str]:
-        return {f: getattr(self, f).strip() for f in CLIP_FIELDS[self.beat] if getattr(self, f)}
+    def prompt_vars(self) -> dict[str, Any]:
+        fields = {f: getattr(self, f).strip() for f in CLIP_FIELDS[self.beat] if getattr(self, f)}
+        return {**fields, "continues": self.continues}
 
 
 class SourceDraft(BaseModel):
@@ -160,9 +172,12 @@ class SourceReplacements(BaseModel):
 
 class ShotVisual(BaseModel):
     n: int = Field(ge=1)
+    style: Literal["product", "open", "explain", "close", "installed", "moving"]
+    start_picture: str = Field(min_length=10)
     scene: str = Field(min_length=20)
     camera: str = Field(min_length=5)
     end_frame: str = Field(min_length=5)
+    continues: bool
 
 
 class ShotsPlan(BaseModel):
@@ -521,6 +536,11 @@ def _script_one(
                  f"{system.version}+{user.version}", match.score)  # fmt: skip
 
 
+def visual_rules_template(ctx: AppContext) -> str:
+    """The film rules Gemini follows: short product-film rules (default, D-105) or story shots."""
+    return "visual_rules.j2" if ctx.channel.video_prompts == "story" else "visual_rules_brief.j2"
+
+
 def benchmark_examples(ctx: AppContext) -> list[dict[str, Any]]:
     """The channel's benchmark videos with the exact Flow prompts of their good shots, for the
     film rules (D-094). A benchmark whose prompts file is missing keeps only the owner's notes."""
@@ -561,11 +581,14 @@ def previous_variety(
     conn: sqlite3.Connection, channel_id: int, content_id: int
 ) -> tuple[str | None, str | None]:
     """hook_type and beat_order of the channel's most recent other scripted item (planned ideas
-    already carry the plan's values but are not scripted yet, so they don't count)."""
+    already carry the plan's values but are not scripted yet, so they don't count). Rejected,
+    dropped and failed items never reach viewers, so they don't count either: dropping #4 made it
+    the "previous video" of #8 (D-106)."""
     row = conn.execute(
         """
         SELECT hook_type, beat_order FROM contents
-        WHERE channel_id = ? AND id <> ? AND hook_type IS NOT NULL AND status <> 'idea'
+        WHERE channel_id = ? AND id <> ? AND hook_type IS NOT NULL
+          AND status NOT IN ('idea', 'rejected', 'archived', 'failed')
         ORDER BY updated_at DESC, id DESC LIMIT 1
         """,
         (channel_id, content_id),
@@ -606,8 +629,10 @@ def _prompts(
         max_clips=MAX_CLIPS,
         min_diagrams=schema.min_diagrams,
         hero_look_words=HERO_LOOK_WORDS,
+        visual_rules=visual_rules_template(ctx),
         benchmarks=benchmark_examples(ctx),
-        references=references_stage.approved_for_prompts(ctx),
+        references=references_stage.approved_for_prompts(ctx, row["id"]),
+        lessons=lessons_stage.approved_for_prompts(ctx),
         reference=reference,
         feedback=feedback,
     )

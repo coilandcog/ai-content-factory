@@ -1,5 +1,5 @@
 {% if hero_look %}This approved {{ format }} video about the {{ object }} keeps its narration, its hero_look and its other
-clips. Write new scene, camera and end_frame only for the flow_clips {{ clip_numbers | join(", ") }}; the owner found them wrong.
+clips. Write new style, start_picture, scene, camera, end_frame and continues only for the flow_clips {{ clip_numbers | join(", ") }}; the owner found them wrong.
 "shots" lists exactly those clips, in that order. Do not return a hero_look: it stays, word for word:
 """
 {{ hero_look }}
@@ -8,7 +8,8 @@ The clips that stay (keep the film continuous: start where the clip before ends,
 {% for s in shots if s.kind == "flow_clip" and s.n not in clip_numbers %}- clip {{ s.n }} ({{ s.beat }}): {{ s.prompt_vars.scene }} It ends on: {{ s.prompt_vars.end_frame }}
 {% endfor %}
 {% else %}This approved {{ format }} video about the {{ object }} keeps its narration and shot list, but its AI video clips
-get new film shots. Write the hero_look and, for each flow_clip below, its scene, camera and end_frame.
+get new story shots. Write the hero_look and, for each flow_clip below, its style, start_picture, scene, camera,
+end_frame and continues.
 "shots" lists exactly the flow_clips {{ clip_numbers | join(", ") }}, in that order.
 {% endif %}
 Narration (what the viewer hears):
@@ -23,4 +24,4 @@ Each flow_clip's scene shows what the narration at that moment is about. The des
 film rules: when one asks for something that does not exist on its own in reality (for example a coolant passage as a
 separate object, when it is really a channel inside an engine block), show the real machine instead.
 
-{% include "visual_rules.j2" %}
+{% include visual_rules %}

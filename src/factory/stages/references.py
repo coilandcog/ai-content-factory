@@ -60,8 +60,16 @@ def store(ctx: AppContext) -> Path:
     return ctx.root / ctx.settings.paths.data_dir / "references"
 
 
-def add(ctx: AppContext, *, llm: GeminiClient | None = None) -> list[dict]:
-    """Study every new image or clip in the inbox; returns one result per file."""
+def add(
+    ctx: AppContext, *, for_item: int | None = None, llm: GeminiClient | None = None
+) -> list[dict]:
+    """Study every new image or clip in the inbox; returns one result per file. With
+    `for_item`, the notes only shape that item's prompts (D-104)."""
+    if (
+        for_item is not None
+        and not ctx.conn.execute("SELECT 1 FROM contents WHERE id = ?", (for_item,)).fetchone()
+    ):
+        raise FactoryError(f"content #{for_item} does not exist")
     folder = inbox(ctx)
     files = sorted(p for p in folder.glob("*") if p.is_file()) if folder.is_dir() else []
     if not files:
@@ -95,7 +103,7 @@ def add(ctx: AppContext, *, llm: GeminiClient | None = None) -> list[dict]:
             schema=ReferenceNotes,
             media=_media(path, mime, kind),
         )
-        ref_id = _save(ctx, channel_id, path, kind, sha, notes, llm.model)
+        ref_id = _save(ctx, channel_id, path, kind, sha, notes, llm.model, for_item)
         results.append({"file": path.name, "id": ref_id, **notes.model_dump()})
         log.info("reference #%s from %s (pending)", ref_id, path.name,
                  extra={"event": "reference_added"})  # fmt: skip
@@ -121,18 +129,19 @@ def _save(
     sha: str,
     notes: ReferenceNotes,
     model: str,
+    for_item: int | None = None,
 ) -> int:
     with ctx.conn:
         ref_id = ctx.conn.execute(
             """
             INSERT INTO reference_notes (channel_id, kind, original_name, path, sha256, summary,
                 lighting, camera, composition, motion, materials_colours, prompt_phrases_json,
-                has_people, model)
-            VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                has_people, model, content_id)
+            VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (channel_id, kind, path.name, sha, notes.summary, notes.lighting, notes.camera,
              notes.composition, notes.motion, notes.materials_colours,
-             json.dumps(notes.prompt_phrases), int(notes.has_people), model),
+             json.dumps(notes.prompt_phrases), int(notes.has_people), model, for_item),
         ).lastrowid  # fmt: skip
         target = store(ctx) / f"{ref_id:04d}_{path.name}"
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -173,21 +182,24 @@ def decide(ctx: AppContext, ref_id: int, status: str, owner_note: str | None = N
         )
 
 
-def approved_for_prompts(ctx: AppContext) -> list[dict]:
-    """The newest PROMPT_LIMIT approved notes, oldest first, for the film rules."""
+def approved_for_prompts(ctx: AppContext, content_id: int | None = None) -> list[dict]:
+    """The newest PROMPT_LIMIT approved notes, oldest first, for the film rules: general ones
+    plus, for `content_id`, the ones made for that item (D-104), which come first in the limit."""
     try:
         rows = ctx.conn.execute(
             """
             SELECT * FROM reference_notes WHERE status = 'approved' AND channel_id =
                 (SELECT id FROM channels WHERE slug = ?)
-            ORDER BY id DESC LIMIT ?
+                AND (content_id IS NULL OR content_id = ?)
+            ORDER BY content_id IS NULL, id DESC LIMIT ?
             """,
-            (ctx.channel.slug, PROMPT_LIMIT),
+            (ctx.channel.slug, content_id, PROMPT_LIMIT),
         ).fetchall()
-    except sqlite3.OperationalError as exc:  # database from before migration 002
-        raise FactoryError("run `uv run factory db init` to add the reference library") from exc
+    except sqlite3.OperationalError as exc:  # database from before migration 002 or 005
+        raise FactoryError("run `uv run factory db init` to update the reference library") from exc
     return [
         {"summary": r["summary"], "owner_note": r["owner_note"], "lighting": r["lighting"],
+         "for_item": r["content_id"],
          "camera": r["camera"], "motion": r["motion"],
          "phrases": json.loads(r["prompt_phrases_json"])}
         for r in reversed(rows)

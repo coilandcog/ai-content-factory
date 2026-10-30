@@ -19,6 +19,8 @@ from factory.integrations.gemini import GeminiClient
 from factory.stages import generate, references
 from factory.stages.voice import asset_dir
 
+STORY = {"style": "product", "start_picture": "the machine at rest", "continues": False}
+
 NOTES = {
     "summary": "A polished engine block on a dark set",
     "lighting": "cyan rim left, warm key right",
@@ -161,7 +163,7 @@ def test_restage_prompt_carries_the_approved_notes(ctx: AppContext) -> None:
     set_status(ctx.conn, content_id, "script_approved")
     plan = {"hero_look": " ".join(["polished alternator"] * 12),
             "shots": [{"n": 1, "scene": "It turns slowly on a dark set", "camera": "low orbit",
-                       "end_frame": "the pulley"}]}  # fmt: skip
+                       **STORY, "end_frame": "the pulley"}]}  # fmt: skip
     llm, sdk = fake_llm(ctx, plan)
 
     generate.restage(ctx, content_id, llm=llm)
@@ -180,3 +182,22 @@ def test_list_command_before_any_reference(config_dir: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "No references yet" in result.output
+
+
+def test_references_for_one_item_only_shape_that_item(ctx: AppContext) -> None:
+    drop(ctx, "general.png", b"general")
+    references.add(ctx, llm=fake_llm(ctx, {**NOTES, "summary": "General look"})[0])
+    content_id = add_content(ctx.conn, ctx.channel, object_name="cvt gearbox", fmt="short",
+                             pillar="vehicles")  # fmt: skip
+    drop(ctx, "cvt.png", b"cvt")
+    references.add(ctx, for_item=content_id, llm=fake_llm(ctx, {**NOTES, "summary": "CVT belt"})[0])
+    references.decide(ctx, 1, "approved")
+    references.decide(ctx, 2, "approved")
+
+    assert [n["summary"] for n in references.approved_for_prompts(ctx)] == ["General look"]
+    for_cvt = references.approved_for_prompts(ctx, content_id)
+    assert [(n["summary"], n["for_item"]) for n in for_cvt] == [
+        ("General look", None), ("CVT belt", content_id),
+    ]  # fmt: skip
+    with pytest.raises(FactoryError, match="content #99 does not exist"):
+        references.add(ctx, for_item=99, llm=fake_llm(ctx)[0])

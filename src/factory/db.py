@@ -21,8 +21,9 @@ TRANSITIONS: dict[str, frozenset[str]] = {
     "scripted": frozenset({"script_approved", "scripted", "rejected", "archived"}),  # Gate 1 redo
     "script_approved": frozenset({"awaiting_clips", "archived"}),
     "awaiting_clips": frozenset({"generated", "archived"}),
-    "generated": frozenset({"assembled", "archived"}),
-    "assembled": frozenset({"approved", "generated", "rejected", "archived"}),  # Gate 2 redo
+    # awaiting_clips = a reshoot of chosen clips (`--restage N --shots`, D-107)
+    "generated": frozenset({"assembled", "awaiting_clips", "archived"}),
+    "assembled": frozenset({"approved", "generated", "awaiting_clips", "rejected", "archived"}),
     "approved": frozenset({"scheduled", "published", "archived"}),  # published = manual (D-072)
     "scheduled": frozenset({"published"}),
     "published": frozenset({"analyzed"}),

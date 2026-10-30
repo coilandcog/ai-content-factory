@@ -45,8 +45,9 @@ Do the sum before answering (a total that is too short is the most common mistak
 x 8 s = {{ shot_seconds.clip_s }} s, so the diagrams and stills (3-6 s each) must add the other {{ shot_seconds.rest_s }} s.
 Add up every duration_s: about {{ target_total_s }} s, never under {{ shot_seconds.min_total_s }} s; more words need more seconds.
 - kind "flow_clip": an 8-second AI video clip, at most 8 seconds. Use {{ min_clips }} to {{ max_clips }} of them.
-  Every flow_clip needs scene, camera and end_frame (see the visual plan below); a flow-beat clip also needs
-  energy (electric, heat or fluid). Stills and diagrams have scene, camera and end_frame "".
+  Every flow_clip needs style, start_picture, scene, camera, end_frame and continues (see the visual plan below);
+  a flow-beat clip also needs energy (electric, heat or fluid). Stills and diagrams have style, start_picture, scene,
+  camera and end_frame "" and continues false.
 - kind "still": an AI still image that will be slowly animated.
 - kind "diagram": a label card drawn by code over the picture: "labels" holds 1-4 part names of at most 4 words each
   (e.g. ["Rotor", "Stator Coils", "Diode Bridge"]), and "energy" picks the colour of their dots. At least {{ min_diagrams }} diagrams.
@@ -54,7 +55,7 @@ Add up every duration_s: about {{ target_total_s }} s, never under {{ shot_secon
 - Shot 1 is always a flow_clip, so the video moves from the first frame (never a still or diagram first).
 - Every one of the four beats appears, and the first appearance of each beat follows the chosen beat_order.
 
-{% include "visual_rules.j2" %}
+{% include visual_rules %}
 
 Sources ("sources"): exactly 3 different real web pages that support the main facts, each with url, title, publisher and the claim it supports.
 {% include "script_source_rules.j2" %}

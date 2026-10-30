@@ -253,6 +253,17 @@ A manual post (`factory publish --manual`, D-072) is stored as `status = publish
 
 Flow credits are entered manually with `factory flow-log --credits 20`.
 
+### `lessons` and `lesson_inputs` (migration 004, D-103)
+| Column | Type | Notes |
+|---|---|---|
+| lessons.id | INTEGER PK | The number used by `factory lessons approve|remove` |
+| lessons.text | TEXT | One general rule (≤ 30 words); the owner may reword it when approving |
+| lessons.applies_to | TEXT | `clip` (motion, camera) \| `frame` (picture) \| `both` |
+| lessons.evidence_json | TEXT | JSON list of the failed reviews it comes from (`<item>/<file>/<reviewed_at>`) |
+| lessons.status | TEXT | `pending` \| `approved` \| `removed`; only `approved` reaches prompts (newest 15) and the clip review; `removed` lessons are shown to Gemini so they aren't proposed again |
+| lessons.model, added_at, decided_at | TEXT | |
+| lesson_inputs (channel_id, review_key) | PK | Failed reviews already learned from, so each failure is sent once |
+
 ### `reference_notes` (migration 002, D-100)
 | Column | Type | Notes |
 |---|---|---|
@@ -267,6 +278,7 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | owner_note | TEXT | The owner's own words, set when approving; counts most |
 | status | TEXT | `pending` \| `approved` \| `removed`; only `approved` reaches the prompts (newest 8) |
 | model, added_at, decided_at | TEXT | |
+| content_id | INTEGER FK, NULL | Migration 005 (D-104): set by `references add --for N`, so the note only shapes item N's prompts; NULL = the channel's style for every topic |
 
 ## 4. Content status lifecycle
 
@@ -276,8 +288,8 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | `scripted` | Script draft waiting for Gate 1 | script | `script_approved`, `scripted` (redo), `rejected`, `archived` (drop) |
 | `script_approved` | Owner approved the script | review | `awaiting_clips`, `archived` (drop) |
 | `awaiting_clips` | Flow sheet issued; waiting for the owner's clips in `data/inbox/flow/<id>/` | generate | `generated`, `archived` (drop) |
-| `generated` | Clips, voice, subtitles, stills and diagrams all present. Built up task by task: since task 1.6 it means every Flow clip (checked: readable, portrait, ≥3 s) plus `voice.wav`; subtitles (1.7) and stills/diagrams (1.8) join when built | generate | `assembled`, `archived` (drop) |
-| `assembled` | Renders done and automated QA passed | assemble | `approved`, `generated` (redo), `rejected`, `archived` (drop) |
+| `generated` | Clips, voice, subtitles, stills and diagrams all present. A reshoot (`--restage N --shots`, D-107) sends it back to `awaiting_clips`. Built up task by task: since task 1.6 it means every Flow clip (checked: readable, portrait, ≥3 s) plus `voice.wav`; subtitles (1.7) and stills/diagrams (1.8) join when built | generate | `assembled`, `awaiting_clips` (reshoot, D-107), `archived` (drop) |
+| `assembled` | Renders done and automated QA passed | assemble | `approved`, `generated` (redo), `awaiting_clips` (reshoot, D-107), `rejected`, `archived` (drop) |
 | `approved` | Owner approved the final video | review | `scheduled`, `published` (manual post, D-072), `archived` (drop) |
 | `scheduled` | YouTube scheduled and/or TikTok draft sent | publish | `published` |
 | `published` | Live on at least one platform | publish | `analyzed` |
