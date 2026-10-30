@@ -16,6 +16,7 @@ from factory.context import AppContext
 from factory.db import add_content, connect, migrate, set_status, upsert_channel
 from factory.errors import FactoryError
 from factory.integrations.gemini import GeminiClient
+from factory.media.ffmpeg import probe
 from factory.stages import generate, references
 from factory.stages.voice import asset_dir
 
@@ -30,6 +31,13 @@ NOTES = {
     "materials_colours": "brushed steel, deep graphite",
     "prompt_phrases": ["crisp cyan rim light", "slow low orbit", "brushed steel highlights"],
     "has_people": False,
+    "hook": "a question in the first second over a fast close-up",
+    "narration": "calm, short sentences, speaks to you",
+    "structure": "hook > why it matters > 3 steps > surprising fact > loop",
+    "pacing": "a cut every 2 s, 35 s long",
+    "sound": "low synth pulse, mechanical clicks",
+    "why_it_works": "satisfying motion and a clear payoff",
+    "topic_ideas": ["how a starter motor engages"],
 }
 
 
@@ -106,24 +114,65 @@ def test_empty_inbox_says_where_to_save(ctx: AppContext) -> None:
     assert references.inbox(ctx).is_dir()  # created so the owner can find it
 
 
-def test_too_large_clip_is_shrunk_before_sending(
-    ctx: AppContext, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    path = drop(ctx, "clip.mp4", b"")
+def long_clip(path: Path, seconds: int) -> None:
+    """A lossless test video with sound, so it is much bigger than its shrunk copy."""
     subprocess.run(
         ["ffmpeg", "-v", "error", "-y", "-f", "lavfi",
-         "-i", "testsrc=size=640x360:rate=10:duration=2",
-         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)],
+         "-i", f"testsrc2=size=320x568:rate=10:duration={seconds}",
+         "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+         "-c:v", "libx264", "-qp", "0", "-pix_fmt", "yuv420p", "-c:a", "aac", str(path)],
         check=True,
     )  # fmt: skip
-    monkeypatch.setattr(references, "MAX_INLINE_BYTES", 10)
+
+
+def sent_seconds(tmp_path: Path, sdk: FakeGenaiClient) -> float:
+    part, _ = sdk.calls[0]["contents"]
+    assert part.inline_data.mime_type == "video/mp4"
+    sent = tmp_path / "sent.mp4"
+    sent.write_bytes(part.inline_data.data)
+    return float(probe(sent)["format"]["duration"])
+
+
+def test_long_clip_is_shrunk_whole_with_its_sound(
+    ctx: AppContext, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = drop(ctx, "reel.mp4", b"")
+    long_clip(path, 75)  # longer than the old 60 s cut
+    monkeypatch.setattr(references, "MAX_INLINE_BYTES", path.stat().st_size - 1)
     llm, sdk = fake_llm(ctx, {**NOTES, "motion": "test pattern scrolls"})
 
     references.add(ctx, llm=llm)
 
-    part, _ = sdk.calls[0]["contents"]
-    assert part.inline_data.mime_type == "video/mp4"
-    assert part.inline_data.data != (ctx.root / references.listing(ctx)[0]["path"]).read_bytes()
+    assert sent_seconds(tmp_path, sdk) == pytest.approx(75, abs=1)  # the whole reel
+    streams = probe(tmp_path / "sent.mp4")["streams"]
+    assert any(st["codec_type"] == "audio" for st in streams)
+
+
+def test_very_long_clip_keeps_only_its_start(
+    ctx: AppContext, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = drop(ctx, "reel.mp4", b"")
+    long_clip(path, 8)
+    monkeypatch.setattr(references, "MAX_INLINE_BYTES", path.stat().st_size - 1)
+    monkeypatch.setattr(references, "MAX_SECONDS", 3)
+    llm, sdk = fake_llm(ctx, NOTES)
+
+    references.add(ctx, llm=llm)
+
+    assert sent_seconds(tmp_path, sdk) == pytest.approx(3, abs=0.5)
+
+
+def test_clip_still_too_big_after_shrinking_is_refused(
+    ctx: AppContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = drop(ctx, "reel.mp4", b"")
+    long_clip(path, 2)
+    monkeypatch.setattr(references, "MAX_INLINE_BYTES", 10)
+    llm, sdk = fake_llm(ctx)
+
+    with pytest.raises(FactoryError, match="still .* after shrinking"):
+        references.add(ctx, llm=llm)
+    assert sdk.calls == []
 
 
 def test_only_approved_notes_reach_the_film_rules(ctx: AppContext) -> None:
@@ -201,3 +250,17 @@ def test_references_for_one_item_only_shape_that_item(ctx: AppContext) -> None:
     ]  # fmt: skip
     with pytest.raises(FactoryError, match="content #99 does not exist"):
         references.add(ctx, for_item=99, llm=fake_llm(ctx)[0])
+
+
+def test_approved_video_storytelling_reaches_script_writing(ctx: AppContext) -> None:
+    drop(ctx, "short.mp4", b"a reference short")
+    references.add(ctx, llm=fake_llm(ctx, NOTES)[0])
+    references.decide(ctx, 1, "approved")
+
+    notes = references.approved_for_prompts(ctx)
+    rules = (ctx.root / "prompts" / "default" / "script_rules.j2").read_text()
+
+    assert notes[0]["kind"] == "video" and notes[0]["hook"].startswith("a question")
+    assert notes[0]["topic_ideas"] == ["how a starter motor engages"]
+    assert "Storytelling notes from reference videos the owner approved" in rules
+    assert "never copy their wording" in rules

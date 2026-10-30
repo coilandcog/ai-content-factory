@@ -1,3 +1,4 @@
+{% set told = (references or []) | selectattr("kind", "equalto", "video") | list %}
 Hook: pick hook_type from {{ allowed_hooks | join(", ") }}.
 {%- set formulas = {
   "why_question": "\"Why does/doesn't {machine} {surprising behavior}?\"",
@@ -24,7 +25,11 @@ Pick beat_order from:
 } %}
 {% for name in allowed_beats %}- {{ name }}: {{ orders[name] }}
 {% endfor %}
-Narration fields, each with its own word budget (count the words of each part before answering):
+{% if told %}Storytelling notes from reference videos the owner approved: learn their craft (how they hook, order, pace
+and tell), never copy their wording, facts or ideas one to one.
+{% for r in told %}- Hook: {{ r.hook }} | Structure: {{ r.structure }} | Narration: {{ r.narration }} | Pacing: {{ r.pacing }} | Why it works: {{ r.why_it_works }}
+{% endfor %}
+{% endif %}Narration fields, each with its own word budget (count the words of each part before answering):
 - hook: the first sentence, about {{ part_words.hook }} words.
 - body: everything between hook and Engineer's Note, about {{ part_words.body }} words in short, plain sentences.
   State facts directly: never claim what viewers know, miss or find surprising ("most people", "you might not know").

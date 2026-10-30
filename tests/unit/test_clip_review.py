@@ -38,11 +38,12 @@ SHOTS = [
 # images (D-104): shot 1 starts on image 1 and ends on image 2; shot 3 on images 3 and 4
 ISSUED = {"1": "VIDEO PROMPT ONE", "3": "VIDEO PROMPT THREE: current flows left to right",
           "image_3": "IMAGE PROMPT THREE: the cutaway seen from the side"}  # fmt: skip
-PASS = {"verdict": "pass", "score": 8, "problems": [], "fix": ""}
+PASS = {"score": 8, "visible_problems": [], "fix": "",
+        "expert_notes": ["real CVTs more often use a push-belt than a chain"]}  # fmt: skip
 FAIL = {
-    "verdict": "fail",
     "score": 3,
-    "problems": ["current flows out of the wrong end"],
+    "visible_problems": ["current flows out of the wrong end"],
+    "expert_notes": [],
     "fix": "show it from the side",
 }
 
@@ -104,25 +105,30 @@ def test_frame_and_clip_are_checked_against_their_prompts_and_kept(ctx: AppConte
     save(ctx, content_id, "image_03.png")
     save(ctx, content_id, "shot_03.mp4")
     save(ctx, content_id, "shot_01.mp4")
-    llm, sdk = fake_llm(ctx, PASS, PASS, FAIL)
+    # 2 agreeing votes settle a file; shot 3 needs a third (fail, pass, fail)
+    llm, sdk = fake_llm(ctx, PASS, PASS, PASS, PASS, FAIL, PASS, FAIL)
 
     entries = clip_review.review(ctx, content_id, llm=llm)
 
     assert [(e["file"], e["verdict"]) for e in entries] == [
         ("shot_01.mp4", "pass"), ("image_03.png", "pass"), ("shot_03.mp4", "fail"),
     ]  # fmt: skip  # shot order, a clip's images before the clip
-    mime, text = sent(sdk.calls[2])
+    mime, text = sent(sdk.calls[4])
     assert mime == "video/mp4" and "VIDEO PROMPT THREE" in text
     assert "moves only in the direction the prompt describes" in text  # clip rules
-    mime, text = sent(sdk.calls[1])
+    mime, text = sent(sdk.calls[2])
     assert mime == "image/png" and "IMAGE PROMPT THREE" in text  # the image's own prompt
     assert "not head-on into an opening" in text  # frame rules
     assert entries[2]["problems"] == ["current flows out of the wrong end"]
-    assert usage_today(ctx.conn, ctx.channel)["gemini"][0] == 3
+    assert entries[2]["votes"] == ["fail", "pass", "fail"]
+    assert entries[0]["votes"] == ["pass", "pass"] and entries[0]["problems"] == []
+    assert entries[0]["expert_notes"] == ["real CVTs more often use a push-belt than a chain"]
+    assert "Only these fail the clip" in text  # visible problems vs expert notes (D-109)
+    assert usage_today(ctx.conn, ctx.channel)["gemini"][0] == 7
     status = ctx.conn.execute("SELECT status FROM contents").fetchone()[0]
     assert status == "awaiting_clips"  # advice only
 
-    llm, _ = fake_llm(ctx, PASS)
+    llm, _ = fake_llm(ctx, PASS, PASS)
     clip_review.review(ctx, content_id, only=(1,), llm=llm)
 
     history = json.loads((asset_dir(ctx, content_id) / "clip_review.json").read_text())
@@ -136,7 +142,7 @@ def test_clips_already_moved_into_the_project_are_found(ctx: AppContext) -> None
     clips = asset_dir(ctx, content_id) / "clips"
     clips.mkdir()
     (clips / "shot_01.mp4").write_bytes(b"clip")
-    llm, _ = fake_llm(ctx, PASS)
+    llm, _ = fake_llm(ctx, PASS, PASS)
 
     entries = clip_review.review(ctx, content_id, llm=llm)
 
@@ -203,7 +209,7 @@ def test_clip_saved_before_its_prompt_was_reissued_is_flagged(ctx: AppContext) -
     save(ctx, content_id, "shot_03.mp4")
     old = datetime(2026, 10, 26, 12, 0, tzinfo=UTC).timestamp()  # made before the restage
     os.utime(generate.inbox_dir(ctx, content_id) / "shot_03.mp4", (old, old))
-    llm, _ = fake_llm(ctx, PASS, FAIL)
+    llm, _ = fake_llm(ctx, PASS, PASS, FAIL, FAIL)
 
     entries = clip_review.review(ctx, content_id, llm=llm)
 
@@ -217,8 +223,29 @@ def test_clip_saved_before_its_prompt_was_reissued_is_flagged(ctx: AppContext) -
 def test_sheet_without_version_file_is_never_flagged(ctx: AppContext) -> None:
     content_id = waiting_item(ctx)
     save(ctx, content_id, "shot_01.mp4")
-    llm, _ = fake_llm(ctx, PASS)
+    llm, _ = fake_llm(ctx, PASS, PASS)
 
     entry = clip_review.review(ctx, content_id, only=(1,), llm=llm)[0]
 
     assert (entry["older_than_prompt"], entry["prompt_issued_at"]) == (False, None)
+
+
+def test_one_odd_answer_cannot_flip_the_verdict(ctx: AppContext) -> None:
+    content_id = waiting_item(ctx)
+    save(ctx, content_id, "shot_01.mp4")
+    llm, sdk = fake_llm(ctx, FAIL, PASS, PASS)
+
+    entry = clip_review.review(ctx, content_id, only=(1,), llm=llm)[0]
+
+    assert (entry["verdict"], entry["votes"], entry["problems"]) == (
+        "pass", ["fail", "pass", "pass"], []
+    )  # fmt: skip
+    assert len(sdk.calls) == 3
+
+
+def test_expert_notes_alone_never_fail_a_clip() -> None:
+    notes_only = clip_review.ClipVerdict(
+        score=6, visible_problems=[], fix="", expert_notes=["a chain instead of a push-belt"]
+    )
+
+    assert notes_only.verdict == "pass"

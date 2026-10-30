@@ -10,9 +10,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -33,11 +34,37 @@ IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                ".webp": "image/webp"}  # fmt: skip
 
 
+VOTES = 3  # each file is judged up to 3 times; the majority decides (D-109)
+
+
 class ClipVerdict(BaseModel):
-    verdict: Literal["pass", "fail"]
     score: int = Field(ge=1, le=10, description="1 = unusable, 10 = as good as the benchmarks")
-    problems: list[str] = Field(description="each problem in one short sentence; [] if none")
+    visible_problems: list[str] = Field(
+        description="problems an ordinary viewer would notice, one short sentence each; [] if none"
+    )
+    expert_notes: list[str] = Field(
+        description="construction details only an engineer would notice; [] if none"
+    )
     fix: str = Field(description="what to change in the prompt or in Flow; '' if nothing")
+
+    @property
+    def verdict(self) -> str:
+        """Only what viewers can see fails a clip (D-109); expert notes are advice."""
+        return "fail" if self.visible_problems else "pass"
+
+
+def _judge(ask: Callable[[], ClipVerdict]) -> tuple[ClipVerdict, list[str]]:
+    """Ask until VOTES // 2 + 1 answers agree (2 of 3), so one odd answer can't flip a verdict.
+    Returns a representative answer of the majority (its median score) and every vote."""
+    answers: list[ClipVerdict] = []
+    while len(answers) < VOTES:
+        answers.append(ask())
+        votes = [a.verdict for a in answers]
+        for side in ("pass", "fail"):
+            if votes.count(side) > VOTES // 2:
+                winners = sorted((a for a in answers if a.verdict == side), key=lambda a: a.score)
+                return winners[len(winners) // 2], votes
+    raise AssertionError("unreachable: 3 votes always give a majority of 2")
 
 
 def review(
@@ -109,12 +136,11 @@ def review(
         )
         data = path.read_bytes()
         types = VIDEO_TYPES if kind == "clip" else IMAGE_TYPES
-        verdict = llm.generate_json(
-            system=system,
-            prompt=user.text,
-            schema=ClipVerdict,
-            media=Media(data=data, mime_type=types[path.suffix.lower()]),
-        )
+        media = Media(data=data, mime_type=types[path.suffix.lower()])
+        verdict, votes = _judge(
+            partial(llm.generate_json, system=system, prompt=user.text, schema=ClipVerdict,
+                    media=media)
+        )  # fmt: skip
         entries.append({
             "reviewed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "shot": shot["n"], "kind": kind, "file": path.name,
@@ -123,7 +149,10 @@ def review(
             "file_saved_at": made,
             # D-098: saved before its prompt was (re)issued, so it was made from an older prompt
             "older_than_prompt": bool(version) and made < version["issued_at"],
-            **verdict.model_dump(),
+            "verdict": verdict.verdict, "votes": votes, "score": verdict.score,
+            # "problems" are what fails a clip (and what lessons learn from)
+            "problems": verdict.visible_problems, "expert_notes": verdict.expert_notes,
+            "fix": verdict.fix,
         })  # fmt: skip
         log.info("#%s %s: %s %d/10", content_id, path.name, verdict.verdict, verdict.score,
                  extra={"content_id": content_id, "event": "clip_reviewed"})  # fmt: skip

@@ -155,7 +155,8 @@ def test_approved_lessons_reach_prompts_and_the_matching_reviews(ctx: AppContext
     (folder / generate.PROMPTS_FILE).write_text(json.dumps({"1": "VIDEO PROMPT"}))
     generate.inbox_dir(ctx, content_id).mkdir(parents=True)
     (generate.inbox_dir(ctx, content_id) / "shot_01.mp4").write_bytes(b"clip")
-    llm, sdk = fake_llm(ctx, {"verdict": "pass", "score": 8, "problems": [], "fix": ""})
+    passed = {"score": 8, "visible_problems": [], "expert_notes": [], "fix": ""}
+    llm, sdk = fake_llm(ctx, passed, passed)
     clip_review.review(ctx, content_id, llm=llm)
     checked = sdk.calls[0]["contents"][1]
     assert CAMERA["text"] in checked and "Cut walls stay" not in checked  # clip lessons only

@@ -145,3 +145,31 @@ The owner can override any label. The ideation prompt receives the top *patterns
 ### Both
 - The same visuals and narration go to both platforms. Only the music bed and metadata differ.
 - No engagement bait ("comment 1 if…") and no misleading thumbnails or covers.
+
+## 12. Short-form best practices (researched 2026-10-30, D-109)
+
+Kept apart: what **YouTube officially states** and what is **creator consensus** (useful patterns from creator studies and guides, not platform facts).
+
+### Official (YouTube Help)
+- **Stayed to watch** ("viewed vs swiped away") is the share of times viewers stayed past the first seconds of a Short. It grades the **opening**, not the whole video. **Engaged views** count those who stayed (not counting loops).
+- **Average view duration** and **average percentage viewed** are calculated **only from viewers who stayed**, so a Short can pass one and fail the other: a weak opening shows as low stayed-to-watch; a weak middle shows as low average percentage.
+- Since 31 March 2025, **views count every start and replay**, so loops raise views and can push average percentage viewed above 100 % (#5: 133 %).
+- YouTube publishes **no target** for stayed to watch: numbers like "70 %+" online are creator benchmarks. The fair baseline is our own similar-length Shorts in Studio. Analytics can lag a few days.
+- Sources: support.google.com/youtube/answer/12220281 (content performance), /answer/10059070 (Shorts views), /answer/6085583 (data delay).
+
+### Creator consensus (not official)
+- **The first 1–2 seconds decide.** The first frame works like a thumbnail: it should be clear at a glance what the video is about (a recognisable part, not an abstract macro shot) and the opening must deliver what the hook promises.
+- **Length:** about 22–45 s does best for most niches; explainers sit at the upper end (35–45 s). Retention percentage matters more than seconds: don't stretch a 30 s idea to 50 s.
+- **Loops:** a last sentence that leads back into the first one, a last shot that matches the first, or a detail worth a second look earns replays.
+- **Keep every Short distinct** (YouTube's inauthentic-content policy), upload natively without watermarks, and test hook variations rather than polishing one.
+- Sources: creator guides and analytics blogs (Shortimize, Fastlane, Everpop, Creator Essentials, JoinBrands, 2026); TikTok-side guides say the same about the first 3 seconds.
+
+### How the factory already matches
+- Hook of at most 12 words, naming the machine or its surprising fact (D-090); shot 1 moves from the first frame (D-090); loop line that leads back into the hook (D-062, D-089); Shorts 30–50 s with the target in the middle; every video a different machine plus the similarity check (D-076).
+
+### Proposed changes (need the owner's approval before they reach the prompts)
+1. Shorts aim for **35–45 s** of narration instead of the middle of 30–50 s.
+2. **Shot 1 shows the whole part, recognisably**, before any macro detail (first frame = thumbnail).
+3. **Visual loop:** the last clip ends on the same view the first clip starts with.
+4. **Hook variants:** the script stage writes 3 hooks and Gate 1 lets the owner pick one.
+5. Reading results: low stayed to watch → fix the opening; low average % viewed → fix the middle (task 2.9's report shows both).

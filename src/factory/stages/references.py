@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field, model_validator
 from factory.context import AppContext
 from factory.errors import FactoryError
 from factory.integrations.gemini import MAX_INLINE_BYTES, GeminiClient, Media
-from factory.media.ffmpeg import run_ffmpeg
+from factory.media.ffmpeg import probe, run_ffmpeg
 from factory.prompts import render_prompt
 from factory.stages import script as script_stage
 
@@ -31,7 +31,12 @@ IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 VIDEO_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
 PHRASES = (3, 6)
 PROMPT_LIMIT = 8  # newest approved notes in the film rules, so prompts stay short
-SHRINK_SECONDS = 20  # a too-large clip is cut to its first 20 s at 720p before sending
+# A too-large clip is re-encoded small enough to send whole, with its sound, so Gemini follows a
+# 4-5 minute reel from hook to ending (D-109). Gemini looks at about 1 frame per second, so a
+# low bitrate costs little. Longer than MAX_SECONDS: only the start is studied.
+MAX_SECONDS = 600
+SHRINK_TARGET = 0.8  # of MAX_INLINE_BYTES, room for the bitrate to wobble
+AUDIO_KBPS = 32
 
 
 class ReferenceNotes(BaseModel):
@@ -43,6 +48,20 @@ class ReferenceNotes(BaseModel):
     materials_colours: str
     prompt_phrases: list[str] = Field(description="3-6 short phrases to reuse in video prompts")
     has_people: bool = Field(description="true if a person, face or hands are visible")
+    # What a video teaches beyond the picture (D-109); for an image these are "none" / [].
+    hook: str = Field(description="how the first 2-3 seconds grab attention; 'none' for an image")
+    narration: str = Field(
+        description="voice, tone, sentence length, speed, how it addresses viewers"
+    )
+    structure: str = Field(
+        description="the order of its parts, e.g. hook > problem > steps > twist"
+    )
+    pacing: str = Field(description="cut rhythm, length, where it speeds up or pauses")
+    sound: str = Field(description="music, sound effects, silence; 'none' for an image")
+    why_it_works: str = Field(description="the main reasons viewers keep watching or share it")
+    topic_ideas: list[str] = Field(
+        description="0-5 machines or angles for a channel about how car parts and machines work"
+    )
 
     @model_validator(mode="after")
     def _enough_phrases(self) -> ReferenceNotes:
@@ -113,12 +132,33 @@ def add(
 def _media(path: Path, mime: str, kind: str) -> Media:
     data = path.read_bytes()
     if kind == "video" and len(data) > MAX_INLINE_BYTES:
-        with tempfile.TemporaryDirectory() as tmp:
-            small = Path(tmp) / "small.mp4"
-            run_ffmpeg(["-i", str(path), "-t", str(SHRINK_SECONDS), "-vf", "scale=-2:720",
-                        "-c:v", "libx264", "-crf", "30", "-an", str(small)])  # fmt: skip
-            data, mime = small.read_bytes(), "video/mp4"
+        data, mime = _shrink(path), "video/mp4"
     return Media(data=data, mime_type=mime)
+
+
+def _shrink(path: Path) -> bytes:
+    """The whole clip (up to MAX_SECONDS) at a bitrate that fits under the send limit."""
+    seconds = min(float(probe(path)["format"]["duration"]), MAX_SECONDS)
+    if seconds == MAX_SECONDS:
+        log.info("%s is longer than %d min: only its start is studied", path.name,
+                 MAX_SECONDS // 60)  # fmt: skip
+    total_kbps = MAX_INLINE_BYTES * SHRINK_TARGET * 8 / 1000 / seconds
+    video_kbps = int(max(60, min(1000, total_kbps - AUDIO_KBPS)))
+    height = 480 if video_kbps >= 500 else 360
+    with tempfile.TemporaryDirectory() as tmp:
+        small = Path(tmp) / "small.mp4"
+        run_ffmpeg(["-i", str(path), "-t", f"{seconds:.2f}", "-vf", f"scale=-2:{height}",
+                    "-r", "10", "-c:v", "libx264", "-b:v", f"{video_kbps}k",
+                    "-maxrate", f"{video_kbps}k", "-bufsize", f"{video_kbps * 2}k",
+                    "-c:a", "aac", "-ac", "1", "-b:a", f"{AUDIO_KBPS}k",
+                    str(small)])  # fmt: skip
+        data = small.read_bytes()
+    if len(data) > MAX_INLINE_BYTES:
+        raise FactoryError(
+            f"{path.name} is still {len(data) / 1e6:.0f} MB after shrinking; "
+            "trim it to a shorter part and drop it in again"
+        )
+    return data
 
 
 def _save(
@@ -136,12 +176,15 @@ def _save(
             """
             INSERT INTO reference_notes (channel_id, kind, original_name, path, sha256, summary,
                 lighting, camera, composition, motion, materials_colours, prompt_phrases_json,
-                has_people, model, content_id)
-            VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                has_people, model, content_id, hook, narration, structure, pacing, sound,
+                why_it_works, topic_ideas_json)
+            VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (channel_id, kind, path.name, sha, notes.summary, notes.lighting, notes.camera,
              notes.composition, notes.motion, notes.materials_colours,
-             json.dumps(notes.prompt_phrases), int(notes.has_people), model, for_item),
+             json.dumps(notes.prompt_phrases), int(notes.has_people), model, for_item,
+             notes.hook, notes.narration, notes.structure, notes.pacing, notes.sound,
+             notes.why_it_works, json.dumps(notes.topic_ideas[:5])),
         ).lastrowid  # fmt: skip
         target = store(ctx) / f"{ref_id:04d}_{path.name}"
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -195,11 +238,14 @@ def approved_for_prompts(ctx: AppContext, content_id: int | None = None) -> list
             """,
             (ctx.channel.slug, content_id, PROMPT_LIMIT),
         ).fetchall()
-    except sqlite3.OperationalError as exc:  # database from before migration 002 or 005
+    except sqlite3.OperationalError as exc:  # database from before migration 002, 005 or 006
         raise FactoryError("run `uv run factory db init` to update the reference library") from exc
     return [
         {"summary": r["summary"], "owner_note": r["owner_note"], "lighting": r["lighting"],
-         "for_item": r["content_id"],
+         "for_item": r["content_id"], "kind": r["kind"], "hook": r["hook"],
+         "narration": r["narration"], "structure": r["structure"], "pacing": r["pacing"],
+         "sound": r["sound"], "why_it_works": r["why_it_works"],
+         "topic_ideas": json.loads(r["topic_ideas_json"]),
          "camera": r["camera"], "motion": r["motion"],
          "phrases": json.loads(r["prompt_phrases_json"])}
         for r in reversed(rows)

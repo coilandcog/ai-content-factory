@@ -278,6 +278,8 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | owner_note | TEXT | The owner's own words, set when approving; counts most |
 | status | TEXT | `pending` \| `approved` \| `removed`; only `approved` reaches the prompts (newest 8) |
 | model, added_at, decided_at | TEXT | |
+| hook, narration, structure, pacing, sound, why_it_works | TEXT | Migration 006 (D-109): what a reference **video** teaches beyond the picture (Gemini listens too); `none` for images |
+| topic_ideas_json | TEXT | Migration 006: 0–5 machines or angles the video suggests; approved notes feed ideation |
 | content_id | INTEGER FK, NULL | Migration 005 (D-104): set by `references add --for N`, so the note only shapes item N's prompts; NULL = the channel's style for every topic |
 
 ## 4. Content status lifecycle

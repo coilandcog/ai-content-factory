@@ -8,7 +8,11 @@ YouTube: median views of the most-viewed videos of the last 30 days; "-" = no da
 Prefer seed topics, especially rising ones. You may add at most {{ max_new }} machines that are not in the list,
 if they fit a pillar and the audience would find them fascinating.
 
-Already covered (never propose these machines again, in any format):
+{% if reference_ideas %}Ideas from reference videos the owner approved (consider them only if they fit a pillar, the audience and
+the blocklist; they count as new machines for the limit above):
+{% for idea in reference_ideas %}- {{ idea }}
+{% endfor %}
+{% endif %}Already covered (never propose these machines again, in any format):
 {% for name in covered %}- {{ name }}
 {% else %}- (nothing yet)
 {% endfor %}

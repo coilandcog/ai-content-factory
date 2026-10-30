@@ -962,8 +962,12 @@ def clips_review(
                     f"  ⚠ saved before its current prompt (issued {e['prompt_issued_at']}): it was "
                     "made from an older prompt, so remake it from the Flow sheet"
                 )
+            if len(e["votes"]) > 1:
+                typer.echo(f"  votes: {', '.join(e['votes'])}")
             for problem in e["problems"]:
                 typer.echo(f"  - {problem}")
+            for note in e["expert_notes"]:
+                typer.echo(f"  (expert note) {note}")
             if e["fix"]:
                 typer.echo(f"  fix: {e['fix']}")
         run.tally.processed = len(entries)
@@ -1135,6 +1139,12 @@ def references_list(
             typer.echo(f"  motion: {r['motion']}")
             typer.echo(f"  materials and colours: {r['materials_colours']}")
             typer.echo(f"  phrases: {'; '.join(json.loads(r['prompt_phrases_json']))}")
+            if r["kind"] == "video" and r["hook"]:  # what it teaches beyond the picture (D-109)
+                for label in ("hook", "narration", "structure", "pacing", "sound", "why_it_works"):
+                    typer.echo(f"  {label.replace('_', ' ')}: {r[label]}")
+                ideas = json.loads(r["topic_ideas_json"])
+                if ideas:
+                    typer.echo(f"  topic ideas: {'; '.join(ideas)}")
             if r["owner_note"]:
                 typer.echo(f"  your note: {r['owner_note']}")
 

@@ -208,10 +208,20 @@ def _record_issued(folder: Path, prompts: dict) -> None:
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     issued = {}
     for key, text in prompts.items():
-        sha = hashlib.sha256(text.encode()).hexdigest()
+        sha = _content_sha(text)
         same = old.get(str(key), {}).get("sha256") == sha
         issued[str(key)] = old[str(key)] if same else {"sha256": sha, "issued_at": now}
     path.write_text(json.dumps(issued, indent=2))
+
+
+RULES_LINE = "Rules from earlier clips:"
+
+
+def _content_sha(prompt: str) -> str:
+    """The prompt's fingerprint without its rules line: approving a new lesson changes every
+    prompt's rules, not what a clip shows, so kept clips aren't flagged as outdated (D-109)."""
+    kept = [line for line in prompt.splitlines() if not line.startswith(RULES_LINE)]
+    return hashlib.sha256("\n".join(kept).encode()).hexdigest()
 
 
 def issued_prompts(ctx: AppContext, content_id: int) -> dict[str, dict]:

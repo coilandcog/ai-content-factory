@@ -27,6 +27,7 @@ from pydantic import BaseModel, create_model, model_validator
 from factory.context import AppContext
 from factory.integrations.gemini import GeminiClient
 from factory.prompts import render_prompt
+from factory.stages import references as references_stage
 from factory.stages.discover import TopicSignals, latest_signals
 from factory.stages.script import BEAT_ORDERS, HOOK_TYPES, gemini_client
 
@@ -159,6 +160,7 @@ def run(
         "ideate", channel, prompts_root=root, count=count, min_short=MIN_SHORT, min_deep=MIN_DEEP,
         max_new=MAX_NEW_OBJECTS, covered=sorted(covered), hook_types=list(HOOK_TYPES),
         topics=[_topic_line(t, signals.get(t)) for t in seeds if t not in covered],
+        reference_ideas=_reference_ideas(ctx),
     )  # fmt: skip
     llm = llm or gemini_client(ctx)
     batch = llm.generate_json(system=system.text, prompt=user.text, schema=schema,
@@ -396,3 +398,12 @@ def _utc(day: date, hour: int, minute: int, zone: ZoneInfo) -> str:
 
 def _channel_id(conn: sqlite3.Connection, slug: str) -> int:
     return conn.execute("SELECT id FROM channels WHERE slug = ?", (slug,)).fetchone()[0]
+
+
+def _reference_ideas(ctx: AppContext) -> list[str]:
+    """Topic ideas from reference videos the owner approved (D-109), each once, newest first."""
+    seen: dict[str, None] = {}
+    for note in reversed(references_stage.approved_for_prompts(ctx)):
+        for idea in note["topic_ideas"]:
+            seen.setdefault(" ".join(idea.split()), None)
+    return list(seen)[:10]

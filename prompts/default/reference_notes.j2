@@ -1,5 +1,6 @@
-The channel's owner likes this {{ kind }} and wants future AI video shots of machines to learn from its style.
-Describe concretely what makes it look good, so the notes can steer AI video prompts:
+The channel's owner likes this {{ kind }} and wants future videos to learn from it: how it looks{% if kind == "video" %},
+how it sounds and how it is told{% endif %}. It is a reference only: never copy its wording, footage or ideas one to one.
+Describe concretely what makes it good:
 - lighting: the light sources, their colours, direction and mood;
 - camera: the angle, the lens feel (wide, macro, shallow depth of field) and {% if kind == "video" %}how the camera moves{% else %}where a camera move would start{% endif %};
 - composition: where the subject sits in the frame, what fills it, the background;
@@ -7,4 +8,16 @@ Describe concretely what makes it look good, so the notes can steer AI video pro
 - materials_colours: surfaces, finishes and the colour palette;
 - prompt_phrases: 3-6 short phrases (a few words each) that could be pasted into a video prompt to get this look;
 - has_people: true if any person, face or hands are visible.
-Describe the style only: never names, brands, logos or text you can read in it.
+{% if kind == "video" %}Then listen and watch how it is made:
+- hook: exactly how the first 2-3 seconds grab attention (a question, a surprising fact, a striking motion, ...);
+- narration: the voice and tone, sentence length, speaking speed, whether it speaks to "you";
+- structure: the order of its parts, e.g. "hook > why it matters > 3 quick steps > surprising fact > loop back";
+- pacing: how often it cuts, its length, where it speeds up or pauses;
+- sound: music style, sound effects, moments of silence;
+- why_it_works: the main reasons viewers keep watching or share it;
+- topic_ideas: 0-5 machines or angles this video suggests for a channel that shows how car parts and machines work
+  inside (for example "how a starter motor engages"). Only real machines; nothing on weapons, dangerous repairs or
+  real brands.
+{% else %}For an image: hook, sound "none"; narration, structure, pacing "none"; why_it_works: why the picture is striking;
+topic_ideas: [] unless the image clearly suggests a machine to explain.
+{% endif %}Describe the style and the craft only: never names, brands, logos or text you can read in it.

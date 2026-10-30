@@ -782,3 +782,28 @@ def test_dropped_rejected_or_failed_items_are_not_the_previous_video(ctx: AppCon
             )
 
     assert stage.previous_variety(ctx.conn, channel_id, 999) == ("reveal", "classic")
+
+
+def test_approved_reference_videos_teach_the_script_their_craft(ctx: AppContext) -> None:
+    content_id = new_idea(ctx)
+    channel_id = ctx.conn.execute("SELECT id FROM channels").fetchone()[0]
+    with ctx.conn:
+        ctx.conn.execute(
+            """
+            INSERT INTO reference_notes (channel_id, kind, original_name, path, sha256, summary,
+                lighting, camera, composition, motion, materials_colours, prompt_phrases_json,
+                has_people, status, hook, narration, structure, pacing, why_it_works)
+            VALUES (?, 'video', 'r.mp4', 'r', 'x', 's', 'l', 'c', 'c', 'm', 'm', '[]', 0,
+                'approved', 'a surprising number in the first second', 'calm, speaks to you',
+                'hook > why > 3 steps > twist', 'a cut every 2 s', 'a clear payoff')
+            """,
+            (channel_id,),
+        )
+    sdk = FakeGenaiClient(fixture_reply("script_short_alternator"))
+
+    run_stage(ctx, sdk)
+
+    prompt = sdk.calls[0]["contents"]
+    assert content(ctx, content_id)["status"] == "scripted"
+    assert "Storytelling notes from reference videos the owner approved" in prompt  # D-109
+    assert "Hook: a surprising number in the first second | Structure: hook > why" in prompt

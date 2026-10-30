@@ -593,3 +593,11 @@ def test_reshoot_keeps_the_good_clips_and_waits_for_the_new_ones(ctx: AppContext
 
     assert (result.processed, status(ctx, content_id)) == (1, "generated")
     assert [r["shot_n"] for r in assets(ctx, "flow_clip")] == CLIPS
+
+
+def test_a_new_rules_line_does_not_make_a_prompt_look_changed() -> None:
+    base = "Create a premium 8-second product video.\nThe gearbox turns."
+    with_rules = base + "\nRules from earlier clips: the camera never passes through parts."
+
+    assert generate._content_sha(with_rules) == generate._content_sha(base)  # D-109
+    assert generate._content_sha(base + " Faster.") != generate._content_sha(base)

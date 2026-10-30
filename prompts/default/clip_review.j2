@@ -18,5 +18,11 @@ Check it against the prompt and these rules. Every broken rule is a problem:
 {% if lessons %}Lessons from earlier failures (each one broken is a problem too):
 {% for lesson in lessons %}- {{ lesson }}
 {% endfor %}{% endif %}
-verdict: "fail" if any problem would make a viewer who knows engineering doubt the video, else "pass".
+Sort what you find into two lists:
+- visible_problems: things an ordinary viewer would notice on a phone: a part passing through solid metal, parts
+  fusing, morphing, floating apart or swapping ends, the wrong machine, the place changing, a flow going the wrong
+  way, a blurry or warped shot, anything forbidden above. Only these fail the clip.
+- expert_notes: construction details only an engineer would notice (for example the exact kind of belt or chain,
+  missing internal profiles). They are advice, not failures. Many real designs exist: don't call a design wrong
+  just because another one is more common.
 score: 1-10 for overall quality. fix: the most useful change to the prompt{% if kind == "clip" %} or the frame image{% endif %}, in one or two sentences.

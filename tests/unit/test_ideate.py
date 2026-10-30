@@ -256,3 +256,30 @@ def test_a_planned_item_must_use_the_planned_hook_and_beats(ctx: AppContext) -> 
     assert (schema.allowed_hooks, schema.allowed_beats) == (("why_question",), ("classic",))
     status = ctx.conn.execute("SELECT status FROM contents WHERE id = ?", (content_id,))
     assert status.fetchone()[0] == "scripted"
+
+
+def approved_reference(ctx: AppContext, *, kind: str, ideas: list[str], status: str) -> None:
+    channel_id = ctx.conn.execute("SELECT id FROM channels").fetchone()[0]
+    with ctx.conn:
+        ctx.conn.execute(
+            """
+            INSERT INTO reference_notes (channel_id, kind, original_name, path, sha256, summary,
+                lighting, camera, composition, motion, materials_colours, prompt_phrases_json,
+                has_people, status, hook, structure, topic_ideas_json)
+            VALUES (?, ?, 'r', 'r', ?, 's', 'l', 'c', 'c', 'm', 'm', '[]', 0, ?, 'h', 'st', ?)
+            """,
+            (channel_id, kind, f"{kind}{status}{ideas}", status, json.dumps(ideas)),
+        )
+
+
+def test_topic_ideas_from_approved_reference_videos_reach_ideation(ctx: AppContext) -> None:
+    approved_reference(ctx, kind="video", ideas=["how a starter motor engages"], status="approved")
+    approved_reference(ctx, kind="video", ideas=["how a fuel pump primes"], status="pending")
+    client, sdk = llm(fixture_reply("ideate_batch"))
+
+    ideate.run(ctx, llm=client)
+
+    prompt = sdk.calls[0]["contents"]
+    assert "Ideas from reference videos the owner approved" in prompt  # D-109
+    assert "- how a starter motor engages" in prompt
+    assert "fuel pump" not in prompt  # pending notes never count
