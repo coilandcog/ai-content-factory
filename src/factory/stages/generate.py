@@ -449,7 +449,8 @@ def image_prompt(
     ctx: AppContext, row: sqlite3.Row, picture: str, style: str, shot: dict, aspect: str
 ) -> str:
     """One image of the chain as a free Flow image: the owner checks it before any clip is
-    made from it (D-095, D-104)."""
+    made from it (D-095, D-104). Only story prompts stand an explain shot upright: brief video
+    prompts don't, and a check image must show what its clip will (D-110)."""
     return render_prompt(
         "flow_image",
         ctx.channel,
@@ -458,7 +459,7 @@ def image_prompt(
         aspect=aspect,
         hero_look=shot["prompt_vars"]["hero_look"],
         picture=picture,
-        explain=style == "explain",
+        explain=style == "explain" and ctx.channel.video_prompts == "story",
         rules=_rules(ctx, "frame"),
     ).text.strip()
 

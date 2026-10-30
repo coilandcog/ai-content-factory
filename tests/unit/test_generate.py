@@ -558,6 +558,8 @@ def test_brief_prompts_are_like_the_alternator_video_with_one_check_image(ctx: A
         f"image_{i}" for i in (1, 2, 3, 4)
     ]
     assert "Check image: `image_03.png`" in sheet and "End image" not in sheet  # shot 4's
+    for key in ("image_1", "image_2", "image_3", "image_4"):
+        assert "vertical cutaway" not in prompts[key]  # images match their brief clips (D-110)
     assert "**Check image first (0 credits, recommended):**" in sheet
 
 
