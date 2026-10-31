@@ -242,11 +242,11 @@ def _save(
         content_id = conn.execute(
             """
             INSERT INTO contents (channel_id, format, pillar, object_name, angle, virality_score,
-                score_breakdown_json, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'idea')
+                score_breakdown_json, status, visual_style)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'idea', ?)
             """,
             (channel_id, idea.format, idea.pillar, name, idea.angle, total,
-             json.dumps(breakdown, ensure_ascii=False)),
+             json.dumps(breakdown, ensure_ascii=False), channel.video_style),
         ).lastrowid  # fmt: skip
         # Link the newest signals of this machine, so the learn stage can see what inspired it.
         conn.execute(

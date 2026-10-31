@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from factory.cli import app
-from factory.config import load_channel
+from factory.config import REPO_ROOT, load_channel
 from factory.db import connect, migrate, set_status, upsert_channel
 from factory.errors import StatusTransitionError
 
@@ -71,8 +72,36 @@ def test_migrate_creates_every_table_once(conn: sqlite3.Connection) -> None:
     tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
     assert tables == ALL_TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
     assert migrate(conn) == []  # second run: nothing left to apply
+
+
+def test_migration_007_keeps_old_items_on_flow_and_accepts_blueprint_films(tmp_path: Path) -> None:
+    conn = connect(tmp_path / "old.db")
+    migrate(conn, _first_migrations(tmp_path, 6))
+    upsert_channel(conn, load_channel("coil-and-cog"))
+    with conn:
+        conn.execute("INSERT INTO contents (channel_id, format, pillar, object_name) "
+                     "VALUES (1, 'short', 'vehicles', 'alternator')")  # fmt: skip
+        conn.execute("INSERT INTO assets (content_id, kind, path) VALUES (1, 'voiceover', 'v.wav')")
+
+    migrate(conn)
+
+    assert conn.execute("SELECT visual_style FROM contents").fetchone()[0] == "flow"
+    with conn:
+        conn.execute("INSERT INTO assets (content_id, kind, path) VALUES (1, 'blueprint', 'b.mp4')")
+    kinds = [r[0] for r in conn.execute("SELECT kind FROM assets ORDER BY id")]
+    assert kinds == ["voiceover", "blueprint"]  # old rows kept through the table rebuild
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("UPDATE contents SET visual_style = 'veo' WHERE id = 1")
+
+
+def _first_migrations(tmp_path: Path, last: int) -> Path:
+    folder = tmp_path / "migrations"
+    folder.mkdir()
+    for path in sorted((REPO_ROOT / "migrations").glob("*.sql"))[:last]:
+        shutil.copy(path, folder / path.name)
+    return folder
 
 
 def test_upsert_channel_updates_instead_of_duplicating(conn: sqlite3.Connection) -> None:

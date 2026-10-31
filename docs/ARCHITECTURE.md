@@ -56,7 +56,7 @@ flowchart LR
 | **ideate** | `factory ideate`, then `factory plan --week next` | Signals, machines already covered (winning patterns from Phase 3) | `contents` rows (score ≥ 65) with `angle`, score breakdown and `content_signals` links; the plan sets `planned_publish_at`, `hook_type`, `beat_order` (D-080) | new → `idea` | Gemini API free tier; Ollama fallback | Claude API, about €3–8 |
 | **script** | `factory script` | `idea` contents that are in a weekly plan, or have no score (created with `factory new`); planned items must use the plan's hook and beat order (D-080) | `scripts`, `sources`; Gate 1 request | `idea` → `scripted`; blocklisted topic or similarity above the threshold → `archived` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
 | **review (Gate 1)** | `factory review --gate script` | `scripted` | `reviews` row | → `script_approved` / `rejected` / back to `scripted` | Terminal, or Telegram buttons via `factory bot` (task 2.1) | — |
-| **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams | → `awaiting_clips` (sheet + voice + subtitles issued) → `generated` (all clips in the inbox, then animated stills and diagram cards made) | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
+| **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams; for a **blueprint** item (D-111) voiceover, subtitles and `blueprint.mp4` (drawn by code, no Flow) | → `awaiting_clips` (sheet + voice + subtitles issued) → `generated` (all clips in the inbox, then animated stills and diagram cards made); a blueprint item goes through both in one run, or waits at `script_approved` if its machine has no drawing yet | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
 | **assemble** | `factory assemble [--force]` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `preview_720p.mp4`, `music.txt`, `cover.jpg`, `qa_report.json`; `metadata.json` (task 1.11) | QA pass → `assembled`; QA failure → stays `generated` with the reasons in `status_reason` (renders are kept, so a re-run only re-checks) | FFmpeg only (D-068) | Not needed |
 | **review (Gate 2)** | `factory review --gate final` | `assembled` | `reviews` row | → `approved` / `rejected` / back to `generated` | Terminal, or Telegram buttons via `factory bot` (task 2.1) | — |
 | **publish** | `factory publish` (Phase 1: `factory publish --manual`, D-072) | `approved` | `posts` rows | → `scheduled` → `published`; a manual post goes `approved` → `published` | Phase 1: you upload by hand, the factory records it. Phase 2: YouTube Data API (scheduled private → public); TikTok Content Posting API (inbox draft) | Not needed |
@@ -64,7 +64,8 @@ flowchart LR
 
 Helper commands:
 - `factory db init|migrate|backup`
-- `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased).
+- `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased). `--style flow|blueprint` overrides the channel's `video_style` (D-111); `factory status <id>` shows the style.
+- `factory style <id> flow|blueprint`: switches an item's picture style while it is `idea`, `scripted`, `script_approved` or `awaiting_clips` (before its pictures exist, D-111).
 - `factory plan --week next|this`: fills the week's `cadence.weekly_plan` slots with the best unplanned ideas (no pillar 3 days in a row; hook type and beat order differ from the day before) and prints the plan; slots already planned are kept (D-080).
 - `factory generate --restage N [--shots 3|2,4]`: new film shots (Gemini) for an approved item that has no clips yet: the narration stays, the clip prompts and (for `awaiting_clips`) the Flow sheet are rewritten (D-092). With `--shots` only those clips are rewritten; the hero_look and the other clips stay (D-096). On a `generated` or `assembled` item `--shots` is a **reshoot** (D-107): the kept clips go back to the inbox, the redone ones stay there as `old_shot_NN.mp4`, renders and the QA report are removed and the item waits for clips again.
 - `factory clips review <id> [--shots 3|2,4]`: Gemini watches each clip (`shot_NN.mp4`, in the inbox or the project's `clips/`) and frame image (`frame_NN.png/.jpg/.webp`, the free Flow image made first) and checks it against its prompt and the film rules: pass/fail, score 1–10, problems, fix. Since D-104 it reviews the chain's images (`image_NN.png`, each once) and the clips. Advice only, no status change; every review is appended to `clip_review.json` (D-097). A file saved before its current prompt was issued (`flow_issued.json`) is flagged ⚠ (D-098). Since D-109 only **visible problems** fail a clip (expert construction details are notes), each file gets up to 3 votes and the majority decides, and a changed "Rules from earlier clips" line alone doesn't count as a new prompt.
@@ -136,7 +137,7 @@ Helper commands:
 Everything niche-specific is configuration. Code reads `config/settings.yaml` (global) plus one `config/channels/<slug>.yaml` per channel. Both are validated with Pydantic, a library that checks data against declared types. A new niche or channel means a new YAML file, a new set of prompt overrides (optional), new accounts, and `secrets/<slug>/` tokens. **No code changes.**
 
 `uv run factory config check` validates both files and prints a summary, or one readable error line per problem (file, key, reason). The models in `src/factory/config.py` enforce these rules (D-053):
-- Unknown keys are errors, so typos are caught. Every key in the shapes below is required except `prompts_dir`, `video_prompts` (`brief` by default, D-105), `niche.wikipedia_articles` (whose keys must be seed topics) and `benchmarks` (each entry needs `content_id`, `name`, at least one `good_shots` number and `liked`; `improve` is optional).
+- Unknown keys are errors, so typos are caught. Every key in the shapes below is required except `prompts_dir`, `video_prompts` (`brief` by default, D-105), `video_style` (`flow` by default; Coil & Cog sets `blueprint`, D-111), `niche.wikipedia_articles` (whose keys must be seed topics) and `benchmarks` (each entry needs `content_id`, `name`, at least one `good_shots` number and `liked`; `improve` is optional).
 - The channel `slug` must match its file name; `timezone` must be a real time zone; times are `HH:MM`; colors are `#RRGGBB`; each format has `min_s < max_s`; `weekly_plan` may only use enabled formats.
 - **Policy guards:** `gates.final` only accepts `required` (Gate 2 is never removed) and `platforms.*.ai_disclosure` only accepts `true`. Loosening either needs a code change and a new decision, not a YAML edit.
 
@@ -252,6 +253,7 @@ benchmarks:                    # optional: the owner's best videos; their Flow p
     liked: "clean polished look, clear glowing heat and air flow"
     improve: "the spinning turbine and compressor wheels were blurry"
 
+video_style: blueprint           # optional: blueprint (code-drawn film, default for new items) | flow (Flow clips) (D-111)
 video_prompts: brief             # optional: brief (alternator-style product prompts, default) | story (D-104/D-105)
 
 prompts_dir: prompts/coil-and-cog   # optional overrides; falls back to prompts/default
@@ -335,7 +337,8 @@ ai-content-factory/
 │   ├── 003_metrics_view_pct.sql
 │   ├── 004_lessons.sql
 │   ├── 005_reference_topic.sql
-│   └── 006_reference_storytelling.sql
+│   ├── 006_reference_storytelling.sql
+│   └── 007_blueprint_films.sql
 ├── src/factory/
 │   ├── __init__.py
 │   ├── cli.py                    # Typer app: one command per stage
@@ -349,6 +352,7 @@ ai-content-factory/
 │   ├── context.py                # AppContext (config + db) passed to stages; StageResult counts
 │   ├── music.py                  # YouTube Audio Library tracks: add, list, pick least-used
 │   ├── similarity.py             # script similarity: local embeddings, closest recent script (D-076)
+│   ├── blueprint/                # code-drawn films (D-111): canvas.py (grid, timing, facts check, render) + one module per machine
 │   ├── stages/
 │   │   ├── discover.py
 │   │   ├── trends.py             # Google Trends CSV import (factory trends import)

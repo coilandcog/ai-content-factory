@@ -83,6 +83,39 @@ def test_new_and_status_commands(config_dir: Path) -> None:
     assert "content #99 does not exist" in missing.output
 
 
+def test_new_takes_a_visual_style(config_dir: Path) -> None:
+    opts = ["--config-dir", str(config_dir)]
+    runner.invoke(app, ["db", "init", *opts])
+    base = ["new", "--object", "turbo", "--format", "short", "--pillar", "vehicles"]
+
+    flow = runner.invoke(app, [*base, "--style", "flow", *opts])
+    bad = runner.invoke(app, [*base, "--style", "veo", *opts])
+    shown = runner.invoke(app, ["status", "1", *opts])
+
+    assert flow.exit_code == 0, flow.output
+    assert bad.exit_code == 1 and "--style must be flow or blueprint" in bad.output
+    assert "style: flow" in shown.output
+
+
+def test_style_switches_only_before_the_pictures_exist(config_dir: Path) -> None:
+    opts = ["--config-dir", str(config_dir)]
+    runner.invoke(app, ["db", "init", *opts])
+    runner.invoke(
+        app, ["new", "--object", "cvt gearbox", "--format", "short", "--pillar", "vehicles", *opts]
+    )
+
+    switched = runner.invoke(app, ["style", "1", "flow", *opts])
+    shown = runner.invoke(app, ["status", "1", *opts])
+    bad = runner.invoke(app, ["style", "1", "veo", *opts])
+    runner.invoke(app, ["drop", "1", "--reason", "test", *opts])
+    late = runner.invoke(app, ["style", "1", "blueprint", *opts])
+
+    assert switched.exit_code == 0 and "#1 style: flow" in switched.output
+    assert "style: flow" in shown.output
+    assert bad.exit_code == 1 and "flow or blueprint" in bad.output
+    assert late.exit_code == 1 and "is archived" in late.output
+
+
 def test_status_shows_failure_details(config_dir: Path) -> None:
     opts = ["--config-dir", str(config_dir)]
     runner.invoke(app, ["db", "init", *opts])

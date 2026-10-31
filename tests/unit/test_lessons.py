@@ -35,7 +35,9 @@ def ctx(tmp_path: Path) -> AppContext:
     shutil.copytree(REPO_ROOT / "prompts", tmp_path / "prompts")
     conn = connect(tmp_path / "test.db")
     migrate(conn)
-    channel = load_channel("coil-and-cog").model_copy(update={"benchmarks": []})
+    channel = load_channel("coil-and-cog").model_copy(
+        update={"benchmarks": [], "video_style": "flow"}
+    )
     upsert_channel(conn, channel)
     env = EnvSettings(dry_run=True, factory_channel="coil-and-cog")
     yield AppContext(load_settings(), env, channel, conn, tmp_path)

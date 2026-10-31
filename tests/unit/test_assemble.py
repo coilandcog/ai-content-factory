@@ -78,7 +78,7 @@ def make_clip(path: Path, *, with_sound: bool) -> None:
 def ctx(tmp_path: Path) -> AppContext:
     conn = connect(tmp_path / "test.db")
     migrate(conn)
-    channel = load_channel("coil-and-cog")
+    channel = load_channel("coil-and-cog").model_copy(update={"video_style": "flow"})  # Flow clips
     # Test renders are 5 s long (real-length ones would make the tests slow), so this test channel
     # accepts 2-10 s Shorts; every other QA rule is the real one.
     short = channel.formats.short.model_copy(update={"min_s": 2, "max_s": 10})
@@ -179,6 +179,61 @@ def test_both_renders_and_preview_are_made_and_tiktok_has_no_music(ctx: AppConte
     [cover_row] = ctx.conn.execute("SELECT shot_n FROM assets WHERE kind = 'cover'").fetchall()
     assert cover_row[0] == 3  # the Cutaway clip
     assert assemble.run(ctx).processed == 0  # nothing left in `generated`
+
+
+@pytest.mark.slow
+def test_blueprint_film_is_the_whole_picture(
+    ctx: AppContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    from factory import blueprint
+    from factory.blueprint.canvas import LINE, Scene
+
+    def draw(c, t, st, t0, t1):
+        c.text((540, 400), "a quiet test drawing", "label", LINE)
+
+    roles = ["hook", "body", "body", "body", "note", "close"]
+    machine = SimpleNamespace(
+        MACHINE="alternator", FACTS={}, LIVE=(), step=lambda *a: None,
+        new_state=lambda *a: {}, SCENES=[Scene(r, draw) for r in roles],
+    )  # fmt: skip
+    monkeypatch.setitem(blueprint.MODULES, "alternator", machine)
+    real = generate.render_film
+    monkeypatch.setattr(generate, "render_film", lambda *a, **k: real(*a, **k, ss=0.25, fps=10))
+    content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="short",
+                             pillar="vehicles", style="blueprint")  # fmt: skip
+    narration = ("The alternator charges your battery. A belt turns it. Magnets spin. Coils catch "
+                 "it. As an engineer, I like it. It never stops.")  # fmt: skip
+    with ctx.conn:
+        ctx.conn.execute(
+            "INSERT INTO scripts (content_id, version, body_text, engineer_note, est_duration_s, "
+            "shot_list_json) VALUES (?, 1, ?, 'As an engineer, I like it.', 4, ?)",
+            (content_id, narration, json.dumps(SHOTS)),
+        )
+        for url in ("https://en.wikipedia.org/wiki/Alternator", "https://example.edu/alternators"):
+            ctx.conn.execute(
+                "INSERT INTO sources (content_id, url, title, publisher) VALUES (?, ?, 'T', 'P')",
+                (content_id, url),
+            )
+    set_status(ctx.conn, content_id, "scripted")
+    set_status(ctx.conn, content_id, "script_approved")
+    tts = make_fake_tts(seconds=VOICE_S, amplitude=0.05)
+    generate.run(ctx, tts=lambda: tts)
+    add_music(ctx)
+
+    result = assemble.run(ctx, llm=fake_llm())
+
+    assert (result.processed, result.failed) == (1, 0)
+    folder = generate.asset_dir(ctx, content_id)
+    info = probe(folder / "render_youtube.mp4")
+    assert float(info["format"]["duration"]) == pytest.approx(VOICE_S + 1.0, abs=0.15)
+    status = ctx.conn.execute("SELECT status FROM contents").fetchone()[0]
+    assert status == "assembled"  # no diagram cards needed: the film draws its own
+    report = json.loads((folder / "qa_report.json").read_text())
+    assert {r["check"] for r in report if r["ok"] is not True} == {"similarity"}
+    [cover] = ctx.conn.execute("SELECT model, license FROM assets WHERE kind = 'cover'").fetchall()
+    assert tuple(cover) == ("frame of blueprint", "own_work")
 
 
 @pytest.mark.slow

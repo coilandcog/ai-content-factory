@@ -81,7 +81,9 @@ def ctx(tmp_path: Path) -> AppContext:
     conn = connect(tmp_path / "test.db")
     migrate(conn)
     # these tests cover story shots (D-104); brief prompts (the default, D-105) have their own
-    channel = load_channel("coil-and-cog").model_copy(update={"video_prompts": "story"})
+    channel = load_channel("coil-and-cog").model_copy(
+        update={"video_prompts": "story", "video_style": "flow"}  # Flow clips (blueprint: D-111)
+    )
     upsert_channel(conn, channel)
     env = EnvSettings(dry_run=True, factory_channel="coil-and-cog")
     # outputs go under tmp_path; subtitles need the real font files there too

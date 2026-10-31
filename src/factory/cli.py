@@ -707,12 +707,19 @@ def new(
     object_name: Annotated[str, typer.Option("--object", help="What the video explains.")],
     fmt: Annotated[str, typer.Option("--format", help="short | deep_dive (enabled formats).")],
     pillar: Annotated[str, typer.Option(help="One of the channel's pillars, e.g. vehicles.")],
+    style: Annotated[
+        str | None, typer.Option(help="flow | blueprint; default: the channel's video_style.")
+    ] = None,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
     """Create a content item by hand, with status 'idea' (ROADMAP 1.1)."""
     with _tracked_run("new", config_dir) as run:
         channel = load_channel(run.env.factory_channel, config_dir)
-        content_id = add_content(run.conn, channel, object_name=object_name, fmt=fmt, pillar=pillar)
+        if style not in (None, "flow", "blueprint"):
+            raise FactoryError("--style must be flow or blueprint")
+        content_id = add_content(
+            run.conn, channel, object_name=object_name, fmt=fmt, pillar=pillar, style=style
+        )
         log.info(
             "created %s %s (%s)",
             fmt,
@@ -743,6 +750,36 @@ def drop(
         log.info("#%s dropped: %s", content_id, reason,
                  extra={"event": "content_dropped", "content_id": content_id})  # fmt: skip
         typer.echo(f"#{content_id} archived (dropped: {reason.strip()})")
+
+
+STYLE_CHANGEABLE = ("idea", "scripted", "script_approved", "awaiting_clips")
+
+
+@app.command()
+def style(
+    content_id: Annotated[int, typer.Argument(help="The item to switch.")],
+    visual_style: Annotated[str, typer.Argument(help="flow | blueprint")],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Switch an item between Flow clips and a blueprint film before its pictures exist (D-111)."""
+    with _tracked_run("style", config_dir) as run:
+        if visual_style not in ("flow", "blueprint"):
+            raise FactoryError("the style must be flow or blueprint")
+        row = run.conn.execute("SELECT status FROM contents WHERE id = ?", (content_id,)).fetchone()
+        if row is None:
+            raise FactoryError(f"content #{content_id} does not exist")
+        if row["status"] not in STYLE_CHANGEABLE:
+            raise FactoryError(
+                f"content #{content_id} is {row['status']}: its pictures exist already; the style "
+                f"can only change while it is {', '.join(STYLE_CHANGEABLE)}"
+            )
+        with run.conn:
+            run.conn.execute(
+                "UPDATE contents SET visual_style = ? WHERE id = ?", (visual_style, content_id)
+            )
+        log.info("#%s style: %s", content_id, visual_style,
+                 extra={"event": "style_changed", "content_id": content_id})  # fmt: skip
+        typer.echo(f"#{content_id} style: {visual_style}")
 
 
 @app.command()

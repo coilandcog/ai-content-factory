@@ -54,7 +54,11 @@ def ctx(tmp_path: Path) -> AppContext:
     conn = connect(tmp_path / "test.db")
     migrate(conn)
     channel = load_channel("coil-and-cog").model_copy(
-        update={"benchmarks": [], "video_prompts": "story"}  # image chains (D-104)
+        update={
+            "benchmarks": [],
+            "video_prompts": "story",
+            "video_style": "flow",
+        }  # image chains (D-104)
     )
     upsert_channel(conn, channel)
     env = EnvSettings(dry_run=True, factory_channel="coil-and-cog")

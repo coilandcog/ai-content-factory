@@ -96,6 +96,7 @@ These are our own work and a major part of the "original value" each video adds.
 
 - **Intro:** none. The hook line and visual start at frame 1.
 - **Outro:** the loop line, then a 1-second logo sting (the logo fades in with a cyan "spark" sweep). The sting is built by `factory brand build` and stored as `assets_static/logo/sting_1080x1920.mp4` and `sting_1920x1080.mp4`: 1.0 s, 30 fps, H.264 `yuv420p`, with a silent 48 kHz stereo AAC track so it joins cleanly onto narrated clips. The logo fades in over 0.45 s and the spark crosses the letters between 0.10 s and 0.75 s. Frames are drawn with Pillow and encoded by FFmpeg (the installed FFmpeg has no `drawtext` filter).
+- **Blueprint covers (D-111):** the sharpest frame of `blueprint.mp4`, licence `own_work`.
 - **Shorts and Deep Dive covers:** the best Cutaway frame, picked automatically as the sharpest of 8 frames from the Cutaway beat's clip (else the first clip), saved as `cover.jpg` (1080×1920, no text) by `factory assemble`, then confirmed by the owner at Gate 2.
 - **Episode thumbnails:** one object, glowing and cut open, on graphite; at most 3 words in Montserrat ExtraBold; 1280×720 JPG under 2 MB.
 
@@ -174,3 +175,14 @@ Open on a wide establishing shot of {{ theme_scene }}, then a slow dolly in, cin
 - Three smooth camera angles per clip, all in the same place; the prompt says the place and physics never change (D-092).
 - Never ask for real brand names, logos, real people or real identifiable locations.
 - Record the exact prompt text for every generated asset in the `assets.prompt` field.
+
+## 11. Blueprint films (D-111)
+
+A blueprint film is drawn by code (`src/factory/blueprint/`), so the mechanism is calculated, never guessed: a CVT belt keeps one length while the pulleys change, jet-engine air only ever moves forward and leaves faster than it came in. It is the channel default for new items (`video_style: blueprint`); Flow stays available per item (`factory new --style flow`).
+
+- **Look:** navy blueprint paper (`#0A1E36`) with a 30 px grid (every 5th line brighter), light-blue line work, the channel's energy colours: cyan for electricity and cool air, amber/red for heat, blue for incoming air and fluids. Titles in Montserrat ExtraBold, labels in Inter SemiBold.
+- **Layout (1080×1920):** a scene title at the top (y ≈ 120); the machine in the upper two thirds; **y 1180–1360 stays empty for the subtitles**; readouts, charts and close-ups below (y 1400–1860).
+- **Story:** one scene per part of the script: hook, body scenes, the Engineer's Note, the closing line. Scenes start on their sentences (from `voice_words.json`, 0.15 s early) and crossfade over 0.3 s, so a changed note still lines up.
+- **Verified truth (owner rule):** every number on screen comes from the machine's `FACTS` (text + source page); counters count up to a fact's value, and readouts the drawing calculates (a ratio) are listed in `LIVE`. `generate` refuses a film that shows any other number. When sources disagree, the film shows a range that covers both (blade alloys melt at "about 1,100-1,350 °C").
+- **Audio:** the narration and music are added by `assemble` as for every video; the film itself is silent.
+- **A new machine** needs one drawing module (one session with Claude); until it exists, a blueprint item waits at `script_approved` with a warning.

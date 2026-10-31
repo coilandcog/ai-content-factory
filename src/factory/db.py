@@ -181,11 +181,13 @@ def add_content(
     object_name: str,
     fmt: str,
     pillar: str,
+    style: str | None = None,
 ) -> int:
     """Create one content item with status 'idea' and return its id.
 
     The format must be enabled and the pillar must exist in the channel YAML; the database has
-    no fixed pillar list because pillars differ per channel.
+    no fixed pillar list because pillars differ per channel. `style` overrides the channel's
+    video_style (flow | blueprint, D-111).
     """
     name = " ".join(object_name.split()).lower()  # "  CVT  Gearbox " -> "cvt gearbox"
     if not name:
@@ -206,10 +208,10 @@ def add_content(
     with conn:
         cur = conn.execute(
             """
-            INSERT INTO contents (channel_id, format, pillar, object_name)
-            SELECT id, ?, ?, ? FROM channels WHERE slug = ?
+            INSERT INTO contents (channel_id, format, pillar, object_name, visual_style)
+            SELECT id, ?, ?, ?, ? FROM channels WHERE slug = ?
             """,
-            (fmt, pillar, name, channel.slug),
+            (fmt, pillar, name, style or channel.video_style, channel.slug),
         )
     if cur.rowcount != 1:
         raise FactoryError(

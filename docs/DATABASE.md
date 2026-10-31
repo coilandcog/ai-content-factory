@@ -86,6 +86,7 @@ Rows are created or updated from the channel YAML (`platforms.*`) when the first
 | format | TEXT | `short` \| `deep_dive` \| `episode` |
 | pillar | TEXT | One of the channel YAML's pillar ids, e.g. `vehicles` \| `air_and_sea` \| `industry_and_energy` (items made before D-073 keep `machines` / `everyday_things`) |
 | object_name | TEXT | e.g. `alternator` |
+| visual_style | TEXT | Migration 007 (D-111): `flow` (Flow clips made by hand) \| `blueprint` (a film drawn by code, `blueprint.mp4`). New items take the channel's `video_style`; older items stay `flow` |
 | working_title | TEXT | |
 | angle | TEXT | One sentence: what's new or interesting |
 | hook_type | TEXT | See `CONTENT_STRATEGY.md` §6 |
@@ -143,7 +144,7 @@ At least 2 sources are required before Gate 1.
 |---|---|---|
 | id | INTEGER PK | |
 | content_id | INTEGER FK | |
-| kind | TEXT | `flow_sheet` \| `flow_clip` \| `still` \| `still_anim` \| `diagram` \| `voiceover` \| `subtitles` \| `music` \| `render_youtube` \| `render_tiktok` \| `preview` \| `cover` \| `thumbnail` \| `metadata` |
+| kind | TEXT | `flow_sheet` \| `flow_clip` \| `still` \| `still_anim` \| `diagram` \| `voiceover` \| `subtitles` \| `music` \| `render_youtube` \| `render_tiktok` \| `preview` \| `cover` \| `thumbnail` \| `metadata` \| `blueprint` (migration 007, D-111: the code-drawn film; the table was rebuilt because SQLite can't change a CHECK) |
 | shot_n | INTEGER | Shot number for clips, stills and diagrams; otherwise NULL |
 | path | TEXT | Relative to the repo root |
 | sha256 | TEXT | Detects changed or duplicate files |
@@ -314,7 +315,8 @@ The main path is the one in the PRD: **idea → scripted → generated → appro
 
 ```
 data/assets/<channel_slug>/<content_id 6 digits>/
-├── flow_sheet.md            # prompts the owner pastes into Google Flow
+├── flow_sheet.md            # prompts the owner pastes into Google Flow (flow items)
+├── blueprint.mp4            # the code-drawn film (blueprint items, D-111)
 ├── clips/shot_01.mp4 …      # copied from data/inbox/flow/<content_id>/
 ├── stills/still_03.png …
 ├── stills/still_03_anim.mp4

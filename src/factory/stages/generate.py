@@ -6,6 +6,8 @@ Pass 2, awaiting_clips -> generated: once every shot_NN.mp4 is in the inbox and 
 clips into the asset folder and record them, then make the animated stills and diagram cards
 (1.8). Pass 1 also writes the subtitles (subs.ass, 1.7) with the voice; "generated" needs clips,
 voice, subtitles, stills and diagrams.
+A blueprint item (D-111) needs no Flow: pass 1 renders the voice, then its code-drawn film
+(blueprint.mp4), and it moves on to "generated" in the same run.
 """
 
 from __future__ import annotations
@@ -24,6 +26,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from factory import blueprint
+from factory.blueprint.canvas import H, W, count_sentences, render_film
 from factory.budgets import check_and_record, daily_limits, usage_today
 from factory.context import AppContext, StageResult
 from factory.db import set_status
@@ -74,6 +78,7 @@ PROMPTS_FILE = script_stage.FLOW_PROMPTS_FILE  # the prompts issued, read back w
 ISSUED_FILE = "flow_issued.json"
 STILL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")  # optional owner images: still_NN.<ext>
 STILL_SAFE_AREA = "upper third and the lower quarter"  # where labels and subtitles go
+BLUEPRINT_FILE = "blueprint.mp4"  # the code-drawn film of a blueprint item (D-111)
 
 
 def run(
@@ -109,6 +114,14 @@ def inbox_dir(ctx: AppContext, content_id: int) -> Path:
 
 def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
     content_id = row["id"]
+    if row["visual_style"] == "blueprint":
+        if row["object_name"] not in blueprint.MODULES:  # no drawing yet: wait, do no work
+            log.warning("#%s: %s", content_id, blueprint.missing_message(row["object_name"]),
+                        extra={"content_id": content_id, "event": "blueprint_missing"})  # fmt: skip
+            return False
+        voice.render(ctx, content_id, speech)
+        set_status(ctx.conn, content_id, "awaiting_clips", reason="blueprint film next")
+        return _draw(ctx, row)
     sheet = _write_sheet(ctx, row)
     voice.render(ctx, content_id, speech)
     set_status(ctx.conn, content_id, "awaiting_clips")
@@ -519,9 +532,38 @@ def windows_path(path: Path) -> str:
 # --- pass 2: collect clips -------------------------------------------------------------------
 
 
+def _draw(ctx: AppContext, row: sqlite3.Row) -> bool:
+    """Render the blueprint film, timed to the narration (D-111). A film showing any number
+    without a verified fact is refused: the owner's rule is no discrepancy anywhere."""
+    content_id = row["id"]
+    module = blueprint.module_for(row["object_name"])
+    folder = asset_dir(ctx, content_id)
+    voice_wav = folder / "voice.wav"
+    if not voice_wav.is_file() or not (folder / voice.WORDS_FILE).is_file():
+        raise FactoryError(f"voice missing: run `factory voice render {content_id}`")
+    words = json.loads((folder / voice.WORDS_FILE).read_text())
+    duration = float(probe(voice_wav)["format"]["duration"])
+    note = current_script(ctx, content_id)["engineer_note"] or ""
+    out = folder / BLUEPRINT_FILE
+    problems = render_film(module, words, count_sentences(note), duration, voice.fonts_dir(ctx),
+                           out)  # fmt: skip
+    if problems:
+        out.unlink(missing_ok=True)
+        raise FactoryError(f"blueprint film refused: {'; '.join(problems)}")
+    film = {"path": out, "generator": "factory", "model": f"blueprint/{module.MACHINE}",
+            "license": "own_work", "duration_s": duration, "width": W, "height": H}  # fmt: skip
+    replace_assets(ctx, content_id, "blueprint", [film])
+    set_status(ctx.conn, content_id, "generated")
+    log.info("#%s: blueprint film drawn (%.1f s) -> generated", content_id, duration,
+             extra={"content_id": content_id, "event": "blueprint_drawn"})  # fmt: skip
+    return True
+
+
 def _collect(ctx: AppContext, row: sqlite3.Row) -> bool:
     """Move a complete, playable clip set into the project. False = still waiting."""
     content_id = row["id"]
+    if row["visual_style"] == "blueprint":
+        return _draw(ctx, row)
     script = current_script(ctx, content_id)
     shots = _flow_shots(script)
     inbox = inbox_dir(ctx, content_id)

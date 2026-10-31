@@ -216,7 +216,8 @@ def content_report(conn: sqlite3.Connection, content_id: int) -> str:
         raise FactoryError(f"content #{content_id} does not exist")
     lines = [
         f"Content #{row['id']} ({row['slug']})",
-        f"  object: {row['object_name']} | format: {row['format']} | pillar: {row['pillar']}",
+        f"  object: {row['object_name']} | format: {row['format']} | pillar: {row['pillar']}"
+        f" | style: {row['visual_style']}",
         f"  status: {row['status']}",
     ]
     if row["status_before_failure"]:
