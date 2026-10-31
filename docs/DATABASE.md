@@ -202,7 +202,7 @@ At least 2 sources are required before Gate 1.
 | dry_run | INTEGER | 1 if created in DRY_RUN mode (never real) |
 | UNIQUE(content_id, platform) | | |
 
-A manual post (`factory publish --manual`, D-072) is stored as `status = published`, `privacy = public`, `dry_run = 0` (the owner posted it, so it is real even while `DRY_RUN=true`), with the video id taken from the link. YouTube rows keep the title and full description; TikTok rows keep the caption (`title` is empty).
+A scheduled YouTube post (`factory publish --id N`, D-115) is stored as `status = scheduled`, `privacy = private`, `scheduled_for = <publishAt, UTC>`, `dry_run = 0`, `url = https://youtu.be/<id>`; `factory publish --check` changes it to `published`, `privacy = public`, `published_at`. In DRY_RUN nothing is stored (a pretend row would block the real one through `UNIQUE(content_id, platform)`). A manual post (`factory publish --manual`, D-072) is stored as `status = published`, `privacy = public`, `dry_run = 0` (the owner posted it, so it is real even while `DRY_RUN=true`), with the video id taken from the link. YouTube rows keep the title and full description; TikTok rows keep the caption (`title` is empty).
 
 ### `metrics`
 | Column | Type | Notes |
@@ -307,7 +307,7 @@ The parts are normal `contents` rows with `series_id` and `part_n` (1..parts).
 | `generated` | Clips, voice, subtitles, stills and diagrams all present. A reshoot (`--restage N --shots`, D-107) sends it back to `awaiting_clips`. Built up task by task: since task 1.6 it means every Flow clip (checked: readable, portrait, ≥3 s) plus `voice.wav`; subtitles (1.7) and stills/diagrams (1.8) join when built | generate | `assembled`, `awaiting_clips` (reshoot, D-107), `archived` (drop) |
 | `assembled` | Renders done and automated QA passed | assemble | `approved`, `generated` (redo), `awaiting_clips` (reshoot, D-107), `rejected`, `archived` (drop) |
 | `approved` | Owner approved the final video | review | `scheduled`, `published` (manual post, D-072), `archived` (drop) |
-| `scheduled` | YouTube scheduled and/or TikTok draft sent | publish | `published` |
+| `scheduled` | YouTube scheduled and/or TikTok draft sent | publish | `published` (`publish --check` once YouTube shows it public, or a manual TikTok post) |
 | `published` | Live on at least one platform | publish | `analyzed` |
 | `analyzed` | 28-day metrics stored and labeled | learn | (end) |
 | `rejected` | Owner rejected it | review | `archived` |

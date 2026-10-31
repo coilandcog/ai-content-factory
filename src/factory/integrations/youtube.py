@@ -4,22 +4,35 @@ ROADMAP 2.2, D-102).
 
 Quota: search.list costs 100 units, videos.list and channels.list 1 unit per call. Callers pass a
 `before_call(units)` that reserves the units in api_usage first.
+
+Signed-in calls retry network errors and 5xx answers like every other client (ARCHITECTURE.md §6):
+an interrupted resumable upload carries on from where it stopped (ROADMAP 2.3, D-115).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import logging
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
+from tenacity import (
+    Retrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+    wait_random,
+)
 
-from factory.errors import BudgetExceededError, IntegrationError
-from factory.integrations.http_json import get_json
+from factory.errors import BudgetExceededError, IntegrationError, RetryableError
+from factory.integrations.http_json import MAX_ATTEMPTS, get_json
+
+log = logging.getLogger("factory.youtube")
 
 API = "https://www.googleapis.com/youtube/v3"
 SEARCH_UNITS = 100
@@ -133,27 +146,83 @@ def upload(
     category_id: int,
     privacy: str,
     before_call: Callable[[int], None],
+    publish_at: datetime | None = None,
+    tags: Sequence[str] = (),
+    retry_wait_s: float = 2,
 ) -> str:
     """Upload one video, always labelled as AI-made (containsSyntheticMedia, D-039); returns its
-    id. The caller decides the privacy; tests and the test upload pass 'unlisted'."""
+    id. The caller decides the privacy; tests and the test upload pass 'unlisted'. With
+    `publish_at` the video stays private until YouTube itself makes it public at that time, so
+    YouTube only accepts it together with 'private'."""
     if privacy not in PRIVACY:
         raise ValueError(f"privacy must be one of {PRIVACY}")
-    body = {
-        "snippet": {"title": title, "description": description, "categoryId": str(category_id),
-                    "defaultLanguage": "en"},
-        "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False,
-                   "containsSyntheticMedia": True},
-    }  # fmt: skip
+    if publish_at is not None and privacy != "private":
+        raise ValueError("publish_at only works with privacy 'private'")
+    snippet = {"title": title, "description": description, "categoryId": str(category_id),
+               "defaultLanguage": "en"}  # fmt: skip
+    if tags:
+        snippet["tags"] = list(tags)
+    status = {"privacyStatus": privacy, "selfDeclaredMadeForKids": False,
+              "containsSyntheticMedia": True}  # fmt: skip
+    if publish_at is not None:
+        status["publishAt"] = publish_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Counted once: a retry resumes the same upload, it doesn't start a new one.
     before_call(UPLOAD_UNITS)
     request = api.videos().insert(
         part="snippet,status",
-        body=body,
+        body={"snippet": snippet, "status": status},
         media_body=MediaFileUpload(str(path), mimetype="video/mp4", resumable=True, chunksize=-1),
     )
     response = None
     while response is None:  # resumable upload: one chunk (the whole small file), then the answer
-        _, response = _execute(request, chunk=True)
+        _, response = _with_retries(
+            lambda: _execute(request, chunk=True), "YouTube upload", retry_wait_s
+        )
     return response["id"]
+
+
+def video_privacy(
+    api: Any,
+    video_ids: Sequence[str],
+    *,
+    before_call: Callable[[int], None],
+    retry_wait_s: float = 2,
+) -> dict[str, str]:
+    """privacyStatus ('private', 'unlisted', 'public') of each video that still exists (up to
+    50 per call, 1 unit); a deleted video is missing from the answer."""
+    found: dict[str, str] = {}
+    for start in range(0, len(video_ids), 50):
+        chunk = ",".join(video_ids[start : start + 50])
+
+        def call(chunk: str = chunk) -> Any:
+            before_call(VIDEOS_UNITS)
+            return _execute(api.videos().list(part="status", id=chunk, maxResults=50))
+
+        response = _with_retries(call, "YouTube videos.list", retry_wait_s)
+        for item in response.get("items") or []:
+            found[item["id"]] = item.get("status", {}).get("privacyStatus", "")
+    return found
+
+
+def _with_retries(call: Callable[[], Any], service: str, retry_wait_s: float) -> Any:
+    """`call()` with the shared retry rules: only RetryableError, 4 attempts, 2/4/8 s + jitter."""
+    retrying = Retrying(
+        retry=retry_if_exception_type(RetryableError),
+        stop=stop_after_attempt(MAX_ATTEMPTS),
+        wait=wait_exponential(multiplier=retry_wait_s) + wait_random(0, retry_wait_s / 2),
+        before_sleep=lambda state: log.warning(
+            "%s attempt %d failed (%s); retrying",
+            service,
+            state.attempt_number,
+            state.outcome.exception() if state.outcome else "?",
+            extra={"event": "http_retry"},
+        ),
+        reraise=True,
+    )
+    for attempt in retrying:
+        with attempt:
+            return call()
+    raise AssertionError("unreachable: Retrying either returns or raises")
 
 
 def _execute(request: Any, *, chunk: bool = False) -> Any:
@@ -163,7 +232,11 @@ def _execute(request: Any, *, chunk: bool = False) -> Any:
         reason = _http_reason(exc)
         if reason in {"quotaExceeded", "uploadLimitExceeded", "rateLimitExceeded"}:
             raise BudgetExceededError(f"YouTube refused: {reason}; try again tomorrow") from exc
+        if exc.resp.status >= 500:
+            raise RetryableError(f"YouTube HTTP {exc.resp.status}: {reason}") from exc
         raise IntegrationError(f"YouTube HTTP {exc.resp.status}: {reason}") from exc
+    except (OSError, TimeoutError) as exc:  # httplib2 raises socket errors for a lost network
+        raise RetryableError(f"YouTube network error: {type(exc).__name__}") from exc
 
 
 def _http_reason(exc: HttpError) -> str:

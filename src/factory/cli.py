@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -113,7 +114,7 @@ STAGES: dict[str, tuple[str, str]] = {
     "generate": ("Build the Flow prompt sheet, voiceover, subtitles and stills.", "1.6"),
     "assemble": ("Edit clips, voice and subtitles into YouTube and TikTok renders.", "1.9"),
     "review": ("Gate 1 (script) and Gate 2 (final) human approval.", "1.5"),
-    "publish": ("Publish approved videos (--manual: record your own uploads).", "1.12"),
+    "publish": ("Schedule approved videos on YouTube (--manual: record your own uploads).", "2.3"),
     "learn": ("Collect analytics and label winners and losers.", "2.5"),
 }
 
@@ -600,10 +601,20 @@ def assemble(
 
 
 def publish(
+    content_id: Annotated[int | None, typer.Option("--id", help="The approved item.")] = None,
+    at: Annotated[
+        str | None,
+        typer.Option(
+            help='When it goes public, local time "2026-11-02 17:00" (default: planned '
+            "slot, else the next free day at the publish time)."
+        ),
+    ] = None,
+    check: Annotated[
+        bool, typer.Option(help="Record scheduled YouTube videos that are public now.")
+    ] = False,
     manual: Annotated[
         bool, typer.Option(help="You upload by hand; the factory prints the kit and records it.")
     ] = False,
-    content_id: Annotated[int | None, typer.Option("--id", help="The approved item.")] = None,
     platform: Annotated[
         str | None, typer.Option(help="youtube | tiktok: record the post you made there.")
     ] = None,
@@ -613,14 +624,47 @@ def publish(
     ] = False,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
-    """Without --platform: print the upload kit. With --platform and --url: record the live post
-    (the first one moves the item to `published`). ROADMAP 1.12, D-072."""
+    """--id N: upload to YouTube as private, scheduled to go public by itself (needs
+    DRY_RUN=false; D-115). --check: record the ones that are public now. --manual: print the
+    upload kit, or with --platform and --url record a post you made (D-072)."""
     with _tracked_run("publish", config_dir) as run:
-        if not manual:
-            raise FactoryError("only `--manual` is built yet (API publishing: ROADMAP task 2.3)")
-        if content_id is None:
-            raise FactoryError("--manual needs --id (approved items: `factory status`)")
         ctx = _context(run, config_dir)
+        if check:
+            checked = publish_stage.check_scheduled(ctx)
+            if not checked:
+                typer.echo("No scheduled YouTube posts.")
+            for post in checked:
+                when = publish_stage.local_time(
+                    ctx, datetime.fromisoformat(post.scheduled_for.replace("Z", "+00:00"))
+                )
+                text = {
+                    "published": "public now: recorded as published",
+                    "waiting": f"still private, goes public {when}",
+                    "missing": "not found on YouTube (deleted in Studio?)",
+                }[post.state]
+                typer.echo(f"#{post.content_id} {post.url}: {text}")
+            run.tally.processed = sum(post.state == "published" for post in checked)
+            return
+        if content_id is None:
+            raise FactoryError("publish needs --id (approved items: `factory status`) or --check")
+        if not manual:
+            when = publish_stage.parse_local_time(ctx, at) if at else None
+            post = publish_stage.schedule_youtube(ctx, content_id, at=when)
+            public = publish_stage.local_time(ctx, post.publish_at)
+            if post.dry_run:
+                typer.echo(f"[DRY RUN] would upload {post.render.name} of #{content_id} to "
+                           f"YouTube as private, public at {public}:\n  {post.title}")  # fmt: skip
+                typer.echo(f"To do it: DRY_RUN=false uv run factory publish --id {content_id}"
+                           + (f' --at "{at}"' if at else ""))  # fmt: skip
+                return
+            run.tally.processed = 1
+            typer.echo(f"#{content_id} uploaded (private, AI label on): {post.url}")
+            typer.echo(f"YouTube makes it public at {public}. Afterwards: "
+                       "uv run factory publish --check")  # fmt: skip
+            typer.echo(
+                f"TikTok is still by hand: uv run factory publish --manual --id {content_id}"
+            )
+            return
         if platform is None:
             typer.echo(publish_stage.upload_kit(ctx, content_id))
             return
@@ -1063,13 +1107,23 @@ def auth_youtube(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
 
 
 @auth_app.command("test-upload")
-def auth_test_upload(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+def auth_test_upload(
+    scheduled: Annotated[
+        bool, typer.Option(help="Private and scheduled 30 days ahead, to prove scheduling.")
+    ] = False,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
     """Upload the 1 s brand sting as an UNLISTED, AI-labelled test video (needs DRY_RUN=false).
     Delete it in YouTube Studio afterwards."""
     with _tracked_run("auth test-upload", config_dir) as run:
-        link = publish_stage.test_upload(_context(run, config_dir))
-        typer.echo(f"Uploaded (unlisted): {link}")
-        typer.echo("Check it in YouTube Studio > Content, then delete it there.")
+        link = publish_stage.test_upload(_context(run, config_dir), scheduled=scheduled)
+        if scheduled:
+            typer.echo(f"Uploaded (private, scheduled 30 days ahead): {link}")
+            typer.echo("Check YouTube Studio > Content shows 'Scheduled', then DELETE it there: "
+                       "otherwise it goes public in 30 days.")  # fmt: skip
+        else:
+            typer.echo(f"Uploaded (unlisted): {link}")
+            typer.echo("Check it in YouTube Studio > Content, then delete it there.")
         run.tally.processed = 1
 
 
