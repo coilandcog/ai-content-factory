@@ -86,6 +86,7 @@ Rows are created or updated from the channel YAML (`platforms.*`) when the first
 | format | TEXT | `short` \| `deep_dive` \| `episode` |
 | pillar | TEXT | One of the channel YAML's pillar ids, e.g. `vehicles` \| `air_and_sea` \| `industry_and_energy` (items made before D-073 keep `machines` / `everyday_things`) |
 | object_name | TEXT | e.g. `alternator` |
+| series_id / part_n | INTEGER | Migration 008 (D-112): the series this item is a part of, and which part (NULL for a normal video) |
 | visual_style | TEXT | Migration 007 (D-111): `flow` (Flow clips made by hand) \| `blueprint` (a film drawn by code, `blueprint.mp4`). New items take the channel's `video_style`; older items stay `flow` |
 | working_title | TEXT | |
 | angle | TEXT | One sentence: what's new or interesting |
@@ -264,6 +265,18 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | lessons.status | TEXT | `pending` \| `approved` \| `removed`; only `approved` reaches prompts (newest 15) and the clip review; `removed` lessons are shown to Gemini so they aren't proposed again |
 | lessons.model, added_at, decided_at | TEXT | |
 | lesson_inputs (channel_id, review_key) | PK | Failed reviews already learned from, so each failure is sent once |
+
+### `series` (migration 008, D-112)
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | |
+| channel_id | INTEGER FK | |
+| topic | TEXT | The machine, e.g. `jet engine` (must have a blueprint drawing with parts) |
+| parts | INTEGER | 2-5 |
+| teaser_content_id | INTEGER FK → contents | Optional overview video the parts link back to |
+| created_at | TEXT | |
+
+The parts are normal `contents` rows with `series_id` and `part_n` (1..parts).
 
 ### `reference_notes` (migration 002, D-100)
 | Column | Type | Notes |

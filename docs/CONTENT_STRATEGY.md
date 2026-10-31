@@ -173,3 +173,13 @@ Kept apart: what **YouTube officially states** and what is **creator consensus**
 3. **Visual loop:** the last clip ends on the same view the first clip starts with.
 4. **Hook variants:** the script stage writes 3 hooks and Gate 1 lets the owner pick one.
 5. Reading results: low stayed to watch → fix the opening; low average % viewed → fix the middle (task 2.9's report shows both).
+
+## 13. Topic series (D-112)
+
+From 2026-10-31 a topic can be made as several linked Shorts (2-5 parts, 3 by default), e.g. *Jet Engine, Part 1/3: Intake, Fan and Bypass*.
+
+- **Parts come from the drawing:** the machine's blueprint module lists its parts (title, focus, scenes), so the film of a part always shows what its script explains and the order is right. A machine needs a drawing in that many parts first (`factory series new` refuses otherwise).
+- **Scripts:** each part's prompt has the outline (its own part marked), the earlier parts' narration (not to be repeated) and the drawing's verified facts (the only numbers it may say). The Engineer's Note is about the part's focus. The last line is a **closing statement, never a question**: parts before the last name what the next part shows ("Next: ..."), the last part wraps up the series. Code rejects a question.
+- **Similarity:** parts of one series and its teaser are not compared with each other (they share a topic on purpose); they are still compared with every other video.
+- **Titles and descriptions:** code sets the title "{Topic}, Part n/N: {part title}", starts the TikTok caption with "Part n/N:", and adds "Part n of N." plus links to the teaser ("Overview: ...") and the earlier parts that are already on YouTube.
+- **Order and posting:** parts are created, scripted and generated in part order; they are not put into `factory plan` (the weekly variety rules would split them). Post them on consecutive days, in order. A teaser (an overview video, e.g. #16) can go out first; the parts link back to it.

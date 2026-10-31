@@ -32,6 +32,7 @@ from factory.db import (
     add_content,
     connect,
     finish_run,
+    latest_version,
     migrate,
     schema_version,
     set_status,
@@ -57,6 +58,7 @@ from factory.stages import publish as publish_stage
 from factory.stages import references as references_stage
 from factory.stages import review as review_stage
 from factory.stages import script as script_stage
+from factory.stages import series as series_stage
 from factory.stages import trends as trends_stage
 from factory.stages import voice as voice_stage
 
@@ -96,6 +98,8 @@ references_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(references_app, name="references")
+series_app = typer.Typer(help="One topic as several linked videos (D-112).", no_args_is_help=True)
+app.add_typer(series_app, name="series")
 app.add_typer(clips_app, name="clips")
 app.add_typer(trends_app, name="trends")
 
@@ -157,6 +161,12 @@ def _open_db(db_path: Path) -> sqlite3.Connection:
         if conn is not None:
             conn.close()
         log.error("no database at %s: run `uv run factory db init` first", db_path)
+        raise typer.Exit(code=1)
+    have, need = schema_version(conn), latest_version()
+    if have < need:  # code newer than the database: stop before anything reads a missing table
+        conn.close()
+        log.error("the database is at version %s, this code needs %s: run `uv run factory db init`",
+                  have, need)  # fmt: skip
         raise typer.Exit(code=1)
     return conn
 
@@ -750,6 +760,38 @@ def drop(
         log.info("#%s dropped: %s", content_id, reason,
                  extra={"event": "content_dropped", "content_id": content_id})  # fmt: skip
         typer.echo(f"#{content_id} archived (dropped: {reason.strip()})")
+
+
+@series_app.command("new")
+def series_new(
+    object_name: Annotated[
+        str, typer.Option("--object", help="A machine with a blueprint drawing.")
+    ],
+    fmt: Annotated[str, typer.Option("--format", help="short | deep_dive")] = "short",
+    pillar: Annotated[str, typer.Option(help="One of the channel's pillars.")] = "vehicles",
+    parts: Annotated[int, typer.Option(help="How many parts (2-5); the drawing must match.")] = 3,
+    teaser: Annotated[
+        int | None, typer.Option(help="An overview video the parts link back to.")
+    ] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Create a series: one idea item per part, in order, each with its part's focus."""
+    with _tracked_run("series new", config_dir) as run:
+        ctx = _context(run, config_dir)
+        series_id, _ = series_stage.create(ctx, object_name, parts=parts, fmt=fmt, pillar=pillar,
+                                           teaser=teaser)  # fmt: skip
+        typer.echo(series_stage.show(run.conn, series_id))
+        typer.echo("Next: uv run factory script   (writes the parts in order)")
+
+
+@series_app.command("show")
+def series_show(
+    series_id: Annotated[int, typer.Argument(help="The series number.")],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Show a series: its parts, their items and where each one stands."""
+    with _tracked_run("series show", config_dir) as run:
+        typer.echo(series_stage.show(run.conn, series_id))
 
 
 STYLE_CHANGEABLE = ("idea", "scripted", "script_approved", "awaiting_clips")

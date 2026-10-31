@@ -545,8 +545,15 @@ def _draw(ctx: AppContext, row: sqlite3.Row) -> bool:
     duration = float(probe(voice_wav)["format"]["duration"])
     note = current_script(ctx, content_id)["engineer_note"] or ""
     out = folder / BLUEPRINT_FILE
-    problems = render_film(module, words, count_sentences(note), duration, voice.fonts_dir(ctx),
-                           out)  # fmt: skip
+    problems = render_film(
+        module,
+        words,
+        count_sentences(note),
+        duration,
+        voice.fonts_dir(ctx),
+        out,
+        part_n=row["part_n"],
+    )  # fmt: skip  (a series part: its scenes)
     if problems:
         out.unlink(missing_ok=True)
         raise FactoryError(f"blueprint film refused: {'; '.join(problems)}")

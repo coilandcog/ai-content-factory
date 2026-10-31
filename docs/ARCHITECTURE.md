@@ -65,6 +65,8 @@ flowchart LR
 Helper commands:
 - `factory db init|migrate|backup`
 - `factory new --object <name> --format <short|deep_dive> --pillar <id>`: creates a content item by hand as an `idea` (the format must be enabled and the pillar defined in the channel YAML; the object is trimmed and lowercased). `--style flow|blueprint` overrides the channel's `video_style` (D-111); `factory status <id>` shows the style.
+- `factory series new --object <machine> [--parts 3] [--format short] [--pillar ...] [--teaser <id>]` / `factory series show <id>`: one topic as linked videos (D-112): one `idea` item per part of the machine's blueprint drawing, in order, each with its focus as the angle; scripts, films, titles and descriptions use the series (CONTENT_STRATEGY §13).
+- Every command stops with "run `uv run factory db init`" when the database is older than the newest migration (D-112).
 - `factory style <id> flow|blueprint`: switches an item's picture style while it is `idea`, `scripted`, `script_approved` or `awaiting_clips` (before its pictures exist, D-111).
 - `factory plan --week next|this`: fills the week's `cadence.weekly_plan` slots with the best unplanned ideas (no pillar 3 days in a row; hook type and beat order differ from the day before) and prints the plan; slots already planned are kept (D-080).
 - `factory generate --restage N [--shots 3|2,4]`: new film shots (Gemini) for an approved item that has no clips yet: the narration stays, the clip prompts and (for `awaiting_clips`) the Flow sheet are rewritten (D-092). With `--shots` only those clips are rewritten; the hero_look and the other clips stay (D-096). On a `generated` or `assembled` item `--shots` is a **reshoot** (D-107): the kept clips go back to the inbox, the redone ones stay there as `old_shot_NN.mp4`, renders and the QA report are removed and the item waits for clips again.
@@ -338,7 +340,8 @@ ai-content-factory/
 │   ├── 004_lessons.sql
 │   ├── 005_reference_topic.sql
 │   ├── 006_reference_storytelling.sql
-│   └── 007_blueprint_films.sql
+│   ├── 007_blueprint_films.sql
+│   └── 008_series.sql
 ├── src/factory/
 │   ├── __init__.py
 │   ├── cli.py                    # Typer app: one command per stage
@@ -363,6 +366,7 @@ ai-content-factory/
 │   │   ├── clip_review.py        # Gemini watches clips and frame images (factory clips review, D-097)
 │   │   ├── references.py         # reference library: style notes from images/clips the owner likes (D-100)
 │   │   ├── lessons.py            # lessons from failed clip reviews, owner-approved (D-103)
+│   │   ├── series.py             # topic series: parts from the drawing, context for scripts and titles (D-112)
 │   │   ├── assemble.py
 │   │   ├── review.py
 │   │   ├── bot.py                # Telegram review bot: both gates + alerts (factory bot)

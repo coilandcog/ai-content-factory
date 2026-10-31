@@ -26,6 +26,7 @@ ALL_TABLES = {
     "posts",
     "metrics",
     "reference_notes",  # 002 (D-100)
+    "series",  # 008 (D-112)
     "lessons",  # 004 (D-103)
     "lesson_inputs",
     "performance_labels",
@@ -72,7 +73,7 @@ def test_migrate_creates_every_table_once(conn: sqlite3.Connection) -> None:
     tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
     assert tables == ALL_TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
     assert migrate(conn) == []  # second run: nothing left to apply
 
 

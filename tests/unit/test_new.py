@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from factory.cli import app
-from factory.config import load_channel
+from factory.config import REPO_ROOT, load_channel
 from factory.db import add_content, connect, migrate, set_status, upsert_channel
 from factory.errors import FactoryError
 
@@ -114,6 +115,25 @@ def test_style_switches_only_before_the_pictures_exist(config_dir: Path) -> None
     assert "style: flow" in shown.output
     assert bad.exit_code == 1 and "flow or blueprint" in bad.output
     assert late.exit_code == 1 and "is archived" in late.output
+
+
+def test_commands_stop_when_the_database_is_older_than_the_code(config_dir: Path) -> None:
+    opts = ["--config-dir", str(config_dir)]
+    first_seven = config_dir.parent / "old_migrations"
+    first_seven.mkdir()
+    for path in sorted((REPO_ROOT / "migrations").glob("*.sql"))[:7]:
+        shutil.copy(path, first_seven / path.name)
+    (config_dir.parent / "data").mkdir(exist_ok=True)
+    db = connect(config_dir.parent / "data" / "factory.db")
+    migrate(db, first_seven)  # a database from before migration 008
+    db.close()
+
+    old = runner.invoke(app, ["status", *opts])
+    runner.invoke(app, ["db", "init", *opts])
+    fixed = runner.invoke(app, ["status", *opts])
+
+    assert old.exit_code == 1 and "run `uv run factory db init`" in old.output
+    assert fixed.exit_code == 0, fixed.output
 
 
 def test_status_shows_failure_details(config_dir: Path) -> None:

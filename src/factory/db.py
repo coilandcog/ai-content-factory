@@ -97,6 +97,12 @@ def _migration_files(migrations_dir: Path) -> list[tuple[int, Path]]:
     return sorted(files.items())
 
 
+def latest_version(migrations_dir: Path = MIGRATIONS_DIR) -> int:
+    """Number of the newest migration file: the version this code needs."""
+    files = _migration_files(migrations_dir)
+    return files[-1][0] if files else 0
+
+
 def schema_version(conn: sqlite3.Connection) -> int:
     """Number of the last applied migration; 0 means `factory db init` never ran."""
     return conn.execute("PRAGMA user_version").fetchone()[0]

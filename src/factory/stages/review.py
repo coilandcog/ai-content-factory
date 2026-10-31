@@ -217,7 +217,8 @@ def content_report(conn: sqlite3.Connection, content_id: int) -> str:
     lines = [
         f"Content #{row['id']} ({row['slug']})",
         f"  object: {row['object_name']} | format: {row['format']} | pillar: {row['pillar']}"
-        f" | style: {row['visual_style']}",
+        f" | style: {row['visual_style']}"
+        + (f" | series #{row['series_id']} part {row['part_n']}" if row["series_id"] else ""),
         f"  status: {row['status']}",
     ]
     if row["status_before_failure"]:

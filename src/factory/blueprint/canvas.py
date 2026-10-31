@@ -215,10 +215,30 @@ class Scene:
     draw: Callable  # draw(canvas, t, state, t0, t1)
 
 
+@dataclass
+class Part:
+    """One video of a topic series (D-112): what it covers and its own scenes."""
+
+    title: str  # e.g. "Compressor and Combustion"
+    focus: str  # what the script must explain, for the script prompt
+    scenes: list[Scene]
+
+
+def scenes_for(module: ModuleType, part_n: int | None) -> list[Scene]:
+    """The whole-machine film, or one part of the machine's series."""
+    if part_n is None:
+        return module.SCENES
+    parts = getattr(module, "PARTS", [])
+    if not 1 <= part_n <= len(parts):
+        raise FactoryError(f"the {module.MACHINE} drawing has no part {part_n}")
+    return parts[part_n - 1].scenes
+
+
 def frames(module: ModuleType, starts: Sequence[float], duration: float, fonts: Path, *,
+           scenes: Sequence[Scene] | None = None,
            ss: float = 2.0, size: tuple[int, int] = (W, H), fps: int = FPS,
            drawn: set[str] | None = None) -> Iterator[bytes]:  # fmt: skip
-    scenes: list[Scene] = module.SCENES
+    scenes = list(scenes if scenes is not None else module.SCENES)
     ends = [*starts[1:], duration]
     state = module.new_state(list(starts), duration)
     dt = 1 / fps
@@ -239,14 +259,17 @@ def frames(module: ModuleType, starts: Sequence[float], duration: float, fonts: 
 
 
 def render_film(module: ModuleType, words: Sequence[dict], note_n: int, duration: float,
-                fonts: Path, out_path: Path, *, ss: float = 2.0, size: tuple[int, int] = (W, H),
-                fps: int = FPS) -> list[str]:  # fmt: skip
-    """Render the machine's film to `out_path`, timed to the narration, and return any
-    fact problems found in what was drawn (the caller refuses the film if there are any)."""
-    starts = scene_starts([s.role for s in module.SCENES], sentences(words), note_n, duration)
+                fonts: Path, out_path: Path, *, part_n: int | None = None, ss: float = 2.0,
+                size: tuple[int, int] = (W, H), fps: int = FPS) -> list[str]:  # fmt: skip
+    """Render the machine's film (or one part of its series) to `out_path`, timed to the
+    narration, and return any fact problems found in what was drawn (the caller refuses the film
+    if there are any)."""
+    scenes = scenes_for(module, part_n)
+    starts = scene_starts([s.role for s in scenes], sentences(words), note_n, duration)
     drawn: set[str] = set()
     encode_rgb_frames(
-        frames(module, starts, duration, fonts, ss=ss, size=size, fps=fps, drawn=drawn),
+        frames(module, starts, duration, fonts, scenes=scenes, ss=ss, size=size, fps=fps,
+               drawn=drawn),
         width=size[0], height=size[1], fps=fps, duration_s=duration, out_path=out_path,
     )  # fmt: skip
     return fact_problems(drawn, module.FACTS, module.LIVE)

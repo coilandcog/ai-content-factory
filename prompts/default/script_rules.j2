@@ -1,3 +1,19 @@
+{% if series_part is defined and series_part %}
+This video is part {{ series_part.part_n }} of {{ series_part.parts }} of a series about the {{ series_part.topic }}:
+{% for p in series_part.outline %}- Part {{ p.n }}: {{ p.title }}: {{ p.focus }}{% if p.n == series_part.part_n %}  <- THIS VIDEO{% endif %}
+{% endfor -%}
+Explain only this part's focus. The other parts explain the rest: mention them at most in passing.
+{% if series_part.earlier %}Earlier parts already said this; do not explain it again and do not repeat their wording:
+{% for text in series_part.earlier %}"""{{ text }}"""
+{% endfor -%}
+{% endif %}
+working_title: "{{ series_part.title }}".
+The Engineer's Note gives a fact about this part's focus.
+{% endif %}
+{%- if verified_facts is defined and verified_facts %}
+Verified facts (the film shows exactly these): {{ verified_facts | join("; ") }}.
+If the narration gives a number, it must be one of these; otherwise describe without numbers (a ton is fine, a guess is not).
+{% endif %}
 {% set told = (references or []) | selectattr("kind", "equalto", "video") | list %}
 Hook: pick hook_type from {{ allowed_hooks | join(", ") }}.
 {%- set formulas = {
@@ -37,10 +53,15 @@ and tell), never copy their wording, facts or ideas one to one.
   that the body does not already say, about {{ part_words.note }} words in all. After the lead-in, state the fact directly: never claim
   what viewers know or miss ("most people", "you might not know"). No other "I" or "me", and no made-up personal story:
   it is a draft the channel's engineer will edit.
-- loop_line: the last sentence. It must be a complete sentence that ends with a period, question mark or
+{% if series_part is defined and series_part and series_part.next %}- loop_line: the last sentence, a closing statement (never a question) that ends this part and names what part {{ series_part.next.n }}
+  shows, e.g. "Next: {{ series_part.next.title | lower }}." Never repeat the hook. About {{ part_words.loop }} words.
+{%- elif series_part is defined and series_part %}- loop_line: the last sentence, a closing statement (never a question) that wraps up the whole {{ series_part.topic }} series.
+  Never repeat the hook. About {{ part_words.loop }} words.
+{%- else %}- loop_line: the last sentence. It must be a complete sentence that ends with a period, question mark or
   exclamation mark (never "..." or a dangling "because"), and it should lead naturally back to the hook when the video loops,
   in new words: never repeat the hook.
   About {{ part_words.loop }} words.
+{%- endif %}
 - Together that is about {{ target_words }} words. The total must stay between {{ min_words }} and {{ max_words }} words:
   going over is the most common mistake, so when in doubt, write less.
 

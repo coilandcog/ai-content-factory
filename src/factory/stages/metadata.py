@@ -23,6 +23,7 @@ from factory.errors import FactoryError
 from factory.integrations.gemini import GeminiClient
 from factory.prompts import render_prompt
 from factory.stages import generate
+from factory.stages import series as series_stage
 from factory.stages.script import gemini_client
 from factory.stages.voice import asset_dir
 
@@ -122,7 +123,14 @@ def build(
 ) -> dict[str, Any]:
     """The full metadata: Gemini's creative parts plus everything code must get exactly right."""
     channel = ctx.channel
+    title, caption = draft.youtube_title, draft.tiktok_caption
     description = [draft.youtube_summary]
+    part = series_stage.context(ctx.conn, item["id"])
+    if part is not None:  # a series part: exact title, part number and links (D-112)
+        title = part.title if len(part.title) <= TITLE_MAX else title
+        caption = f"Part {part.part_n}/{part.parts}: {caption}"
+        description += ["", f"Part {part.part_n} of {part.parts}.",
+                        *series_stage.links(ctx.conn, item["id"])]  # fmt: skip
     if music is not None and music["attribution_text"]:
         description += ["", music["attribution_text"]]
     description += ["", " ".join(draft.youtube_hashtags)]
@@ -131,7 +139,7 @@ def build(
         "object": item["object_name"],
         "format": item["format"],
         "youtube": {
-            "title": draft.youtube_title,
+            "title": title,
             "description": "\n".join(description),
             "hashtags": draft.youtube_hashtags,
             "category_id": channel.platforms.youtube.category_id,
@@ -140,7 +148,7 @@ def build(
             "render": "render_youtube.mp4",
         },
         "tiktok": {
-            "caption": f"{draft.tiktok_caption} {' '.join(draft.tiktok_hashtags)}",
+            "caption": f"{caption} {' '.join(draft.tiktok_hashtags)}",
             "hashtags": draft.tiktok_hashtags,
             "ai_generated_label": True,  # switch it on when posting (D-039)
             "add_tiktok_sound": True,  # the render has no music (D-042)

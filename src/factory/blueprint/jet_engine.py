@@ -18,6 +18,7 @@ from factory.blueprint.canvas import (
     PANEL,
     RED,
     Fact,
+    Part,
     Scene,
     W,
     ease,
@@ -41,7 +42,13 @@ FACTS = {
     # shown covers both sources.
     "melt": Fact("about 1,100-1,350 °C", BAM),
 }
-LIVE = (r"[\d,]+ kg", r"× \d+", r"[\d,]+ °C")  # counters that count up to a fact's value
+LIVE = (
+    r"[\d,]+ kg",
+    r"× \d+",
+    r"[\d,]+ °C",  # counters that count up to a fact's value
+    r"PART \d OF \d",
+    r"NEXT: PART \d OF \d",
+)  # series labels (D-112)
 
 CY = 760
 X_FAN, X_SPLIT, X_COMB0, X_COMB1, X_TURB1, X_TAIL, X_NAC = 165, 250, 525, 665, 800, 965, 770
@@ -353,3 +360,168 @@ def close(c, t, st, t0, t1):
 
 SCENES = [Scene("hook", intake), Scene("body", bypass), Scene("body", core),
           Scene("body", turbine), Scene("note", blade), Scene("close", close)]  # fmt: skip
+
+
+# --- topic series (D-112): the engine in three parts, each with its own scenes --------------------
+
+ZONES = {  # x range and half-height of each section, to highlight what a part is about
+    "fan": (X_FAN - 45, X_FAN + 55, 300),
+    "compressor": (X_SPLIT + 5, X_COMB0, 140),
+    "combustion": (X_COMB0, X_COMB1, 140),
+    "turbine": (X_COMB1, X_TURB1 + 10, 140),
+}
+
+
+def zone(c, name, colour=CYAN):
+    x0, x1, h = ZONES[name]
+    c.rounded((x0, CY - h), (x1, CY + h), 14, colour, 3)
+
+
+def part_tag(c, n):
+    c.text((W / 2, 178), f"PART {n} OF {len(PARTS)}", "small", DIM)
+
+
+def fan_face(c, st, cx=W / 2, cy=1600, r=190):
+    """The fan seen from the front: wide blades turning around the spinner."""
+    c.ellipse((cx, cy), r, outline=LINE)
+    for k in range(18):
+        a = st["fan"] + k * 2 * math.pi / 18
+        pts = []
+        for j in range(9):
+            rr = lerp(38, r - 8, j / 8)
+            aa = a + 0.35 * (j / 8) ** 1.4  # blades sweep as they reach out
+            pts.append((cx + rr * math.cos(aa), cy + rr * math.sin(aa)))
+        c.line(pts, LINE, 3, curve=True)
+    c.ellipse((cx, cy), 38, fill=PANEL, outline=LINE)
+
+
+def fan_scene(c, t, st, t0, t1):
+    title(c, "THE BIG FAN AT THE FRONT")
+    part_tag(c, 1)
+    engine(c, st)
+    flows(c, st, "all")
+    zone(c, "fan")
+    c.text((X_FAN + 5, CY - 345), "fan", "label", CYAN)
+    fan_face(c, st)
+    c.text((W / 2, 1830), "seen from the front", "small", DIM)
+
+
+def intake_part(c, t, st, t0, t1):
+    intake(c, t, st, t0, t1)
+    part_tag(c, 1)
+
+
+def bypass_part(c, t, st, t0, t1):
+    bypass(c, t, st, t0, t1)
+    part_tag(c, 1)
+
+
+def bypass_note(c, t, st, t0, t1):
+    title(c, "THE FAN DOES MOST OF THE WORK")
+    part_tag(c, 1)
+    engine(c, st, focus="bypass")
+    flows(c, st, "bypass")
+    zone(c, "fan")
+    fan_face(c, st, cy=1620, r=170)
+
+
+def compressor_hook(c, t, st, t0, t1):
+    title(c, "SQUEEZED BEFORE IT BURNS")
+    part_tag(c, 2)
+    engine(c, st, focus="core")
+    flows(c, st, "core")
+    zone(c, "compressor")
+    zone(c, "combustion", AMBER)
+
+
+def compressor(c, t, st, t0, t1):
+    title(c, "THE COMPRESSOR")
+    part_tag(c, 2)
+    engine(c, st, focus="core")
+    flows(c, st, "core")
+    zone(c, "compressor")
+    c.text((385, CY - 340), "compressor", "label", LINE)
+    p = FACTS["pressure"]
+    u = ease((t - t0) / max(0.5, t1 - t0 - 0.8))
+    c.text((W / 2, 1470), "pressure", "label", LINE)
+    c.text((W / 2, 1545), f"× {int(1 + (p.value - 1) * u)}" if u < 1 else p.text, "big",
+           mix(BLUE, LINE, u))  # fmt: skip
+    c.text((W / 2, 1640), "each row of blades squeezes the air more", "small", DIM)
+
+
+def combustion(c, t, st, t0, t1):
+    title(c, "FUEL IN, FIRE ON")
+    part_tag(c, 2)
+    engine(c, st, focus="core")
+    flows(c, st, "core")
+    zone(c, "combustion", AMBER)
+    c.text((595, CY - 340), "combustion", "label", AMBER)
+    g = FACTS["gas"]
+    v = ease((t - t0) / max(0.5, t1 - t0 - 0.8))
+    c.text((W / 2, 1470), "after burning", "label", LINE)
+    c.text(
+        (W / 2, 1545), f"{int(g.value * v):,} °C" if v < 1 else g.text, "big", mix(AMBER, RED, v)
+    )
+    c.text((W / 2, 1640), "fuel sprays into the squeezed air and burns", "small", DIM)
+
+
+def core_note(c, t, st, t0, t1):
+    core(c, t, st, t0, t1)
+    part_tag(c, 2)
+
+
+def turbine_hook(c, t, st, t0, t1):
+    title(c, "WHAT TURNS THE FAN?")
+    part_tag(c, 3)
+    engine(c, st, focus="turbine")
+    flows(c, st, "core")
+    zone(c, "turbine", AMBER)
+    zone(c, "fan")
+
+
+def turbine_part(c, t, st, t0, t1):
+    turbine(c, t, st, t0, t1)
+    part_tag(c, 3)
+
+
+def blade_part(c, t, st, t0, t1):
+    blade(c, t, st, t0, t1)
+    part_tag(c, 3)
+
+
+def teaser(n_next):
+    """Closing scene of a part: the next part's section lights up (D-112: a statement, never an
+    open question)."""
+
+    def draw(c, t, st, t0, t1):
+        nxt = PARTS[n_next - 1]
+        title(c, nxt.title.upper())
+        engine(c, st)
+        flows(c, st, "all")
+        for name in NEXT_ZONES[n_next]:
+            zone(c, name, AMBER)
+        c.text((W / 2, 1480), f"NEXT: PART {n_next} OF {len(PARTS)}", "big", AMBER)
+        c.text((W / 2, 1560), nxt.title, "label", LINE)
+
+    return draw
+
+
+NEXT_ZONES = {2: ("compressor", "combustion"), 3: ("turbine",)}
+
+PARTS = [
+    Part("Intake, Fan and Bypass",
+         "the intake, the big front fan and the bypass air that goes around the core and makes "
+         "most of the thrust",
+         [Scene("hook", intake_part), Scene("body", fan_scene), Scene("body", bypass_part),
+          Scene("note", bypass_note), Scene("close", teaser(2))]),
+    Part("Compressor and Combustion",
+         "the core: the compressor squeezes the air about 40 times, fuel is sprayed in and burns",
+         [Scene("hook", compressor_hook), Scene("body", compressor), Scene("body", combustion),
+          Scene("note", core_note), Scene("close", teaser(3))]),
+    Part("Turbine, Shaft and Blade Cooling",
+         "the turbine takes energy from the hot gas and turns the fan through the inner shaft; "
+         "turbine blades work in gas hotter than their melting point thanks to cooling air; the "
+         "air leaves faster than it came in, which is the thrust",
+         [Scene("hook", turbine_hook), Scene("body", turbine_part), Scene("note", blade_part),
+          Scene("close", close)]),
+]  # fmt: skip

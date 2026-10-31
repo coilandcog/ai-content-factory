@@ -19,6 +19,8 @@ from urllib.parse import quote, unquote
 import httpx
 from pydantic import BaseModel, Field, create_model, model_validator
 
+from factory import blueprint
+from factory.blueprint.canvas import NUMBER
 from factory.budgets import check_and_record
 from factory.config import ChannelConfig
 from factory.context import AppContext, StageResult
@@ -36,6 +38,7 @@ from factory.prompts import render_prompt
 from factory.similarity import closest
 from factory.stages import lessons as lessons_stage
 from factory.stages import references as references_stage
+from factory.stages import series as series_stage
 from factory.stages.voice import asset_dir
 
 log = logging.getLogger("factory.script")
@@ -241,6 +244,10 @@ class ScriptDraftBase(BaseModel):
     reference_url: ClassVar[str | None] = None
     allowed_hooks: ClassVar[tuple[str, ...]] = HOOK_TYPES
     allowed_beats: ClassVar[tuple[str, ...]] = tuple(BEAT_ORDERS)
+    # Blueprint items (D-111/D-112): the only numbers the narration may say, so the narration and
+    # the film can never disagree; None = no limit. A series part ends on a statement.
+    verified_facts: ClassVar[tuple[str, ...] | None] = None
+    in_series: ClassVar[bool] = False
 
     def narration(self) -> str:
         """Everything the narrator says, in order (stored as scripts.body_text)."""
@@ -275,6 +282,16 @@ def _rule_problems(draft: Any) -> list[str]:
             )
     if _repeats(draft.engineer_note_draft, draft.body):
         problems.append("engineer_note_draft repeats the body: give a fact the body doesn't say")
+    if draft.in_series and loop.endswith("?"):  # owner: a part never ends on an open question
+        problems.append("loop_line must be a closing statement in a series, not a question")
+    if draft.verified_facts is not None:
+        allowed = " ".join(draft.verified_facts)
+        unverified = [n for n in NUMBER.findall(draft.narration()) if n.rstrip(".,") not in allowed]
+        if unverified:
+            problems.append(
+                f"the narration says {', '.join(unverified)}, which is not in the verified facts "
+                f"({'; '.join(draft.verified_facts)}): use only those numbers, or none"
+            )
     if _repeats(draft.loop_line, draft.hook):  # D-089: it leads back to the hook, not repeats it
         problems.append(
             "loop_line repeats the hook: write a new last sentence that leads back into the hook"
@@ -347,6 +364,8 @@ def script_schema(
     previous: tuple[str | None, str | None],
     reference_url: str | None,
     planned: tuple[str, str] | None = None,
+    verified_facts: list[str] | None = None,
+    in_series: bool = False,
 ) -> type[ScriptDraftBase]:
     """Build the ScriptDraft model for one item.
 
@@ -373,6 +392,8 @@ def script_schema(
     model.reference_url = reference_url
     model.allowed_hooks = hooks
     model.allowed_beats = beats
+    model.verified_facts = tuple(verified_facts) if verified_facts is not None else None
+    model.in_series = in_series
     return model
 
 
@@ -517,16 +538,21 @@ def _script_one(
         planned=(row["hook_type"], row["beat_order"])
         if row["planned_publish_at"] and row["hook_type"] and row["beat_order"]
         else None,
+        verified_facts=(facts := blueprint_facts(row)),
+        in_series=(part := series_stage.context(conn, row["id"])) is not None,
     )
-    system, user = _prompts(ctx, row, schema, reference, feedback)
+    system, user = _prompts(ctx, row, schema, reference, feedback, part, facts)
     draft = llm.generate_json(
         system=system.text, prompt=user.text, schema=schema, max_reasks=MAX_REASKS
     )
     if not draft.policy.allowed:
         raise PolicyBlockedError(draft.policy.reason)
     sources = _open_sources(ctx, row, llm, http, draft, system.text)
+    # Parts of one series (and its teaser) share a topic on purpose: they are not compared with
+    # each other, only with every other video (D-112).
     match = closest(conn, row["channel_id"], row["id"], draft.narration(),
-                    window=channel.scoring.similarity_window)  # fmt: skip
+                    window=channel.scoring.similarity_window,
+                    exclude=part.sibling_ids if part else ())  # fmt: skip
     threshold = channel.scoring.similarity_block_threshold
     if match.score > threshold:  # D-041/D-076: a near-repeat of a recent script is not made
         raise PolicyBlockedError(
@@ -534,6 +560,13 @@ def _script_one(
         )
     return _save(conn, row["id"], draft, sources, llm.model,
                  f"{system.version}+{user.version}", match.score)  # fmt: skip
+
+
+def blueprint_facts(row: sqlite3.Row) -> list[str] | None:
+    """The drawing's verified facts for a blueprint item, None for a Flow item (D-111)."""
+    if row["visual_style"] != "blueprint" or row["object_name"] not in blueprint.MODULES:
+        return None
+    return [f.text for f in blueprint.MODULES[row["object_name"]].FACTS.values()]
 
 
 def visual_rules_template(ctx: AppContext) -> str:
@@ -602,6 +635,8 @@ def _prompts(
     schema: type[ScriptDraftBase],
     reference: WikiSummary | None,
     feedback: Feedback | None,
+    series_part: series_stage.SeriesContext | None = None,
+    verified_facts: list[str] | None = None,
 ) -> tuple[Any, Any]:
     channel = ctx.channel
     video_format = getattr(channel.formats, row["format"])
@@ -635,6 +670,8 @@ def _prompts(
         lessons=lessons_stage.approved_for_prompts(ctx),
         reference=reference,
         feedback=feedback,
+        series_part=series_part,
+        verified_facts=verified_facts,
     )
     return system, user
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -67,18 +67,25 @@ def embed_texts(texts: list[str], embed: Embedder) -> np.ndarray:
 
 
 def recent_scripts(
-    conn: sqlite3.Connection, channel_id: int, content_id: int, window: int
+    conn: sqlite3.Connection,
+    channel_id: int,
+    content_id: int,
+    window: int,
+    exclude: Sequence[int] = (),
 ) -> list[sqlite3.Row]:
-    """The current script of the channel's last `window` other items (rejected/archived skipped)."""
+    """The current script of the channel's last `window` other items (rejected/archived and the
+    `exclude` ids skipped: the other parts of a series, D-112)."""
+    skipped = [content_id, *exclude]
     return conn.execute(
         f"""
         SELECT s.content_id, s.body_text FROM scripts s JOIN contents c ON c.id = s.content_id
-        WHERE s.is_current = 1 AND c.channel_id = ? AND c.id != ?
+        WHERE s.is_current = 1 AND c.channel_id = ?
+          AND c.id NOT IN ({",".join("?" * len(skipped))})
           AND c.status NOT IN ({",".join("?" * len(SKIPPED_STATUSES))})
         ORDER BY s.created_at DESC, s.id DESC
         LIMIT ?
         """,
-        (channel_id, content_id, *SKIPPED_STATUSES, window),
+        (channel_id, *skipped, *SKIPPED_STATUSES, window),
     ).fetchall()
 
 
@@ -90,9 +97,10 @@ def closest(
     *,
     window: int,
     embed: Embedder | None = None,
+    exclude: Sequence[int] = (),
 ) -> Match:
     """The recent script most similar to `text`."""
-    others = recent_scripts(conn, channel_id, content_id, window)
+    others = recent_scripts(conn, channel_id, content_id, window, exclude)
     if not others:
         return Match(0.0, None)
     texts = [text, *(r["body_text"] or "" for r in others)]
