@@ -272,7 +272,7 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | id | INTEGER PK | |
 | channel_id | INTEGER FK | |
 | topic | TEXT | The machine, e.g. `jet engine` (must have a blueprint drawing with parts) |
-| parts | INTEGER | 2-5 |
+| parts | INTEGER | 2-5 in the database; the code asks for 3-5 (owner: at least 3) |
 | teaser_content_id | INTEGER FK → contents | Optional overview video the parts link back to |
 | created_at | TEXT | |
 

@@ -11,8 +11,11 @@ working_title: "{{ series_part.title }}".
 The Engineer's Note gives a fact about this part's focus.
 {% endif %}
 {%- if verified_facts is defined and verified_facts %}
-Verified facts (the film shows exactly these): {{ verified_facts | join("; ") }}.
-If the narration gives a number, it must be one of these; otherwise describe without numbers (a ton is fine, a guess is not).
+Verified facts (the film shows exactly these; each number belongs only to what it describes):
+{% for f in verified_facts %}- {{ f.about }}: {{ f.text }}
+{% endfor -%}
+If the narration gives a number, it must be one of these, written in digits (1,600, not "sixteen hundred"), and used for
+exactly what it describes; otherwise describe without numbers (a ton is fine, a guess is not).
 {% endif %}
 {% set told = (references or []) | selectattr("kind", "equalto", "video") | list %}
 Hook: pick hook_type from {{ allowed_hooks | join(", ") }}.

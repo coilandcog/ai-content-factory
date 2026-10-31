@@ -32,16 +32,22 @@ BLADE = "https://en.wikipedia.org/wiki/Turbine_blade"
 BAM = "https://opus4.kobv.de/opus4-bam/frontdoor/index/index/docId/40903"
 FACTS = {
     # GE90: static air mass flow 1,350 kg/s, bypass ratio 8.4-9, pressure ratio 40:1-42:1.
-    "airflow": Fact("over 1,000 kg", GE90, value=1000),
-    "bypass": Fact("about 9 parts", GE90),
-    "core_part": Fact("1 part", GE90),
-    "pressure": Fact("× 40", GE90, value=40),
+    "airflow": Fact("over 1,000 kg", GE90, value=1000,
+                    about="air a large airliner engine takes in every second at take-off"),
+    "bypass": Fact("about 9 parts", GE90,
+                   about="air that goes around the core, for every part through it"),
+    "core_part": Fact("1 part", GE90, about="air that goes through the core"),
+    "pressure": Fact("× 40", GE90, value=40,
+                     about="how much the compressor raises the air pressure"),
     # Turbine entry temperatures above 1,900 K (about 1,630 °C) in modern designs.
-    "gas": Fact("over 1,600 °C", BLADE, value=1600),
+    "gas": Fact("over 1,600 °C", BLADE, value=1600,
+                about="hot gas leaving the combustion chamber and entering the turbine"),
     # Blade material melts at 1,300-1,400 K (Wikipedia); CMSX-4 about 1,612 K (BAM): the range
     # shown covers both sources.
-    "melt": Fact("about 1,100-1,350 °C", BAM),
-}
+    "melt": Fact("about 1,100-1,350 °C", BAM,
+                 about="where turbine blade alloys melt (the gas is hotter; cooling air "
+                       "protects them)"),
+}  # fmt: skip
 LIVE = (
     r"[\d,]+ kg",
     r"× \d+",
@@ -519,7 +525,8 @@ PARTS = [
          [Scene("hook", compressor_hook), Scene("body", compressor), Scene("body", combustion),
           Scene("note", core_note), Scene("close", teaser(3))]),
     Part("Turbine, Shaft and Blade Cooling",
-         "the turbine takes energy from the hot gas and turns the fan through the inner shaft; "
+         "the turbine takes energy from the hot gas: the front (high-pressure) turbine turns the "
+         "compressor, the rear (low-pressure) turbine turns the fan through the inner shaft; "
          "turbine blades work in gas hotter than their melting point thanks to cooling air; the "
          "air leaves faster than it came in, which is the thrust",
          [Scene("hook", turbine_hook), Scene("body", turbine_part), Scene("note", blade_part),

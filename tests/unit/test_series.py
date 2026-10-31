@@ -22,6 +22,11 @@ from factory.stages import script as script_stage
 
 runner = CliRunner()
 DRAFT = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+# blueprint narration writes numbers as digits (D-112): drop the fixture's "fourteen volts"
+DRAFT["body"] = DRAFT["body"].replace("near fourteen volts", "steady")
+DRAFT["engineer_note_draft"] = DRAFT["engineer_note_draft"].replace(
+    "more than a hundred amps", "far more current"
+)
 
 
 @pytest.fixture
@@ -66,8 +71,8 @@ def test_a_series_is_one_blueprint_idea_per_drawn_part_in_order(ctx: AppContext)
     ("name", "parts", "message"),
     [("tower crane", 3, "no blueprint drawing for 'tower crane'"),
      ("cvt gearbox", 3, "the cvt gearbox has no parts drawn yet"),
-     ("jet engine", 2, "is drawn in 3 parts; ask Claude to draw it in 2 parts"),
-     ("jet engine", 6, "--parts must be 2-5")],
+     ("jet engine", 4, "is drawn in 3 parts; ask Claude to draw it in 4 parts"),
+     ("jet engine", 2, "--parts must be 3-5"), ("jet engine", 6, "--parts must be 3-5")],
 )  # fmt: skip
 def test_a_series_needs_a_drawing_with_that_many_parts(
     ctx: AppContext, name: str, parts: int, message: str
@@ -131,7 +136,7 @@ def script_with(ctx: AppContext, *drafts: dict) -> FakeGenaiClient:
     llm = GeminiClient("fake-key", "gemini-3.5-flash-lite", sdk=sdk, retry_wait_s=0)
     client = httpx.Client(transport=httpx.MockTransport(no_wikipedia()),
                           headers={"User-Agent": "CoilAndCogTest/0.1"})  # fmt: skip
-    script_stage.run(ctx, limit=1, llm=llm, http=client)
+    script_stage.run(ctx, limit=1 if drafts else None, llm=llm, http=client)
     return sdk
 
 
@@ -147,7 +152,7 @@ def test_a_part_knows_its_series_and_ends_on_a_statement(ctx: AppContext) -> Non
     assert "part 1 of 3 of a series about the jet engine" in prompt
     assert "Part 1: Intake, Fan and Bypass" in prompt and "<- THIS VIDEO" in prompt
     assert (
-        "names what part 2" in prompt and "Verified facts (the film shows exactly these)" in prompt
+        "names what part 2" in prompt and "Verified facts (the film shows exactly these" in prompt
     )
     assert "closing statement in a series, not a question" in sdk.calls[1]["contents"]
 
@@ -248,3 +253,32 @@ def test_part_titles_count_and_link_the_parts_already_posted(ctx: AppContext) ->
         "Overview: https://youtube.com/shorts/aaa", "Part 1: https://youtube.com/shorts/bbb",
     ]  # fmt: skip
     assert data["tiktok"]["caption"].startswith("Part 2/3: Squeezed 40 times")
+
+
+def test_numbers_are_digits_and_shot_rules_skip_drawn_films(ctx: AppContext) -> None:
+    jet_series(ctx)
+    no_diagrams = [x for x in DRAFT["shots"] if x["kind"] != "diagram"]
+    no_diagrams = [{**x, "n": n} for n, x in enumerate(no_diagrams, 1)]
+    spelled = {**DRAFT, "loop_line": "Next: the core.", "shots": no_diagrams,
+               "body": DRAFT["body"] + " It swallows over a thousand kilograms."}  # fmt: skip
+    fixed = {**spelled, "body": DRAFT["body"] + " It swallows over 1,000 kg of air."}
+
+    sdk = script_with(ctx, spelled, fixed)
+
+    reask = sdk.calls[1]["contents"]
+    assert "write numbers as digits" in reask and "(thousand)" in reask
+    assert "diagram shots" not in reask  # the film is drawn by code: no Flow shot rules
+    assert len(sdk.calls) == 2
+    prompt = sdk.calls[0]["contents"]
+    assert "- how much the compressor raises the air pressure: × 40" in prompt  # with its meaning
+
+
+def test_a_later_part_waits_for_the_earlier_part(ctx: AppContext) -> None:
+    _, (one, two, three) = jet_series(ctx)
+    set_status(ctx.conn, one, "failed", reason="Gemini broke the rules")
+
+    sdk = script_with(ctx)  # no answers: nothing may be asked
+
+    assert sdk.calls == []
+    assert [item(ctx, i)["status"] for i in (two, three)] == ["idea", "idea"]
+    assert series.waiting_for(ctx.conn, three) == 1

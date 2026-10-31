@@ -20,7 +20,7 @@ import httpx
 from pydantic import BaseModel, Field, create_model, model_validator
 
 from factory import blueprint
-from factory.blueprint.canvas import NUMBER
+from factory.blueprint.canvas import NUMBER, Fact
 from factory.budgets import check_and_record
 from factory.config import ChannelConfig
 from factory.context import AppContext, StageResult
@@ -248,6 +248,7 @@ class ScriptDraftBase(BaseModel):
     # the film can never disagree; None = no limit. A series part ends on a statement.
     verified_facts: ClassVar[tuple[str, ...] | None] = None
     in_series: ClassVar[bool] = False
+    drawn: ClassVar[bool] = False  # a blueprint item: the film is drawn by code, not from shots
 
     def narration(self) -> str:
         """Everything the narrator says, in order (stored as scripts.body_text)."""
@@ -262,6 +263,15 @@ class ScriptDraftBase(BaseModel):
         if problems:
             raise ValueError("; ".join(problems))
         return self
+
+
+# Spelled-out numbers from ten up slip past the digit check ("sixteen hundred"): a blueprint
+# narration must write them as digits (the voice reads "1,600" aloud; D-112).
+NUMBER_WORDS = re.compile(
+    r"\b(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|"
+    r"thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b",
+    re.IGNORECASE,
+)
 
 
 def _rule_problems(draft: Any) -> list[str]:
@@ -311,6 +321,14 @@ def _rule_problems(draft: Any) -> list[str]:
             f"narration has {words} words ({parts}); it must have "
             f"{draft.min_words}-{draft.max_words}"
         )
+    if draft.drawn and (spelled := NUMBER_WORDS.findall(draft.narration())):
+        problems.append(
+            f"write numbers as digits so they can be checked against the verified facts, "
+            f"not as words ({', '.join(dict.fromkeys(w.lower() for w in spelled))})"
+        )
+    if draft.drawn:  # the film is drawn by code (D-111): the Flow shot list rules don't apply
+        problems += _source_problems(draft)
+        return problems
     problems += hero_look_problems(draft.hero_look)
     shots = draft.shots
     if [s.n for s in shots] != list(range(1, len(shots) + 1)):
@@ -331,6 +349,11 @@ def _rule_problems(draft: Any) -> list[str]:
     total_s = sum(s.duration_s for s in shots)
     if total_s < needed_s:
         problems.append(f"shots last {total_s:.0f} s; they must cover at least {needed_s:.0f} s")
+    return problems + _source_problems(draft)
+
+
+def _source_problems(draft: Any) -> list[str]:
+    problems = []
     if len(draft.sources) < SOURCES_ASKED:
         problems.append(f"{len(draft.sources)} sources; give {SOURCES_ASKED} different ones")
     if draft.reference_url and draft.reference_url not in [s.url for s in draft.sources]:
@@ -366,6 +389,7 @@ def script_schema(
     planned: tuple[str, str] | None = None,
     verified_facts: list[str] | None = None,
     in_series: bool = False,
+    drawn: bool = False,
 ) -> type[ScriptDraftBase]:
     """Build the ScriptDraft model for one item.
 
@@ -394,6 +418,7 @@ def script_schema(
     model.allowed_beats = beats
     model.verified_facts = tuple(verified_facts) if verified_facts is not None else None
     model.in_series = in_series
+    model.drawn = drawn
     return model
 
 
@@ -453,6 +478,11 @@ def run(
     http = http or http_client(ctx)
     try:
         for row in ideas:
+            if (waiting := series_stage.waiting_for(ctx.conn, row["id"])) is not None:
+                log.info("#%s waits: part %s of its series has no script yet", row["id"], waiting,
+                         extra={"content_id": row["id"], "event": "series_waiting"})  # fmt: skip
+                result.skipped += 1
+                continue
             _script_one_safely(ctx, row, llm, http, result)
     finally:
         if own_http:
@@ -538,8 +568,11 @@ def _script_one(
         planned=(row["hook_type"], row["beat_order"])
         if row["planned_publish_at"] and row["hook_type"] and row["beat_order"]
         else None,
-        verified_facts=(facts := blueprint_facts(row)),
+        verified_facts=[f.text for f in facts]
+        if (facts := blueprint_facts(row)) is not None
+        else None,
         in_series=(part := series_stage.context(conn, row["id"])) is not None,
+        drawn=row["visual_style"] == "blueprint",
     )
     system, user = _prompts(ctx, row, schema, reference, feedback, part, facts)
     draft = llm.generate_json(
@@ -562,11 +595,11 @@ def _script_one(
                  f"{system.version}+{user.version}", match.score)  # fmt: skip
 
 
-def blueprint_facts(row: sqlite3.Row) -> list[str] | None:
+def blueprint_facts(row: sqlite3.Row) -> list[Fact] | None:
     """The drawing's verified facts for a blueprint item, None for a Flow item (D-111)."""
     if row["visual_style"] != "blueprint" or row["object_name"] not in blueprint.MODULES:
         return None
-    return [f.text for f in blueprint.MODULES[row["object_name"]].FACTS.values()]
+    return list(blueprint.MODULES[row["object_name"]].FACTS.values())
 
 
 def visual_rules_template(ctx: AppContext) -> str:
@@ -636,7 +669,7 @@ def _prompts(
     reference: WikiSummary | None,
     feedback: Feedback | None,
     series_part: series_stage.SeriesContext | None = None,
-    verified_facts: list[str] | None = None,
+    verified_facts: list[Fact] | None = None,
 ) -> tuple[Any, Any]:
     channel = ctx.channel
     video_format = getattr(channel.formats, row["format"])

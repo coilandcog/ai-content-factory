@@ -176,10 +176,12 @@ Kept apart: what **YouTube officially states** and what is **creator consensus**
 
 ## 13. Topic series (D-112)
 
-From 2026-10-31 a topic can be made as several linked Shorts (2-5 parts, 3 by default), e.g. *Jet Engine, Part 1/3: Intake, Fan and Bypass*.
+From 2026-10-31 a topic can be made as several linked Shorts (at least 3 parts, up to 5 when the topic deserves it; owner), e.g. *Jet Engine, Part 1/3: Intake, Fan and Bypass*.
 
 - **Parts come from the drawing:** the machine's blueprint module lists its parts (title, focus, scenes), so the film of a part always shows what its script explains and the order is right. A machine needs a drawing in that many parts first (`factory series new` refuses otherwise).
 - **Scripts:** each part's prompt has the outline (its own part marked), the earlier parts' narration (not to be repeated) and the drawing's verified facts (the only numbers it may say). The Engineer's Note is about the part's focus. The last line is a **closing statement, never a question**: parts before the last name what the next part shows ("Next: ..."), the last part wraps up the series. Code rejects a question.
+- **Order:** a part is scripted only after every earlier part has a script (a failed part 1 makes parts 2 and 3 wait), so each part sees what came before.
+- **Numbers (all blueprint scripts):** digits only ("1,600", not "sixteen hundred"), and only the drawing's verified facts, each used for what it describes (the prompt lists every fact with its meaning). The shot-list rules of Flow scripts don't apply: the film is drawn by code.
 - **Similarity:** parts of one series and its teaser are not compared with each other (they share a topic on purpose); they are still compared with every other video.
 - **Titles and descriptions:** code sets the title "{Topic}, Part n/N: {part title}", starts the TikTok caption with "Part n/N:", and adds "Part n of N." plus links to the teaser ("Overview: ...") and the earlier parts that are already on YouTube.
 - **Order and posting:** parts are created, scripted and generated in part order; they are not put into `factory plan` (the weekly variety rules would split them). Post them on consecutive days, in order. A teaser (an overview video, e.g. #16) can go out first; the parts link back to it.

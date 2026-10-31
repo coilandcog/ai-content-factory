@@ -18,7 +18,7 @@ from factory.db import add_content
 from factory.errors import FactoryError
 
 log = logging.getLogger("factory.series")
-MIN_PARTS, MAX_PARTS = 2, 5
+MIN_PARTS, MAX_PARTS = 3, 5  # owner: at least 3 parts, more when the topic deserves it
 
 
 @dataclass(frozen=True)
@@ -125,6 +125,21 @@ def context(conn: sqlite3.Connection, content_id: int) -> SeriesContext | None:
         outline=outline, earlier=earlier, sibling_ids=siblings,
         facts=[f.text for f in module.FACTS.values()],
     )  # fmt: skip
+
+
+def waiting_for(conn: sqlite3.Connection, content_id: int) -> int | None:
+    """The first earlier part that has no script yet (a later part must see it), else None."""
+    row = conn.execute(
+        """
+        SELECT e.part_n FROM contents c
+        JOIN contents e ON e.series_id = c.series_id AND e.part_n < c.part_n
+        WHERE c.id = ? AND c.series_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM scripts s WHERE s.content_id = e.id AND s.is_current = 1)
+        ORDER BY e.part_n LIMIT 1
+        """,
+        (content_id,),
+    ).fetchone()
+    return row["part_n"] if row else None
 
 
 def links(conn: sqlite3.Connection, content_id: int) -> list[str]:

@@ -44,6 +44,7 @@ class Fact:
     text: str
     source: str
     value: float | None = None  # for counters that count up to it
+    about: str = ""  # what the number describes, so a script can't use it for something else
 
 
 def lerp(a: float, b: float, f: float) -> float:

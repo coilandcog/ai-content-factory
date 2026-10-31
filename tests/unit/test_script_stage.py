@@ -55,7 +55,7 @@ def ctx(tmp_path: Path) -> AppContext:
     conn = connect(tmp_path / "test.db")
     migrate(conn)
     channel = load_channel("coil-and-cog").model_copy(
-        update={"benchmarks": []}
+        update={"benchmarks": [], "video_style": "flow"}  # Flow scripts (blueprint: test_series)
     )  # the repo root is the prompt root: never read the owner's real benchmark clips' prompts
     upsert_channel(conn, channel)
     env = EnvSettings(
@@ -401,7 +401,19 @@ def test_show_script_prints_every_part(config_dir: Path) -> None:
     opts = ["--config-dir", str(config_dir)]
     runner.invoke(app, ["db", "init", *opts])
     runner.invoke(
-        app, ["new", "--object", "alternator", "--format", "short", "--pillar", "vehicles", *opts]
+        app,
+        [
+            "new",
+            "--object",
+            "alternator",
+            "--format",
+            "short",
+            "--pillar",
+            "vehicles",
+            "--style",
+            "flow",
+            *opts,
+        ],  # a Flow script (the fixture spells out its numbers)
     )
     conn = connect(config_dir.parent / "data" / "factory.db")
     env = EnvSettings(

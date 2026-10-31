@@ -60,7 +60,7 @@ def make_ctx(db_path: Path) -> AppContext:
     conn = connect(db_path)
     migrate(conn)
     channel = load_channel("coil-and-cog").model_copy(
-        update={"benchmarks": []}
+        update={"benchmarks": [], "video_style": "flow"}  # Flow scripts from the alternator fixture
     )  # the repo root is the prompt root: never read the owner's real benchmark clips' prompts
     upsert_channel(conn, channel)
     env = EnvSettings(

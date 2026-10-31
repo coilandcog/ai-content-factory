@@ -60,7 +60,9 @@ def ctx(tmp_path: Path) -> AppContext:
     shutil.copytree(REPO_ROOT / "prompts", tmp_path / "prompts")
     conn = connect(tmp_path / "data" / "factory.db")
     migrate(conn)
-    channel = load_channel("coil-and-cog")
+    channel = load_channel("coil-and-cog").model_copy(
+        update={"video_style": "flow"}
+    )  # Flow scripts
     upsert_channel(conn, channel)
     env = EnvSettings(dry_run=True, factory_channel="coil-and-cog",
                       wikimedia_user_agent="Test/0.1 (https://example.org)")  # fmt: skip
