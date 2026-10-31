@@ -60,7 +60,7 @@ flowchart LR
 | **assemble** | `factory assemble [--force]` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `preview_720p.mp4`, `music.txt`, `cover.jpg`, `qa_report.json`; `metadata.json` (task 1.11) | QA pass → `assembled`; QA failure → stays `generated` with the reasons in `status_reason` (renders are kept, so a re-run only re-checks) | FFmpeg only (D-068) | Not needed |
 | **review (Gate 2)** | `factory review --gate final` | `assembled` | `reviews` row | → `approved` / `rejected` / back to `generated` | Terminal, or Telegram buttons via `factory bot` (task 2.1) | — |
 | **publish** | `factory publish --id N` (YouTube, task 2.3, D-115); `factory publish --check`; `factory publish --manual` (D-072) | `approved` | `posts` rows | YouTube upload → `scheduled`; `--check` after it went public → `published`; a manual post goes `approved`/`scheduled` → `published` | Phase 1: you upload by hand, the factory records it. Phase 2: YouTube Data API (scheduled private → public); TikTok stays a manual post recorded with `--manual` (D-116) | Not needed |
-| **learn** | `factory learn [--id N]` (YouTube Analytics pull, task 2.5, D-117); labels and weekly report in 2.9 | `published` posts | `metrics` (`source = api` at the 24h/72h/7d/28d checkpoints, once final), `performance_labels`, weekly report | → `analyzed` (after 28-day metrics) | YouTube Analytics API; TikTok numbers by hand or from the weekly TikTok Studio CSV (no TikTok API, D-116) | Not needed |
+| **learn** | `factory learn [--id N]` (YouTube Analytics pull, task 2.5, D-117; also refreshes labels); `factory labels show/set`, `factory report weekly` (task 2.9, D-119) | `published` posts | `metrics` (`source = api` at the 24h/72h/7d/28d checkpoints, once final), `performance_labels`, weekly report | → `analyzed` (after 28-day metrics) | YouTube Analytics API; TikTok numbers by hand or from the weekly TikTok Studio CSV (no TikTok API, D-116) | Not needed |
 
 Helper commands:
 - `factory db init|migrate|backup`
@@ -83,6 +83,8 @@ Helper commands:
 - `factory publish --manual --id N`: prints the upload kit (render paths, YouTube title and description, TikTok caption, the AI-label steps). `factory publish --manual --id N --platform youtube|tiktok --url <link> --ai-label-on` records the live post in `posts`; the first one moves the item to `published` (D-072).
 - `factory auth youtube`: signs the channel in to YouTube (link for the Windows browser), checks the account is `@coilandcog` and saves the token in `secrets/<slug>/google_token.json`. `factory auth test-upload` (with `DRY_RUN=false`) uploads the brand sting **unlisted** and AI-labelled to prove the upload path; delete it in Studio afterwards (D-102). `--scheduled` makes it private with `publishAt` 30 days ahead instead (D-115); it must be deleted before then.
 - `factory learn [--id N]` (D-117): for every real, published YouTube post (or item N), pulls each checkpoint that is final from the YouTube Analytics API into `metrics` (`source = api`): a checkpoint covers the US Pacific days from going public to the end of its window and is final 2 days after that. First it corrects `posts.published_at` to YouTube's `publishedAt`. API numbers replace typed ones, except stayed-to-watch, which the API lacks. Read-only (works in DRY_RUN); prints saved/waiting checkpoints and the `metrics show` table.
+- `factory labels show` / `factory labels set <id> winner|average|loser|auto [--note ...]` (D-119): winner/average/loser from each real YouTube video's 7-day numbers (CONTENT_STRATEGY §10, channel median = median 7-day views of the labelled videos; no stayed-to-watch → at most `average`) into `performance_labels`; an owner's label is kept on every recompute until `auto`.
+- `factory report weekly [--no-send]` (D-119): last week's (Mon–Sun, channel time) posts, winners and losers with their numbers, patterns per pillar / hook type / format (median 7-day views and W/A/L counts, never "copy this video") and a to-do list (missing stayed-to-watch, videos waiting for 7-day numbers); refreshes labels first and sends it to `TELEGRAM_ALLOWED_CHAT_ID` ("[DRY RUN]" prefix in dry run). The Monday 06:00 run is task 2.11.
 - `factory metrics add <id> --platform youtube|tiktok --checkpoint 24h|72h|7d|28d [--views --stayed --avd-pct --avd-s --likes --comments --shares --subs --watch-min]` / `factory metrics show <id>`: numbers copied by hand from YouTube Studio or TikTok into `metrics` (`source = manual`); entering a checkpoint again replaces only the numbers given. Learning from results starts before the Analytics API (D-101).
 - `factory lessons learn|list|approve <n> [--text ...]|remove <n>`: Gemini turns failed clip reviews (every item's `clip_review.json`, each failure once) into short general lessons; only lessons you approve go into the film rules (new scripts, restages) and into `clips review`'s checks (clip lessons for clips, frame lessons for frames) (D-103).
 - `factory references add [--for N]|list|approve <n> [--note ...]|remove <n>`: the reference library: Gemini writes style notes (lighting, camera, composition, motion, materials, 3–6 prompt phrases) about images and clips you drop into `data/inbox/references/`; the files move to `data/references/` and are never used in a video; only notes you approve (newest 8) join the film rules for new scripts and restages (D-100); with `--for N` a note only shapes item N (D-104). For videos Gemini also listens: hook, narration, structure, pacing, sound, why it works and topic ideas; approved video notes feed script writing (storytelling) and ideation (topic ideas); a video too big to send (over 18 MB) is shrunk whole, with its sound, to fit (up to 10 min; longer ones keep their first 10 min) (D-109).
@@ -124,7 +126,7 @@ Helper commands:
 | Time (Europe/Berlin) | Job | Phase |
 |---|---|---|
 | 01:00 daily | `factory run-nightly` (production batch, then Gate notifications) | 2+ |
-| 06:00 daily | `factory learn` (analytics pull, labels; weekly report on Mondays) | 2+ |
+| 06:00 daily | `factory learn` (analytics pull, labels); Mondays also `factory report weekly` | 2+ |
 | 02:30 daily | `factory db backup` | 2+ |
 | 17:00 daily | Publishing is done by YouTube itself; TikTok drafts are posted by the owner | 2+ |
 
@@ -375,7 +377,8 @@ ai-content-factory/
 │   │   ├── review.py
 │   │   ├── bot.py                # Telegram review bot: both gates + alerts (factory bot)
 │   │   ├── publish.py
-│   │   └── learn.py
+│   │   ├── learn.py              # metrics, Analytics pull, winner/average/loser labels (D-119)
+│   │   └── report.py             # weekly Telegram report: posts, labels, patterns (D-119)
 │   ├── integrations/
 │   │   ├── gemini.py
 │   │   ├── ollama.py

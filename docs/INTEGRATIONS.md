@@ -138,7 +138,7 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 | Messages | Plain text (no Markdown, so nothing needs escaping), at most 4,096 characters per message, longer texts are sent in parts. `inline_keyboard` callback data `<action>:<gate>:<content_id>` with actions `approve`, `reject`, `redo`, `skip`, `edit` (Gate 2), `keep` (Gate 1 draft note), `confirm` (Gate 2 checklist), `cancel`. Reject and redo take your next text message as the reason | ✔ |
 | Video preview | `sendVideo` (multipart upload, caption ≤1,024 characters) with `preview_720p.mp4`. Bot uploads are limited to **50 MB** (Bot API docs, checked 2026-10-25); QA keeps the preview under 45 MB | ✔ |
 | Alerts | While `factory bot` runs: runs that end `failed`/`partial` (budget stops and quota errors included, with the redacted `runs.error`) and items that newly become `failed`, each once. `spam_risk` comes with the publish API tasks | ✔ (task 2.1) |
-| Reports | Monday 06:00: weekly winners and losers plus pattern summary | — |
+| Reports | `factory report weekly` (D-119): last week's posts, winners and losers, pattern summary and to-do as plain `sendMessage` text (split over 4,096 characters, "[DRY RUN]" prefix in dry run). Monday 06:00 via Task Scheduler in task 2.11 | ✔ (task 2.9) |
 | Errors | 429 → wait `parameters.retry_after` seconds, then retry; network errors and 5xx → the shared 4-attempt backoff; other 4xx → `HttpStatusError` with Telegram's description. If Telegram stays unreachable the bot waits 60 s and polls again | ✔ |
 | Usage | Each `sendMessage`/`sendVideo` adds 1 to `api_usage` (`telegram`, no daily limit); polling is not counted | ✔ |
 

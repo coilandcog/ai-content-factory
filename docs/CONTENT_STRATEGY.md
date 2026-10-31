@@ -124,7 +124,9 @@ Each idea is scored from 0 to 100. Gemini scores five criteria (85 points); the 
 | `loser` | Views ≤ 0.5× channel median **or** average view duration below half of the winner threshold |
 | `average` | Everything else |
 
-The owner can override any label. The ideation prompt receives the top *patterns* (pillar, `hook_type`, `beat_order`, length, topic type), never instructions to copy a specific video.
+How the code applies it (D-119): the numbers are the **YouTube** 7-day checkpoint of real posts (`metrics`, API or typed); the **channel median** is the median 7-day views of every labelled video (this one included); "Shorts" means `format = short`, everything else uses the 40% bar. A video whose stayed-to-watch or average-viewed share is missing can't be a winner (at most `average`), but views alone can still make it a loser. `factory labels show` works them out, `factory learn` and `factory report weekly` refresh them.
+
+The owner can override any label (`factory labels set <id> winner|average|loser|auto`); a recompute never changes an owner's label, and `auto` hands it back to the rule. The ideation prompt receives the top *patterns* (pillar, `hook_type`, `beat_order`, length, topic type), never instructions to copy a specific video.
 
 ## 11. Platform-specific rules
 

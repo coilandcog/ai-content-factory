@@ -1,11 +1,14 @@
 """Learn stage (ROADMAP 2.5): numbers the owner copies from YouTube Studio and TikTok become
 `metrics` rows (D-101), and `factory learn` pulls the YouTube ones from the Analytics API (D-117).
+From the 7-day numbers each video gets a winner/average/loser label (ROADMAP 2.9, D-119).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
+import statistics
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -260,3 +263,162 @@ def _store_api(ctx: AppContext, post_id: int, checkpoint: str, numbers: dict[str
             """,
             (post_id, checkpoint, *values.values()),
         )
+
+
+# --- Winner / average / loser labels (ROADMAP 2.9, CONTENT_STRATEGY §10, D-119) -------------
+
+LABELS = ("winner", "average", "loser")
+WINNER_VIEWS_X = 3.0  # at least 3x the channel median
+LOSER_VIEWS_X = 0.5  # at most half the channel median
+WINNER_STAYED_PCT = 70.0
+
+
+@dataclass(frozen=True)
+class Label:
+    content_id: int
+    object_name: str
+    label: str
+    basis: dict[str, Any] | None
+    overridden: bool
+    notes: str | None
+
+
+def duration_target(fmt: str) -> float:
+    """Average percentage viewed a winner needs: 80% for Shorts, 40% for videos over 60 s."""
+    return 80.0 if fmt == "short" else 40.0
+
+
+def judge(views: int, median: float, stayed: float | None, viewed: float | None,
+          fmt: str) -> tuple[str, list[str]]:  # fmt: skip
+    """The §10 label for one video's 7-day numbers, plus the reasons in plain words.
+
+    A missing stayed-to-watch or average-viewed share can't prove a winner, so the video is at
+    most `average` until it is entered; views alone can still make it a loser."""
+    target = duration_target(fmt)
+    reasons = []
+    if views <= LOSER_VIEWS_X * median:
+        reasons.append(f"views {views} ≤ {LOSER_VIEWS_X:g}× median {median:g}")
+    if viewed is not None and viewed < target / 2:
+        reasons.append(f"avg viewed {viewed:g}% < {target / 2:g}%")
+    if reasons:
+        return "loser", reasons
+    checks = [
+        (views > 0 and views >= WINNER_VIEWS_X * median,
+         f"views {views} vs {WINNER_VIEWS_X:g}× median {median:g}"),
+        (stayed is not None and stayed >= WINNER_STAYED_PCT,
+         "stayed-to-watch missing" if stayed is None
+         else f"stayed {stayed:g}% vs {WINNER_STAYED_PCT:g}%"),
+        (viewed is not None and viewed >= target,
+         "avg viewed missing" if viewed is None else f"avg viewed {viewed:g}% vs {target:g}%"),
+    ]  # fmt: skip
+    if all(ok for ok, _ in checks):
+        return "winner", [text for _, text in checks]
+    return "average", [f"not yet a winner: {text}" for ok, text in checks if not ok]
+
+
+def compute_labels(ctx: AppContext) -> list[Label]:
+    """Label every real YouTube video that has 7-day numbers; returns all of the channel's labels.
+
+    The channel median is the median 7-day views of those videos (this one included). A label
+    the owner set is never replaced; only its basis (the numbers) is refreshed."""
+    rows = ctx.conn.execute(
+        """
+        SELECT c.id, c.format, m.views, m.stayed_to_watch_pct, m.avg_view_pct
+        FROM contents c JOIN channels ch ON ch.id = c.channel_id
+        JOIN posts p ON p.content_id = c.id AND p.platform = 'youtube'
+        JOIN metrics m ON m.post_id = p.id AND m.checkpoint = '7d'
+        WHERE ch.slug = ? AND p.dry_run = 0 AND p.status = 'published' AND m.views IS NOT NULL
+        """,
+        (ctx.channel.slug,),
+    ).fetchall()
+    if rows:
+        median = float(statistics.median(r["views"] for r in rows))
+        with ctx.conn:
+            for r in rows:
+                label, reasons = judge(r["views"], median, r["stayed_to_watch_pct"],
+                                       r["avg_view_pct"], r["format"])  # fmt: skip
+                basis = {"platform": "youtube", "checkpoint": "7d", "views": r["views"],
+                         "median": median, "median_of": len(rows),
+                         "stayed_pct": r["stayed_to_watch_pct"], "avg_view_pct": r["avg_view_pct"],
+                         "duration_target": duration_target(r["format"]),
+                         "rule": label, "reasons": reasons}  # fmt: skip
+                ctx.conn.execute(
+                    """
+                    INSERT INTO performance_labels (content_id, label, basis_json)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT (content_id) DO UPDATE SET basis_json = excluded.basis_json,
+                        label = CASE WHEN overridden_by_owner = 1 THEN label
+                                     ELSE excluded.label END,
+                        computed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                    """,
+                    (r["id"], label, json.dumps(basis)),
+                )
+    return labels(ctx)
+
+
+def labels(ctx: AppContext) -> list[Label]:
+    """The channel's stored labels, by content id."""
+    rows = ctx.conn.execute(
+        """
+        SELECT l.*, c.object_name FROM performance_labels l
+        JOIN contents c ON c.id = l.content_id JOIN channels ch ON ch.id = c.channel_id
+        WHERE ch.slug = ? ORDER BY l.content_id
+        """,
+        (ctx.channel.slug,),
+    ).fetchall()
+    return [Label(r["content_id"], r["object_name"], r["label"],
+                  json.loads(r["basis_json"]) if r["basis_json"] else None,
+                  bool(r["overridden_by_owner"]), r["notes"]) for r in rows]  # fmt: skip
+
+
+def set_label(ctx: AppContext, content_id: int, label: str, note: str | None = None) -> None:
+    """The owner's own label (kept on every recompute), or `auto` to hand it back to the rule."""
+    if label not in (*LABELS, "auto"):
+        raise FactoryError(f"label must be one of {', '.join(LABELS)} or auto")
+    row = ctx.conn.execute(
+        "SELECT c.id FROM contents c JOIN channels ch ON ch.id = c.channel_id "
+        "WHERE c.id = ? AND ch.slug = ?",
+        (content_id, ctx.channel.slug),
+    ).fetchone()
+    if row is None:
+        raise FactoryError(f"content #{content_id} does not exist")
+    with ctx.conn:
+        if label == "auto":
+            ctx.conn.execute(
+                "UPDATE performance_labels SET overridden_by_owner = 0, notes = ?, "
+                "label = COALESCE(json_extract(basis_json, '$.rule'), label) "
+                "WHERE content_id = ?",
+                (note, content_id),
+            )
+            # Without 7-day numbers there is no rule label to go back to.
+            ctx.conn.execute(
+                "DELETE FROM performance_labels WHERE content_id = ? AND basis_json IS NULL",
+                (content_id,),
+            )
+            return
+        ctx.conn.execute(
+            """
+            INSERT INTO performance_labels (content_id, label, overridden_by_owner, notes)
+            VALUES (?, ?, 1, ?)
+            ON CONFLICT (content_id) DO UPDATE SET label = excluded.label,
+                overridden_by_owner = 1, notes = excluded.notes,
+                computed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            """,
+            (content_id, label, note),
+        )
+
+
+def labels_text(items: list[Label]) -> str:
+    if not items:
+        return "No labels yet: a video gets one when its 7-day YouTube numbers are in."
+    lines = []
+    for item in items:
+        mark = " (yours)" if item.overridden else ""
+        basis = item.basis or {}
+        why = "; ".join(basis.get("reasons", [])) if basis.get("rule") == item.label else ""
+        if item.overridden and basis.get("rule") and basis["rule"] != item.label:
+            why = f"rule says {basis['rule']}"
+        tail = f"  {why}" if why else ""
+        note = f"  note: {item.notes}" if item.notes else ""
+        lines.append(f"#{item.content_id} {item.object_name}: {item.label}{mark}{tail}{note}")
+    return "\n".join(lines)

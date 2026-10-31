@@ -132,3 +132,99 @@ def test_metrics_commands(config_dir: Path) -> None:
     assert added.exit_code == 0, added.output
     assert "youtube 7d   1234 views | stayed 56.8% | avg viewed 133%  (manual)" in added.output
     assert empty.exit_code == 1 and "content #99 does not exist" in empty.output
+
+
+# --- labels (ROADMAP 2.9, D-119) ----------------------------------------------------------
+
+
+def video(ctx: AppContext, name: str, views: int, stayed: float | None = None,
+          viewed: float | None = None, fmt: str = "short", dry_run: int = 0) -> int:  # fmt: skip
+    """A real, published YouTube video with 7-day numbers."""
+    content_id = add_content(ctx.conn, ctx.channel, object_name=name, fmt=fmt, pillar="vehicles")
+    channel_id = ctx.conn.execute("SELECT id FROM channels").fetchone()[0]
+    account = upsert_platform_account(ctx.conn, channel_id, "youtube", "@coilandcog", "manual")
+    with ctx.conn:
+        ctx.conn.execute(
+            "INSERT INTO posts (content_id, platform_account_id, platform, status, dry_run) "
+            "VALUES (?, ?, 'youtube', 'published', ?)",
+            (content_id, account, dry_run),
+        )
+    numbers = Numbers(views=views, stayed_to_watch_pct=stayed, avg_view_pct=viewed)
+    learn.add_manual(ctx, content_id, "youtube", "7d", numbers)
+    return content_id
+
+
+@pytest.mark.parametrize(
+    ("views", "stayed", "viewed", "fmt", "label"),
+    [
+        (300, 75, 85, "short", "winner"),  # 3x median, stayed and viewed above the bar
+        (300, None, 85, "short", "average"),  # no stayed-to-watch yet: can't prove a winner
+        (300, 75, 79, "short", "average"),  # Shorts need 80% viewed
+        (300, 75, 45, "deep_dive", "winner"),  # over 60 s: 40% is enough
+        (50, 90, 120, "short", "loser"),  # half the median or less
+        (200, 60, 39, "short", "loser"),  # viewed below half of 80%
+        (200, 60, 70, "short", "average"),
+    ],
+)
+def test_judge_follows_the_strategy_rules(
+    views: int, stayed: float | None, viewed: float | None, fmt: str, label: str
+) -> None:
+    assert learn.judge(views, 100, stayed, viewed, fmt)[0] == label
+
+
+def test_labels_use_the_channel_median_and_skip_dry_runs(ctx: AppContext) -> None:
+    low = video(ctx, "alternator", 100, 60, 70)
+    mid = video(ctx, "turbocharger", 400, 60, 70)
+    high = video(ctx, "jet engine", 1500, 72, 90)  # median of 100/400/1500 = 400
+    video(ctx, "test", 99999, 90, 90, dry_run=1)  # a dry-run post never counts
+
+    got = {item.content_id: item for item in learn.compute_labels(ctx)}
+
+    assert {k: v.label for k, v in got.items()} == {low: "loser", mid: "average", high: "winner"}
+    assert (got[high].basis["median"], got[high].basis["median_of"]) == (400, 3)
+
+
+def test_owner_label_survives_recompute_and_auto_hands_it_back(ctx: AppContext) -> None:
+    video(ctx, "alternator", 100, 60, 70)
+    content_id = video(ctx, "turbocharger", 400, 60, 70)
+    video(ctx, "jet engine", 1500, 72, 90)
+    learn.compute_labels(ctx)
+
+    learn.set_label(ctx, content_id, "winner", "great comments")
+    after = {i.content_id: i for i in learn.compute_labels(ctx)}[content_id]
+    assert (after.label, after.overridden, after.notes) == ("winner", True, "great comments")
+    assert "rule says average" in learn.labels_text([after])
+
+    learn.set_label(ctx, content_id, "auto")
+    back = {i.content_id: i for i in learn.labels(ctx)}[content_id]
+    assert (back.label, back.overridden) == ("average", False)
+
+
+def test_set_label_refuses_unknown_labels_and_items(ctx: AppContext) -> None:
+    with pytest.raises(FactoryError, match="label must be one of"):
+        learn.set_label(ctx, 1, "great")
+    with pytest.raises(FactoryError, match="does not exist"):
+        learn.set_label(ctx, 99, "winner")
+
+
+def test_labels_commands(config_dir: Path) -> None:
+    opts = ["--config-dir", str(config_dir)]
+    runner = CliRunner()
+    runner.invoke(app, ["db", "init", *opts])
+    db = connect(config_dir.parent / "data" / "factory.db")
+    env = EnvSettings(dry_run=True, factory_channel="coil-and-cog")
+    ctx = AppContext(load_settings(config_dir), env,
+                     load_channel("coil-and-cog", config_dir), db, config_dir.parent)  # fmt: skip
+    content_id = video(ctx, "alternator", 300, 75, 85)
+    db.close()
+
+    shown = runner.invoke(app, ["labels", "show", *opts])
+    changed = runner.invoke(app, ["labels", "set", str(content_id), "loser", "--note", "dull",
+                                  *opts])  # fmt: skip
+
+    assert shown.exit_code == 0, shown.output
+    assert f"#{content_id} alternator: average" in shown.output  # alone: 300 = 1x its own median
+    assert changed.exit_code == 0, changed.output
+    assert f"#{content_id} alternator: loser (yours)  rule says average  note: dull" in (
+        changed.output
+    )

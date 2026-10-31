@@ -68,7 +68,7 @@ Before starting Phase 2, re-check OQ-2 (YouTube incentive programs) and §3 of `
 | 2.6 | **Dropped (D-116): needs a reviewed TikTok app.** TikTok inbox upload plus a Telegram "I posted it" confirmation | Draft appears in the TikTok inbox; confirming sets `published` | Post a draft as private first, then the real one |
 | 2.7 | `factory metrics import-tiktok <csv>` (TikTok Studio export). *The Display API counts are dropped (D-116)* | Counts are stored; the CSV import is idempotent | Import the same CSV twice; row counts don't change |
 | 2.8 | Episode format: 16:9 side-panel layout, opener shot, thumbnail via `thumbnails.set` | One 5–10 min Episode renders and passes QA | Watch it on a laptop or TV |
-| 2.9 | Labels (winner/average/loser) plus the Monday Telegram report | Labels follow `CONTENT_STRATEGY.md` §10; you can override them | Read Monday's report |
+| 2.9 | Labels (winner/average/loser) plus the Monday Telegram report. **Built 2026-10-31 (D-119): `factory labels show/set`, `factory report weekly [--no-send]`; the Monday 06:00 run comes with 2.11** | Labels follow `CONTENT_STRATEGY.md` §10; you can override them | Read Monday's report |
 | 2.10 | Nightly Google Drive backup | The newest 14 backups are kept; no secrets in the zip | Download a backup and open the database with `sqlite3` |
 | 2.11 | `factory run-nightly` plus Windows Task Scheduler jobs (01:00, 02:30, 06:00) with how-to steps in `ops/windows/` | Jobs run with the laptop on and WSL closed | Check the next morning's Telegram messages and `runs` table |
 | 2.12 | **[Owner]** Turn on Docker Desktop's WSL integration for Ubuntu; optional n8n container that only calls the CLI | `docker run hello-world` works in WSL | Run that command |

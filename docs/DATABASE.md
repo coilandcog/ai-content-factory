@@ -226,8 +226,8 @@ A scheduled YouTube post (`factory publish --id N`, D-115) is stored as `status 
 |---|---|---|
 | content_id | INTEGER PK FK | |
 | label | TEXT | `winner` \| `average` \| `loser` |
-| basis_json | TEXT | Numbers used (median, views, pct values) |
-| overridden_by_owner | INTEGER | 0/1 |
+| basis_json | TEXT | Numbers used: `platform`, `checkpoint` (`youtube`, `7d`), `views`, `median`, `median_of` (videos in the median), `stayed_pct`, `avg_view_pct`, `duration_target`, `rule` (the label the rule gives) and `reasons`; NULL for an owner label on a video without 7-day numbers (D-119) |
+| overridden_by_owner | INTEGER | 0/1: 1 = the owner set the label; recomputes keep it and only refresh `basis_json` |
 | notes | TEXT | |
 | computed_at | TEXT | |
 

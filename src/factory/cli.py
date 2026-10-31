@@ -57,6 +57,7 @@ from factory.stages import lessons as lessons_stage
 from factory.stages import metadata as metadata_stage
 from factory.stages import publish as publish_stage
 from factory.stages import references as references_stage
+from factory.stages import report as report_stage
 from factory.stages import review as review_stage
 from factory.stages import script as script_stage
 from factory.stages import series as series_stage
@@ -91,6 +92,11 @@ auth_app = typer.Typer(
 app.add_typer(auth_app, name="auth")
 metrics_app = typer.Typer(help="Video results: views, stayed-to-watch, ...", no_args_is_help=True)
 app.add_typer(metrics_app, name="metrics")
+labels_app = typer.Typer(help="Winner / average / loser labels (7-day numbers).",
+                         no_args_is_help=True)  # fmt: skip
+app.add_typer(labels_app, name="labels")
+report_app = typer.Typer(help="Reports sent to you in Telegram.", no_args_is_help=True)
+app.add_typer(report_app, name="report")
 lessons_app = typer.Typer(
     help="Lessons from failed clips: proposed by Gemini, approved by you.", no_args_is_help=True
 )
@@ -116,7 +122,10 @@ STAGES: dict[str, tuple[str, str]] = {
     "assemble": ("Edit clips, voice and subtitles into YouTube and TikTok renders.", "1.9"),
     "review": ("Gate 1 (script) and Gate 2 (final) human approval.", "1.5"),
     "publish": ("Schedule approved videos on YouTube (--manual: record your own uploads).", "2.3"),
-    "learn": ("Pull YouTube numbers (Analytics API) at the 24h/72h/7d/28d checkpoints.", "2.5"),
+    "learn": (
+        "Pull YouTube numbers (Analytics API) at the 24h/72h/7d/28d checkpoints; labels.",
+        "2.5",
+    ),
 }
 
 
@@ -711,7 +720,6 @@ def learn(
         pulled = learn_stage.pull(ctx, content_id)
         if not pulled:
             typer.echo("Nothing to pull: every published YouTube video has all 4 checkpoints.")
-            return
         for item in pulled:
             text = {
                 "saved": f"saved ({item.views} views)",
@@ -722,6 +730,7 @@ def learn(
         run.tally.processed = sum(item.state == "saved" for item in pulled)
         for shown in sorted({item.content_id for item in pulled if item.state == "saved"}):
             typer.echo(learn_stage.show(ctx, shown))
+        typer.echo(learn_stage.labels_text(learn_stage.compute_labels(ctx)))
 
 
 # Stages that are built; the rest stay stubs. Registered in pipeline order for --help.
@@ -1214,6 +1223,59 @@ def metrics_show(
     """Show every stored checkpoint of an item, per platform."""
     with _tracked_run("metrics show", config_dir) as run:
         typer.echo(learn_stage.show(_context(run, config_dir), content_id))
+
+
+@labels_app.command("show")
+def labels_show(config_dir: ConfigDirOption = CONFIG_DIR) -> None:
+    """Work out every video's label from its 7-day YouTube numbers (CONTENT_STRATEGY §10) and
+    show them. Labels you set yourself are kept."""
+    with _tracked_run("labels show", config_dir) as run:
+        items = learn_stage.compute_labels(_context(run, config_dir))
+        typer.echo(learn_stage.labels_text(items))
+        run.tally.processed = len(items)
+
+
+@labels_app.command("set")
+def labels_set(
+    content_id: Annotated[int, typer.Argument(help="The item.")],
+    label: Annotated[str, typer.Argument(help="winner | average | loser | auto (the rule)")],
+    note: Annotated[str | None, typer.Option(help="Why you chose it.")] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Set an item's label yourself; recomputing never changes it until you set `auto`."""
+    with _tracked_run("labels set", config_dir) as run:
+        ctx = _context(run, config_dir)
+        learn_stage.set_label(ctx, content_id, label, note)
+        typer.echo(learn_stage.labels_text(learn_stage.compute_labels(ctx)))
+        run.tally.processed = 1
+
+
+@report_app.command("weekly")
+def report_weekly(
+    send: Annotated[
+        bool, typer.Option("--send/--no-send", help="Send it in Telegram, or only print it.")
+    ] = True,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Last week's posts, labels and patterns (Monday report, ROADMAP 2.9). Refreshes labels."""
+    with _tracked_run("report weekly", config_dir) as run:
+        ctx = _context(run, config_dir)
+        text = report_stage.weekly(ctx)
+        typer.echo(text)
+        if not send:
+            return
+        token, chat_id = run.env.telegram_bot_token, run.env.telegram_allowed_chat_id
+        if token is None or chat_id is None:
+            raise FactoryError(
+                "TELEGRAM_BOT_TOKEN and TELEGRAM_ALLOWED_CHAT_ID are needed in .env to send it "
+                "(or use --no-send)"
+            )
+        client = TelegramClient(
+            token.get_secret_value(),
+            before_send=lambda: check_and_record(run.conn, ctx.channel, "telegram"),
+        )
+        run.tally.processed = report_stage.send(ctx, client, chat_id, text)
+        typer.echo(f"Sent to Telegram in {run.tally.processed} message(s).")
 
 
 @lessons_app.command("learn")
