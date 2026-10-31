@@ -104,10 +104,12 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 | Item | Contract | Verified |
 |---|---|---|
 | Auth | Same OAuth token as uploads, scope `yt-analytics.readonly` (asked in `factory auth youtube`, D-102) | ✔ |
-| Call | `reports.query(ids="channel==MINE", startDate, endDate, metrics="views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained", dimensions="video", filters="video==<id>")` | Metric names: confirm in task 2.5 |
-| Stayed to watch | May not be available through the API. If not, it's read in YouTube Studio and entered with `factory metrics add --manual` | OQ-4 |
-| Schedule | Checkpoints at 24 h, 72 h, 7 days and 28 days after `published_at` | — |
-| Errors | Data delay (up to 48 h) → store what's available; re-pull at the next checkpoint | — |
+| Call | `youtubeAnalytics v2 reports.query(ids="channel==MINE", startDate, endDate, metrics="views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained", dimensions="video", filters="video==<id>")` (`integrations/youtube_analytics.video_totals`) → `views`, `watch_time_min`, `avg_view_duration_s`, `avg_view_pct`, `likes`, `comments`, `shares`, `subscribers_gained`; no row = no data yet | ✔ 2026-10-31: names in Google's metrics page (updated 2026-09-14); first real pull for #5/#6 (D-117) |
+| Stayed to watch | **Not in the API** (OQ-4 resolved, D-117): read it in YouTube Studio and enter it with `factory metrics add --stayed`; a pull keeps it. `engagedViews` exists but isn't stored | ✔ |
+| Publish time | `videos.list(part=snippet).publishedAt` (Data API, 1 unit per 50 videos) is the moment the video went public; it corrects `posts.published_at` before the windows are worked out | ✔ |
+| Schedule | Checkpoints 24 h, 72 h, 7 days and 28 days after going public. Analytics counts whole **US Pacific** days: a checkpoint covers the publish day to the day the window ends, and is pulled from the 2nd day after that (`LAG_DAYS = 2`), so the 24 h numbers arrive about 4 days after publishing | ✔ |
+| Quota | Its own free quota (not the Data API's 10,000 units); each call is counted under `youtube_analytics` in `api_usage`, without a daily limit | — |
+| Errors | Same rules as the Data API (§4): quota/rate reasons → `BudgetExceededError`; 5xx/network → retried; a final checkpoint without data is tried again next run | ✔ |
 
 ## 6. TikTok APIs (publish, learn)
 

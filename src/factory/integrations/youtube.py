@@ -204,6 +204,31 @@ def video_privacy(
     return found
 
 
+def published_times(
+    api: Any,
+    video_ids: Sequence[str],
+    *,
+    before_call: Callable[[int], None],
+    retry_wait_s: float = 2,
+) -> dict[str, datetime]:
+    """When each video went public (snippet.publishedAt: for a video made public later this is
+    that moment, not the upload), up to 50 per call, 1 unit; a deleted video is missing."""
+    found: dict[str, datetime] = {}
+    for start in range(0, len(video_ids), 50):
+        chunk = ",".join(video_ids[start : start + 50])
+
+        def call(chunk: str = chunk) -> Any:
+            before_call(VIDEOS_UNITS)
+            return _execute(api.videos().list(part="snippet", id=chunk, maxResults=50))
+
+        response = _with_retries(call, "YouTube videos.list", retry_wait_s)
+        for item in response.get("items") or []:
+            stamp = item.get("snippet", {}).get("publishedAt")
+            if stamp:
+                found[item["id"]] = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    return found
+
+
 def _with_retries(call: Callable[[], Any], service: str, retry_wait_s: float) -> Any:
     """`call()` with the shared retry rules: only RetryableError, 4 attempts, 2/4/8 s + jitter."""
     retrying = Retrying(

@@ -38,7 +38,7 @@
 | assemble | ffprobe checks: resolution, fps, duration bounds, audio present, loudness −14 ±1 LUFS; TikTok render has no music track | Watch both renders on the phone |
 | review | Approve / reject / redo transitions; reason is required for reject and redo. Bot (fake Telegram server): other chats ignored; Gate 1 note reply and keep-draft; reject/redo reasons and `/cancel`; Gate 2 approves only after the checklist button; old buttons on decided items do nothing; alerts once, none for old failures; message splitting; the token never appears in errors | `uv run pytest -m integration -k telegram` (one real message + video to your chat); Telegram buttons on a dry-run item |
 | publish | Manual (1.12): link parsing, refusals (not approved, AI label not confirmed, wrong or conflicting link), status moves, second platform, re-run with the same link. API (2.3+): builds the correct YouTube body (`containsSyntheticMedia=true`, `publishAt`, `selfDeclaredMadeForKids=false`); DRY_RUN returns a `dryrun-` ID | 1.12: find the live video from a second browser. 2.2+: unlisted real upload |
-| learn | Label rules (winner/average/loser) from sample numbers; CSV import parser | One real Analytics pull for an unlisted video |
+| learn | Checkpoint windows (Pacific days, 2-day lag), Analytics pull with a fake client (`test_learn_pull.py`); label rules (winner/average/loser) from sample numbers; CSV import parser | One real Analytics pull for an unlisted video |
 
 ## 4. Quality checklist (every video must pass)
 

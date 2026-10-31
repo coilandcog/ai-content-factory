@@ -115,7 +115,7 @@ STAGES: dict[str, tuple[str, str]] = {
     "assemble": ("Edit clips, voice and subtitles into YouTube and TikTok renders.", "1.9"),
     "review": ("Gate 1 (script) and Gate 2 (final) human approval.", "1.5"),
     "publish": ("Schedule approved videos on YouTube (--manual: record your own uploads).", "2.3"),
-    "learn": ("Collect analytics and label winners and losers.", "2.5"),
+    "learn": ("Pull YouTube numbers (Analytics API) at the 24h/72h/7d/28d checkpoints.", "2.5"),
 }
 
 
@@ -680,6 +680,31 @@ def publish(
             typer.echo(f"#{content_id} on {platform} was already recorded: {post.url}")
 
 
+def learn(
+    content_id: Annotated[int | None, typer.Option("--id", help="Only this item.")] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Pull the YouTube numbers of published videos from the Analytics API, for each checkpoint
+    that is final (about 2 days after it ends, D-117). Read-only, so DRY_RUN doesn't matter.
+    Stayed-to-watch isn't in the API: add it with `factory metrics add --stayed`."""
+    with _tracked_run("learn", config_dir) as run:
+        ctx = _context(run, config_dir)
+        pulled = learn_stage.pull(ctx, content_id)
+        if not pulled:
+            typer.echo("Nothing to pull: every published YouTube video has all 4 checkpoints.")
+            return
+        for item in pulled:
+            text = {
+                "saved": f"saved ({item.views} views)",
+                "no_data": "final, but YouTube has no numbers yet: tried again next run",
+                "waiting": f"final from {item.due.isoformat()} (Pacific time)",
+            }[item.state]
+            typer.echo(f"#{item.content_id} {item.checkpoint:<4} {text}")
+        run.tally.processed = sum(item.state == "saved" for item in pulled)
+        for shown in sorted({item.content_id for item in pulled if item.state == "saved"}):
+            typer.echo(learn_stage.show(ctx, shown))
+
+
 # Stages that are built; the rest stay stubs. Registered in pipeline order for --help.
 IMPLEMENTED: dict[str, Callable[..., None]] = {
     "discover": discover,
@@ -689,6 +714,7 @@ IMPLEMENTED: dict[str, Callable[..., None]] = {
     "assemble": assemble,
     "review": review,
     "publish": publish,
+    "learn": learn,
 }
 
 for _name, (_help, _task) in STAGES.items():

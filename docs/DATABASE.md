@@ -202,7 +202,7 @@ At least 2 sources are required before Gate 1.
 | dry_run | INTEGER | 1 if created in DRY_RUN mode (never real) |
 | UNIQUE(content_id, platform) | | |
 
-A scheduled YouTube post (`factory publish --id N`, D-115) is stored as `status = scheduled`, `privacy = private`, `scheduled_for = <publishAt, UTC>`, `dry_run = 0`, `url = https://youtu.be/<id>`; `factory publish --check` changes it to `published`, `privacy = public`, `published_at`. In DRY_RUN nothing is stored (a pretend row would block the real one through `UNIQUE(content_id, platform)`). A manual post (`factory publish --manual`, D-072) is stored as `status = published`, `privacy = public`, `dry_run = 0` (the owner posted it, so it is real even while `DRY_RUN=true`), with the video id taken from the link. YouTube rows keep the title and full description; TikTok rows keep the caption (`title` is empty).
+A scheduled YouTube post (`factory publish --id N`, D-115) is stored as `status = scheduled`, `privacy = private`, `scheduled_for = <publishAt, UTC>`, `dry_run = 0`, `url = https://youtu.be/<id>`; `factory publish --check` changes it to `published`, `privacy = public`, `published_at`. `factory learn` corrects `published_at` of real YouTube posts to YouTube's `publishedAt` (D-117). In DRY_RUN nothing is stored (a pretend row would block the real one through `UNIQUE(content_id, platform)`). A manual post (`factory publish --manual`, D-072) is stored as `status = published`, `privacy = public`, `dry_run = 0` (the owner posted it, so it is real even while `DRY_RUN=true`), with the video id taken from the link. YouTube rows keep the title and full description; TikTok rows keep the caption (`title` is empty).
 
 ### `metrics`
 | Column | Type | Notes |
@@ -210,11 +210,11 @@ A scheduled YouTube post (`factory publish --id N`, D-115) is stored as `status 
 | id | INTEGER PK | |
 | post_id | INTEGER FK | |
 | checkpoint | TEXT | `24h` \| `72h` \| `7d` \| `28d` |
-| source | TEXT | `api` \| `csv` \| `manual` |
+| source | TEXT | `api` \| `csv` \| `manual`. `factory learn` writes `api` rows (YouTube) and never pulls an `api` checkpoint again; on a typed row it replaces the numbers it has and sets `api` (D-117) |
 | views | INTEGER | |
 | avg_view_duration_s | REAL | |
 | avg_view_pct | REAL | 0–1000: YouTube Shorts pass 100 % when viewers rewatch (#5: 133 %; migration 003, D-101) |
-| stayed_to_watch_pct | REAL | 0–100, NULL if unavailable. Counts (views, likes, comments, shares, watch time) can't be negative |
+| stayed_to_watch_pct | REAL | 0–100, NULL if unavailable. Counts (views, likes, comments, shares, watch time) can't be negative. Always typed by hand (the Analytics API has none); an API pull keeps it (D-117) |
 | likes / comments / shares | INTEGER | |
 | subscribers_gained | INTEGER | YouTube only |
 | watch_time_min | REAL | |
