@@ -19,6 +19,7 @@ from factory.blueprint.canvas import (
     Scene,
     W,
     ease,
+    lerp,
 )  # fmt: skip
 
 MACHINE = "cvt gearbox"
@@ -225,7 +226,10 @@ def hook(c, t, st, t0, t1):
     c.text((x0 + 14, y1 - 10), "engine speed", "small", DIM, "lm")
     c.text((x1, y0 + 34), "car speed", "small", DIM, "rm")
     span = t1 - t0
-    u = ease((t - t0 - 0.2) / (span * 0.55))
+    # two gear steps are already drawn at the first frame (the hook works with the sound off)
+    u = lerp(0.4, 1.0, ease((t - t0) / (span * 0.55)))
+    front(c, st, oy=1180, k=0.35, labels=False)  # the CVT itself, turning from frame 0
+    c.text((640, 1700), "CVT", "label", CYAN, "lm")
     pts, teeth = [], 5
     for i in range(teeth):
         for j in range(21):

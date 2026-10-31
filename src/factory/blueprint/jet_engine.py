@@ -220,12 +220,10 @@ def title(c, s):
 
 def intake(c, t, st, t0, t1):
     title(c, "A TON OF AIR EVERY SECOND")
-    prog = min(1.0, (t - t0 + 0.05) / 1.4)
-    engine(c, st, progress=prog)
-    if prog >= 1:
-        flows(c, st, "all")
+    engine(c, st)  # complete and moving from the first frame: the hook works with the sound off
+    flows(c, st, "all")
     f = FACTS["airflow"]
-    u = ease((t - t0 - 0.6) / max(0.5, t1 - t0 - 1.2))
+    u = ease((t - t0) / max(0.5, t1 - t0 - 0.6))
     c.text((W / 2, 1490), f"{int(f.value * u):,} kg" if u < 1 else f.text, "big", CYAN)
     c.text((W / 2, 1565), "of air, every second", "label", LINE)
     c.text((W / 2, 1625), "(large airliner engine, take-off)", "small", DIM)

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from fakes.fake_tts import make_fake_tts
+from PIL import Image
 
 from factory import blueprint
 from factory.blueprint import canvas, cvt_gearbox, jet_engine
@@ -83,6 +84,29 @@ def test_every_scene_of_every_machine_shows_only_verified_numbers(module) -> Non
     assert fact_problems(drawn, module.FACTS, module.LIVE) == []
     assert all(f.source.startswith("https://") for f in module.FACTS.values())
     assert any(any(ch.isdigit() for ch in s) for s in drawn)  # numbers really were checked
+
+
+def ink(img: Image.Image) -> float:
+    """Share of bright pixels (line work, flows, text): the navy paper and grid stay dark."""
+    hist = img.convert("L").resize((108, 192)).histogram()
+    return sum(hist[91:]) / sum(hist)
+
+
+@pytest.mark.parametrize(("module", "part"), [(jet_engine, None), (jet_engine, 1), (jet_engine, 2),
+                                              (jet_engine, 3), (cvt_gearbox, None)])  # fmt: skip
+def test_the_first_frame_already_shows_the_machine(
+    module, part, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gate 2 checklist: the hook works with the sound off. Measured on the drawing alone (text
+    off): the old openings, an engine just starting to draw itself or bare chart axes, had
+    0.01-0.05 % ink; a machine drawn and moving from frame 0 has 0.6-1.3 %."""
+    monkeypatch.setattr(canvas.Canvas, "text", lambda self, *a, **k: None)
+    scenes = canvas.scenes_for(module, part)
+    starts = [float(i) for i in range(len(scenes))]
+    first = next(canvas.frames(module, starts, len(scenes), FONTS, scenes=scenes, ss=0.5,
+                               size=(270, 480), fps=10))  # fmt: skip
+
+    assert ink(Image.frombytes("RGB", (270, 480), first)) > 0.003
 
 
 # --- the mechanisms are calculated ---------------------------------------------------------------
