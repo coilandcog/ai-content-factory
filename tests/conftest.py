@@ -10,7 +10,9 @@ from fakes.fake_embedder import fake_embed
 
 from factory import similarity
 from factory.config import CONFIG_DIR, load_settings
+from factory.errors import ConfigError
 from factory.media import ffmpeg
+from factory.stages import precheck
 
 
 @pytest.fixture
@@ -39,6 +41,17 @@ def reset_factory_logging() -> Iterator[None]:
 def fake_embedding_model(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unit tests never load the real embedding model (slow, needs a download)."""
     monkeypatch.setattr(similarity, "default_embedder", lambda: fake_embed)
+
+
+@pytest.fixture(autouse=True)
+def no_precheck_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Gate 1 pre-check's claim check never reaches Gemini (or eats a fake's answers meant
+    for the script stage); tests of the claim check pass their own client (D-118)."""
+
+    def refuse(ctx: object) -> None:
+        raise ConfigError("no Gemini claim check in unit tests")
+
+    monkeypatch.setattr(precheck, "claim_client", refuse)
 
 
 @pytest.fixture(autouse=True, scope="session")

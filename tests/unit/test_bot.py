@@ -27,7 +27,7 @@ from factory.integrations.gemini import GeminiClient
 from factory.integrations.http_json import HttpStatusError
 from factory.integrations.telegram_bot import TelegramClient
 from factory.stages import bot as bot_stage
-from factory.stages import metadata, review
+from factory.stages import metadata, precheck, review
 from factory.stages import script as script_stage
 from factory.stages.voice import asset_dir
 
@@ -213,9 +213,10 @@ def test_start_shows_waiting_scripts_with_buttons_in_dry_run(
     make_bot(ctx, tg).start()
 
     assert tg.texts[0].startswith("[DRY RUN] Bot running. Waiting for Gate 1: 1, Gate 2: 0.")
-    shown = tg.message_with(f"approve:script:{content_id}")
-    assert shown["text"].startswith("[DRY RUN] GATE 1: script review")
-    assert "NARRATION:" in shown["text"] and "SOURCES:" in shown["text"]
+    tg.message_with(f"approve:script:{content_id}")  # the buttons are on the last part
+    review_text = next(t for t in tg.texts if t.startswith("[DRY RUN] GATE 1: script review"))
+    assert "PRE-CHECK" in review_text and "NARRATION:" in review_text
+    assert "SOURCES:" in "".join(tg.texts)
 
 
 def test_approve_asks_for_the_note_and_stores_mine(ctx: AppContext, tg: FakeTelegram) -> None:
@@ -300,8 +301,8 @@ def test_redo_writes_version_2_and_shows_it(ctx: AppContext, tg: FakeTelegram) -
 
     assert review.current_script(ctx.conn, content_id)["version"] == 2
     assert reviews(ctx) == [("script", "redo", "mention the voltage regulator", "telegram", 101)]
-    new = tg.message_with(f"approve:script:{content_id}")
-    assert "What happens if your alternator stops spinning?" in new["text"]
+    tg.message_with(f"approve:script:{content_id}")  # the new version has review buttons
+    assert "What happens if your alternator stops spinning?" in "".join(tg.texts)
 
 
 def test_an_old_button_on_a_decided_item_does_nothing(ctx: AppContext, tg: FakeTelegram) -> None:
@@ -411,3 +412,33 @@ def test_bot_command_needs_the_token(config_dir: Path, monkeypatch: pytest.Monke
 
     assert result.exit_code == 1
     assert "TELEGRAM_BOT_TOKEN is missing" in result.output
+
+
+def test_a_note_with_precheck_problems_needs_approve_anyway(
+    ctx: AppContext, tg: FakeTelegram, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content_id = scripted_item(ctx)
+    found = {"unsupported_claims": ["'14 volts': about 14.4 V"], "blocklist_hits": [],
+             "told_too_early": []}  # fmt: skip
+    client = llm(*[reply(json.dumps(found)) for _ in range(3)])
+    monkeypatch.setattr(precheck, "claim_client", lambda ctx: client)
+    bot = make_bot(ctx, tg)
+    bot.start()
+    review_message = tg.message_with(f"approve:script:{content_id}")["message_id"]
+    tg.press(f"approve:script:{content_id}", review_message)
+    tg.type("As an engineer, I like that it holds 14 volts.")
+    bot.poll_once(0)
+
+    assert status(ctx, content_id) == "scripted"
+    warning = tg.message_with(f"anyway:script:{content_id}")
+    assert "'14 volts': about 14.4 V" in warning["text"]
+
+    tg.press(f"anyway:script:{content_id}", warning["message_id"])
+    bot.poll_once(0)
+
+    assert status(ctx, content_id) == "script_approved"
+    assert reviews(ctx)[-1][:3] == (
+        "script",
+        "approve",
+        "approved anyway: claim: '14 volts': about 14.4 V",
+    )

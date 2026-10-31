@@ -62,6 +62,7 @@ from factory.stages import script as script_stage
 from factory.stages import series as series_stage
 from factory.stages import trends as trends_stage
 from factory.stages import voice as voice_stage
+from factory.stages.precheck import PrecheckError
 
 log = logging.getLogger("factory.cli")
 
@@ -322,6 +323,9 @@ def review(
         bool,
         typer.Option(help="Gate 2 approve: I watched the preview; every checklist item holds."),
     ] = False,
+    approve_anyway: Annotated[
+        bool, typer.Option(help="Gate 1 approve although the pre-check found problems (D-118).")
+    ] = False,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
     """Gate 1 (script) or Gate 2 (final video): approve, reject or redo each item (1.5, 1.11)."""
@@ -335,7 +339,7 @@ def review(
         if decision is not None:
             if content_id is None:
                 raise FactoryError("--decision needs --id")
-            _decide(ctx, content_id, decision, reason, note, keep_note)
+            _decide(ctx, content_id, decision, reason, note, keep_note, approve_anyway)
             run.tally.processed = 1
             return
         items = [content_id] if content_id else [r["id"] for r in review_stage.pending(ctx)]
@@ -356,6 +360,7 @@ def _decide(
     reason: str | None,
     note: str | None,
     keep_note: bool,
+    anyway: bool = False,
 ) -> None:
     """Non-interactive Gate 1 decision (for scripts, tests and later the Telegram bot)."""
     if decision == "approve":
@@ -366,7 +371,11 @@ def _decide(
             if note is not None
             else review_stage.current_script(ctx.conn, content_id)["engineer_note"]
         )
-        _echo_approval(content_id, review_stage.approve(ctx, content_id, text))
+        try:
+            approval = review_stage.approve(ctx, content_id, text, anyway=anyway)
+        except PrecheckError as exc:
+            raise FactoryError(f"{exc}. Fix the note, or add --approve-anyway") from exc
+        _echo_approval(content_id, approval)
     elif decision == "reject":
         review_stage.reject(ctx, content_id, reason or "")
         typer.echo(f"#{content_id} rejected.")
@@ -484,6 +493,7 @@ def _review_interactively(ctx: AppContext, content_id: int) -> str:
     """Show one item and loop until it is decided. Returns approve/reject/skip/quit."""
     while True:
         typer.echo(review_stage.content_report(ctx.conn, content_id))
+        typer.echo(review_stage.precheck_report(ctx, content_id))
         typer.echo(review_stage.script_report(ctx.conn, content_id))
         choice = typer.prompt(
             "\n[a]pprove  [r]eject  re[d]o  [s]kip  [q]uit",
@@ -513,7 +523,16 @@ def _review_interactively(ctx: AppContext, content_id: int) -> str:
             continue
         if note == draft and not typer.confirm("Keep the AI draft as your Engineer's Note?"):
             continue
-        _echo_approval(content_id, review_stage.approve(ctx, content_id, note))
+        try:
+            approval = review_stage.approve(ctx, content_id, note)
+        except PrecheckError as exc:  # D-118: the text with your note is checked once more
+            typer.echo(
+                "\nPRE-CHECK with your note:\n" + "\n".join(f"  ! {p}" for p in exc.problems)
+            )
+            if not typer.confirm("Approve anyway?", default=False):
+                continue
+            approval = review_stage.approve(ctx, content_id, note, anyway=True)
+        _echo_approval(content_id, approval)
         return "approve"
 
 

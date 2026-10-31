@@ -1,0 +1,23 @@
+The narration of a video about: {{ object_name }}
+"""
+{{ narration }}
+"""
+
+{% if facts is not none %}Verified facts (the film shows exactly these; the narration must not contradict them):
+{% for fact in facts %}- {{ fact }}
+{% endfor %}
+{% endif %}{% if sources %}Sources the script was written from:
+{% for s in sources %}- {{ s.publisher }} ({{ s.url }}): {{ s.claim }}
+{% endfor %}
+{% endif %}1. unsupported_claims: every statement that is wrong by standard engineering knowledge, contradicts the
+   verified facts or the sources, or gives a number that neither supports (a wrong part, a wrong material, a wrong
+   temperature or speed, a wrong order of steps). The Engineer's Note ("As an engineer, ...") is checked too.
+2. blocklist_hits: anything that touches a topic the channel never covers:
+{% for item in channel.niche.blocklist %}   - {{ item }}
+{% endfor %}   Explaining how a safety-relevant part works is allowed; repair steps, removal or bypassing it are not.
+{% if part %}3. told_too_early: this is part {{ part.part_n }} of {{ part.parts }} of a series about {{ part.topic }}:
+{% for p in part.outline %}   - Part {{ p.n }}: {{ p.title }}: {{ p.focus }}
+{% endfor %}   List anything that explains a LATER part's topic in detail. Naming a later part in passing is fine, and
+   the last sentence ("{{ last_sentence }}") names the next part on purpose: never list it.
+{% else %}3. told_too_early: not a series, return [].
+{% endif %}

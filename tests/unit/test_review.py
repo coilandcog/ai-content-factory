@@ -16,7 +16,7 @@ from factory.context import AppContext
 from factory.db import add_content, connect, migrate, upsert_channel
 from factory.errors import FactoryError
 from factory.integrations.gemini import GeminiClient
-from factory.stages import review
+from factory.stages import precheck, review
 from factory.stages import script as script_stage
 
 DRAFT_NOTE = (
@@ -275,3 +275,38 @@ def test_gate1_report_shows_the_film_look_once_and_each_shot_scene(ctx: AppConte
     assert report.count("A compact car alternator") == 1  # D-092: one hero_look per film
     assert "LOOK:" in report and report.index("LOOK:") < report.index("SHOTS:")
     assert "camera=slow dolly-in on a 35 mm lens" in report
+
+
+def precheck_finds(monkeypatch: pytest.MonkeyPatch, claim: str) -> None:
+    """Every pre-check claim call (D-118) reports `claim`."""
+    found = {"unsupported_claims": [claim], "blocklist_hits": [], "told_too_early": []}
+    client, _ = llm(*[reply(json.dumps(found)) for _ in range(5)])
+    monkeypatch.setattr(precheck, "claim_client", lambda ctx: client)
+
+
+def test_cli_approve_with_precheck_problems_needs_approve_anyway(
+    cli_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    precheck_finds(monkeypatch, "'14 volts': about 14.4 V")
+
+    refused = run_cli(cli_db, "--id", "1", "--decision", "approve", "--note", MY_NOTE)
+    assert refused.exit_code == 1 and "--approve-anyway" in refused.output
+    assert db_status(cli_db) == "scripted"
+
+    done = run_cli(cli_db, "--id", "1", "--decision", "approve", "--note", MY_NOTE,
+                   "--approve-anyway")  # fmt: skip
+    assert done.exit_code == 0, done.output
+    assert db_status(cli_db) == "script_approved"
+
+
+def test_cli_interactive_shows_the_precheck_and_asks_before_approving_anyway(
+    cli_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    precheck_finds(monkeypatch, "'14 volts': about 14.4 V")
+    monkeypatch.setattr(cli, "_edit_note", lambda draft: MY_NOTE)
+
+    result = run_cli(cli_db, input="a\nn\nq\n")  # approve, refuse "approve anyway", quit
+
+    assert "PRE-CHECK: 1 problem(s)" in result.output
+    assert "PRE-CHECK with your note:" in result.output and "Approve anyway?" in result.output
+    assert db_status(cli_db) == "scripted"

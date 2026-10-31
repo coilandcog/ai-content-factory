@@ -25,6 +25,7 @@ from factory.integrations.gemini import GeminiClient
 from factory.integrations.telegram_bot import MAX_TEXT, Buttons, TelegramClient
 from factory.media.qa import PREVIEW_MAX_MB
 from factory.stages import metadata, review
+from factory.stages.precheck import PrecheckError
 from factory.stages.review import Via
 from factory.stages.voice import asset_dir
 
@@ -48,10 +49,11 @@ HELP = (
 class Waiting:
     """What the owner's next message (or confirm button) answers."""
 
-    action: str  # note | reject | redo | checklist
+    action: str  # note | reject | redo | checklist | anyway
     gate: str  # script | final
     content_id: int
     message_id: int  # the review message whose button started this
+    note: str = ""  # anyway: the note the pre-check found problems with (D-118)
 
 
 class ReviewBot:
@@ -150,6 +152,14 @@ class ReviewBot:
             self._ask_note(content_id, message_id)
         elif action == "approve":
             self._ask_checklist(content_id, message_id)
+        elif action == "anyway" and gate == "script":
+            waiting = self.waiting
+            if waiting is None or waiting.action != "anyway" or waiting.content_id != content_id:
+                self.say(
+                    f"Nothing to approve for #{content_id}: press Approve on its review again."
+                )
+                return
+            self._approve_script(content_id, waiting.note, origin, anyway=True)
         elif action == "keep" and gate == "script":
             draft = review.current_script(self.ctx.conn, content_id)["engineer_note"] or ""
             self._approve_script(content_id, draft, origin)
@@ -188,8 +198,8 @@ class ReviewBot:
         if waiting is None:
             self.say("I'm not waiting for an answer. Use the buttons on a review message.\n" + HELP)
             return
-        if waiting.action == "checklist":
-            self.say("Use the buttons under the checklist, or /cancel.")
+        if waiting.action in ("checklist", "anyway"):
+            self.say("Use the buttons above, or /cancel.")
             return
         self.waiting = None
         via = Via("telegram", waiting.message_id)
@@ -231,6 +241,8 @@ class ReviewBot:
         text = (
             "GATE 1: script review\n\n"
             + review.content_report(self.ctx.conn, content_id)
+            + "\n\n"
+            + review.precheck_report(self.ctx, content_id)
             + "\n"
             + review.script_report(self.ctx.conn, content_id)
         )
@@ -272,8 +284,22 @@ class ReviewBot:
              [("Cancel", f"cancel:final:{content_id}")]],
         )  # fmt: skip
 
-    def _approve_script(self, content_id: int, note: str, origin: int) -> None:
-        approval = review.approve(self.ctx, content_id, note, via=Via("telegram", origin))
+    def _approve_script(
+        self, content_id: int, note: str, origin: int, *, anyway: bool = False
+    ) -> None:
+        via = Via("telegram", origin)
+        try:
+            approval = review.approve(self.ctx, content_id, note, via=via, anyway=anyway)
+        except PrecheckError as exc:  # D-118: the text with the note is checked once more
+            self.waiting = Waiting("anyway", "script", content_id, origin, note)
+            self.say(
+                f"Pre-check of #{content_id} with this note found:\n"
+                + "\n".join(f"! {p}" for p in exc.problems)
+                + "\nApprove anyway, or Cancel and press Approve again to write another note.",
+                [[("Approve anyway", f"anyway:script:{content_id}"),
+                  ("Cancel", f"cancel:script:{content_id}")]],
+            )  # fmt: skip
+            return
         self.waiting = None
         text = (
             f"#{content_id} approved: {approval.word_count} words, "

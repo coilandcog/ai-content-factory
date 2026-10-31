@@ -21,6 +21,7 @@ from factory.db import set_status
 from factory.errors import FactoryError
 from factory.integrations.gemini import GeminiClient
 from factory.stages import metadata
+from factory.stages import precheck as precheck_stage
 from factory.stages import script as script_stage
 from factory.stages.voice import asset_dir
 
@@ -62,11 +63,15 @@ def current_script(conn: sqlite3.Connection, content_id: int) -> sqlite3.Row:
     return row
 
 
-def approve(ctx: AppContext, content_id: int, note: str, *, via: Via | None = None) -> Approval:
+def approve(
+    ctx: AppContext, content_id: int, note: str, *, via: Via | None = None, anyway: bool = False
+) -> Approval:
     """Store the owner's Engineer's Note in the script and narration, then approve.
 
     The note is our main answer to YouTube's inauthentic-content policy, so the CLI makes sure it
-    was written or knowingly kept by the owner before calling this.
+    was written or knowingly kept by the owner before calling this. The final narration is
+    pre-checked first (D-118): open problems raise PrecheckError unless `anyway`; then they are
+    kept as the review's reason.
     """
     item = _scripted_item(ctx, content_id)
     note = " ".join(note.split())
@@ -74,6 +79,10 @@ def approve(ctx: AppContext, content_id: int, note: str, *, via: Via | None = No
         raise FactoryError("the Engineer's Note must not be empty")
     script = current_script(ctx.conn, content_id)
     narration = _replace_note(script["body_text"], script["engineer_note"] or "", note)
+    problems = precheck_stage.check(ctx, content_id, narration).problems
+    if problems and not anyway:
+        raise precheck_stage.PrecheckError(content_id, problems)
+    reason = "approved anyway: " + "; ".join(problems) if problems else None
     words = script_stage.word_count(narration)
     est = round(words / ctx.channel.voice.target_wpm * 60, 1)
     low, high = script_stage.word_range(ctx.channel, item["format"])
@@ -86,10 +95,15 @@ def approve(ctx: AppContext, content_id: int, note: str, *, via: Via | None = No
             """,
             (note, narration, words, est, script["id"]),
         )
-        _add_review(ctx.conn, content_id, "approve", None, via=via)
+        _add_review(ctx.conn, content_id, "approve", reason, via=via)
         set_status(ctx.conn, content_id, "script_approved")  # last: its commit covers all above
     log.info("#%s approved at Gate 1", content_id, extra=_extra(content_id, "gate1_approved"))
     return Approval(words, est, warning)
+
+
+def precheck_report(ctx: AppContext, content_id: int) -> str:
+    """The pre-check of the current script (D-118), shown above it at Gate 1."""
+    return precheck_stage.check(ctx, content_id).report()
 
 
 def reject(ctx: AppContext, content_id: int, reason: str, *, via: Via | None = None) -> None:
