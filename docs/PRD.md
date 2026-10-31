@@ -50,8 +50,8 @@ There is one user, **the owner**:
 ## 7. Nice-to-have (Phase 2–3)
 
 - Telegram approval bot with buttons.
-- YouTube API scheduled publishing with the AI-disclosure flag; TikTok inbox-draft upload.
-- Analytics collection (YouTube Analytics API, TikTok Display API, weekly TikTok CSV) and winner/loser labels.
+- YouTube API scheduled publishing with the AI-disclosure flag; TikTok stays a manual post (about 1 minute), because TikTok doesn't approve API apps for personal use (D-116).
+- Analytics collection (YouTube Analytics API, TikTok numbers entered by hand or from the TikTok Studio CSV; no TikTok API, D-116) and winner/loser labels.
 - Weekly 16:9 **Episode** (5–10 min) for YouTube watch hours.
 - Nightly runs via Windows Task Scheduler; Google Drive backups.
 - Learn loop feeding winning patterns into ideation.
@@ -82,7 +82,7 @@ There is one user, **the owner**:
 |---|---|---|---|
 | OQ-1 | ~~Exact Gemini API free-tier limits (RPM/RPD) for the chosen model~~ **Resolved 2026-10-23:** `gemini-3.5-flash-lite`, 15 RPM / 500 RPD (`INTEGRATIONS.md` §1, D-051) | Claude (read in AI Studio with the owner's key) | ROADMAP task 0.5 |
 | OQ-2 | Details of YouTube's announced incentive programs for channels under the Shorts threshold. *Re-checked 2026-10-25: announced (milestone earnings, Shopping bonuses, brand-deal incentives, trend boosts) but no details yet (D-082); check again before task 2.3* | Claude | Before Phase 2 |
-| OQ-3 | TikTok app review requirements for Login Kit, Content Posting (inbox) and Display API; redirect URI for a local app | Claude | ROADMAP task 2.4 |
+| OQ-3 | ~~TikTok app review requirements for Login Kit, Content Posting (inbox) and Display API; redirect URI for a local app~~ **Resolved 2026-10-31:** TikTok's review refuses apps for private or personal use and tools that upload to accounts you manage, so TikTok stays manual (D-116) | Claude | ROADMAP task 2.4 |
 | OQ-4 | Whether the YouTube Analytics API exposes "stayed to watch" for Shorts; otherwise read it manually in Studio | Claude | ROADMAP task 2.5 |
 | OQ-5 | Claim `@coilandcog` on YouTube and TikTok; trademark search result for "Coil & Cog" | Owner | ROADMAP task 0.2 |
 | OQ-6 | Access to Google's official Trends API | Claude | Phase 3 |

@@ -111,17 +111,19 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 
 ## 6. TikTok APIs (publish, learn)
 
+**Not used (D-116, 2026-10-31).** TikTok's App Review Guidelines say *"Apps must not be for private or personal use"* and its Content Sharing Guidelines list *"A utility tool to help upload contents to the account(s) you or your team manages"* as not acceptable. The factory is exactly that, so it can't honestly pass app review, and an unreviewed (sandbox) app may only post privately (`SELF_ONLY`). TikTok stays manual: the owner posts the TikTok render in the app and records it with `factory publish --manual` (D-072); numbers come from `factory metrics add` and, later, the TikTok Studio CSV. The rows below are kept as the reference for what the API would need, in case TikTok's rules change.
+
 | Item | Contract | Verified |
 |---|---|---|
-| App | A TikTok for Developers app with Login Kit, Content Posting API (**upload to inbox**) and Display API. Needs Terms of Service and Privacy Policy URLs (plan: a static GitHub Pages site). App review is needed before production use | Requirements and redirect URI: OQ-3, task 2.4 |
-| Auth | OAuth 2.0 authorization code flow. Scopes: `user.info.basic`, `video.upload`, `video.list`. Tokens in `secrets/<slug>/tiktok_token.json`; `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` in `.env` | Token lifetimes: confirm in task 2.4 |
+| App | A TikTok for Developers app with Login Kit, Content Posting API (**upload to inbox**) and Display API. Needs Terms of Service and Privacy Policy URLs (plan: a static GitHub Pages site). App review is needed before production use, and personal tools are refused (D-116) | ✔ OQ-3 closed 2026-10-31 (D-116) |
+| Auth | OAuth 2.0 authorization code flow. Scopes: `user.info.basic`, `video.upload`, `video.list`. Tokens in `secrets/<slug>/tiktok_token.json`; `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` in `.env` | Not needed (D-116) |
 | Inbox upload | `POST https://open.tiktokapis.com/v2/post/publish/inbox/video/init/` with `{"source_info": {"source": "FILE_UPLOAD", "video_size", "chunk_size", "total_chunk_count"}}` → response `data.publish_id`, `data.upload_url`. Then `PUT upload_url` with `Content-Range` and `Content-Type: video/mp4` | ✔ |
 | Status | `POST /v2/post/publish/status/fetch/` with `publish_id` until processing completes | — |
-| Owner step | Open TikTok → inbox notification → edit → add a TikTok sound → switch on the **AI-generated content** label → caption from `metadata.json` → Post. Then `factory publish --confirm-tiktok <content_id>` (Telegram button in Phase 2) | — |
+| Owner step | Open TikTok → inbox notification → edit → add a TikTok sound → switch on the **AI-generated content** label → caption from `metadata.json` → Post. Today (D-116): post the TikTok render from the app or tiktok.com/upload the same way, then `factory publish --manual --id N --platform tiktok --url <link> --ai-label-on` | ✔ |
 | Why not Direct Post | Unaudited apps can only post `SELF_ONLY` (private), and Direct Post requires an audit | ✔ |
 | Display API | `POST /v2/video/list/` (scope `video.list`) with fields `id,create_time,duration,view_count,like_count,comment_count,share_count` | Fields ✔ |
 | Retention | Not available in the API. A weekly CSV export from TikTok Studio, imported with `factory metrics import-tiktok <file.csv>` | ✔ |
-| Fallback | If the app review fails or stalls: download the TikTok render from Telegram and upload it manually in the app (about 1 minute) | — |
+| Fallback | This is now the normal way (D-116): upload the TikTok render manually in the app (about 1 minute) | ✔ |
 | Errors | `spam_risk_*` errors → stop all TikTok actions for 24 h and alert the owner; 429 → retry | — |
 
 ## 7. Telegram Bot API (review gates, alerts, reports)

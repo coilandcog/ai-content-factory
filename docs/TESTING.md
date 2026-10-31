@@ -10,7 +10,7 @@
 | **Media** (marked `slow`) | FFmpeg pipelines on tiny fixture clips (made with FFmpeg's built-in `testsrc` and `sine` generators, so no Flow credits are used) | `pytest -m slow` | Before merging media-related tasks |
 | **Integration** (marked `integration`) | One real call per external API, using test data, private or unlisted only | `pytest -m integration` | Manually, once per integration task, and after credential changes |
 | **Dry run** | The whole pipeline with `DRY_RUN=true`: everything except uploads and public posts | `uv run factory run-nightly` | Before turning on scheduling, and after big changes |
-| **Private-first publishing** | The first 3 YouTube uploads via the API are **unlisted**, and the first TikTok drafts are checked in the app before posting | Manual | Phase 2 tasks 2.2–2.6 |
+| **Private-first publishing** | The first 3 YouTube uploads via the API are **unlisted**, and TikTok is posted by hand (D-116) | Manual | Phase 2 tasks 2.2–2.3 |
 | **Human QA** | The quality checklist (§4) at Gate 2 | Owner | Every video |
 
 `pyproject.toml` pytest settings: `markers = ["slow", "integration"]` and `addopts = "-m 'not integration'"`, so real APIs are never called by accident.
@@ -37,7 +37,7 @@
 | generate | Flow sheet lists every `flow_clip` shot; inbox ingest detects missing or extra shots; voice duration ≈ estimate ±20% | Paste one prompt into Flow; drop the clip; status → `generated` |
 | assemble | ffprobe checks: resolution, fps, duration bounds, audio present, loudness −14 ±1 LUFS; TikTok render has no music track | Watch both renders on the phone |
 | review | Approve / reject / redo transitions; reason is required for reject and redo. Bot (fake Telegram server): other chats ignored; Gate 1 note reply and keep-draft; reject/redo reasons and `/cancel`; Gate 2 approves only after the checklist button; old buttons on decided items do nothing; alerts once, none for old failures; message splitting; the token never appears in errors | `uv run pytest -m integration -k telegram` (one real message + video to your chat); Telegram buttons on a dry-run item |
-| publish | Manual (1.12): link parsing, refusals (not approved, AI label not confirmed, wrong or conflicting link), status moves, second platform, re-run with the same link. API (2.3+): builds the correct YouTube body (`containsSyntheticMedia=true`, `publishAt`, `selfDeclaredMadeForKids=false`); DRY_RUN returns a `dryrun-` ID | 1.12: find the live video from a second browser. 2.2+: unlisted real upload; TikTok draft appears in the inbox |
+| publish | Manual (1.12): link parsing, refusals (not approved, AI label not confirmed, wrong or conflicting link), status moves, second platform, re-run with the same link. API (2.3+): builds the correct YouTube body (`containsSyntheticMedia=true`, `publishAt`, `selfDeclaredMadeForKids=false`); DRY_RUN returns a `dryrun-` ID | 1.12: find the live video from a second browser. 2.2+: unlisted real upload |
 | learn | Label rules (winner/average/loser) from sample numbers; CSV import parser | One real Analytics pull for an unlisted video |
 
 ## 4. Quality checklist (every video must pass)
