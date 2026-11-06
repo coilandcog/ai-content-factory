@@ -1,12 +1,14 @@
 # PRD — Product Requirements Document
 
-*Last updated: 2026-10-23*
+*Last updated: 2026-11-06 (D-121)*
 
 ## 1. Overview
 
 **Coil & Cog AI Content Factory** is a personal automation pipeline. It researches, writes, generates, assembles and publishes short "how machines work" explainer videos for a faceless channel, **Coil & Cog** (`@coilandcog`), on YouTube and TikTok. A human approves every video.
 
 The visual benchmark is a cinematic 9:16 product explainer. A machine part is shown on a dark studio pedestal, then cut open, then shown with glowing energy flows, then shown installed where it is used. The first example was a car alternator made with Google Flow.
+
+**Direction since 2026-11-06 (D-121):** the pictures come from **Blender** (free, realistic 3D built from measurements, rendered on the owner's second PC) instead of Google Flow, and the main format is a **long video of 8–9 minutes in 16:9** (4 chapters), with 3–4 Shorts per long video, each with its own script. Flow stays as an optional style. The goals below (G1–G6) still apply; the weekly mix in G3 changes when the owner sets it in ROADMAP 2.28.
 
 ## 2. Problem
 

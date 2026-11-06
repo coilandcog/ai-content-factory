@@ -187,3 +187,30 @@ From 2026-10-31 a topic can be made as several linked Shorts (at least 3 parts, 
 - **Similarity:** parts of one series and its teaser are not compared with each other (they share a topic on purpose); they are still compared with every other video.
 - **Titles and descriptions:** code sets the title "{Topic}, Part n/N: {part title}", starts the TikTok caption with "Part n/N:", and adds "Part n of N." plus links to the teaser ("Overview: ...") and the earlier parts that are already on YouTube.
 - **Order and posting:** parts are created, scripted and generated in part order; they are not put into `factory plan` (the weekly variety rules would split them). Post them on consecutive days, in order. A teaser (an overview video, e.g. #16) can go out first; the parts link back to it.
+
+## 14. Blender long-form slate (D-121)
+
+From 2026-11-06 each machine is made as **one long video (8–9 min, 16:9, 4 chapters)** plus **3–4 Shorts** cut from the same Blender model, each Short with its own new script. A machine can only be scripted after its Blender model exists and the owner has approved its stills (ROADMAP 2.35). Order below = suggested production order: models that share parts come next to each other (a rotor and stator built once serve the alternator, starter motor and e-car motor).
+
+"Effort" is the modelling work for one session: **S** = simple shapes (cylinders, gears, rings), **M** = several moving assemblies, **L** = a big machine, built in simplified form (the 2 GB render card limits scene size, D-121). Every topic stays inside §3 (how it works, never how to repair it) and the blocklist.
+
+| # | Machine (pillar) | Already in the factory | Long video: working angle | Shorts from it | Effort |
+|---|---|---|---|---|---|
+| 1 | Alternator (vehicles) | #5 Short published; Blender trial model | *Inside an Alternator: How Your Car Makes Its Own Electricity* (belt and pulley, claw-pole rotor, stator, three-phase AC, diodes, regulator, why it fails) | Why alternators have diodes; the slip-ring trick; what the voltage regulator does | S (exists) |
+| 2 | Starter motor (vehicles) | new | *The 1-Second Motor That Starts Every Car* (solenoid, pinion engagement, overrunning clutch, gear reduction) | Why the starter clicks; the pinion that jumps forward; why it can't run for long | S |
+| 3 | Electric car motor (vehicles) | #14 idea | *Inside an Electric Car Motor* (stator windings, permanent-magnet vs induction rotor, inverter, regenerative braking) | Why EVs need no gearbox; regen braking; magnet vs induction | M |
+| 4 | Turbocharger (vehicles) | #6 Short published (Flow) | *How a Turbocharger Turns Waste Heat into Power* (turbine, compressor, shaft, wastegate, intercooler, lag) | What turbo lag is; the wastegate; why intercoolers | S |
+| 5 | Disc brakes (vehicles) | seed topic | *What Happens When You Press the Brake* (master cylinder, hydraulics, caliper, pads, disc, heat) | Why discs are vented; how hydraulics multiply force; why brakes fade | S |
+| 6 | Four-stroke piston engine (vehicles) | new | *The Four-Stroke Engine, Part by Part* (pistons, crankshaft, camshaft, valves, firing order) | Why 4 strokes; what the camshaft does; firing order | M |
+| 7 | Differential (vehicles) | #9 idea, #15 Short script approved (blueprint) | *Why Your Car Needs a Differential* (open differential, spider gears, cornering, limited-slip) | Wheels turning at different speeds; the one-wheel-spin problem; limited-slip | M |
+| 8 | Manual gearbox and clutch (vehicles) | new | *Inside a Manual Gearbox* (clutch, gear pairs, synchronisers, shift forks) | What the clutch does; synchronisers; why gears have ratios | M |
+| 9 | Planetary gearset / automatic gearbox (vehicles) | new | *The Gear Inside Every Automatic* (sun, planets, ring, locking members, torque converter) | One gearset, many ratios; torque converter | M |
+| 10 | CVT gearbox (vehicles) | #8 Short approved (blueprint) | *A Gearbox With No Gears* (pulleys, belt, ratio change, pros and cons) | How the belt changes ratio; why CVTs feel different | S |
+| 11 | Centrifugal water pump (industry_and_energy) | new | *How a Pump Moves Water Uphill* (impeller, volute, pressure, cavitation) | What the impeller does; cavitation | S |
+| 12 | Hydraulic cylinder / excavator arm (industry_and_energy) | seed topic | *How Hydraulics Lift 20 Tonnes* (pump, valves, cylinder, Pascal's law, excavator arm) | Pascal's law; why oil, not air | M |
+| 13 | Wind turbine nacelle (industry_and_energy) | seed topic | *Inside a Wind Turbine* (blades, pitch, main shaft, gearbox, generator, yaw) | Blade pitch; why 3 blades; the gearbox | L |
+| 14 | Jet engine (air_and_sea) | #16 Short published, #17–19 series (blueprint), #10 paused | *Inside a Jet Engine* (fan, compressor, combustor, turbine, bypass) | Why the fan does most of the work; gas hotter than the turbine blades' melting point (and how the blades survive); bypass ratio | L |
+| 15 | Helicopter rotor and swashplate (air_and_sea) | seed topic | *How a Helicopter Steers With One Rotor* (swashplate, collective, cyclic, tail rotor) | The swashplate trick; why a tail rotor | M |
+| 16 | Aircraft landing gear (air_and_sea) | #12 idea | *How Landing Gear Folds Away* (oleo strut, retraction, locks, brakes) | The oleo strut; how it locks down | M |
+
+What happens to the existing items: #8 CVT and #15 differential keep their blueprint films until their Blender model exists, then the owner decides whether to post them as they are or remake them; #17–19 jet series and #10 wait for model 14. The weekly mix (§8) changes in ROADMAP 2.28, when the owner sets the new `cadence.weekly_plan`.
