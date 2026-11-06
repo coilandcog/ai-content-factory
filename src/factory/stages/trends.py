@@ -78,7 +78,7 @@ def import_inbox(ctx: AppContext) -> ImportResult:
         result.files += 1
         result.rows_added += added
         result.rows_skipped += skipped
-        _move_to_imported(path)
+        move_to_imported(path)
         log.info("Trends file %s: %d topic(s), %d row(s) added", path.name, len(series), added,
                  extra={"event": "trends_imported"})  # fmt: skip
     return result
@@ -201,7 +201,7 @@ def _store(
     return added, skipped
 
 
-def _move_to_imported(path: Path) -> None:
+def move_to_imported(path: Path) -> None:
     target_dir = path.parent / "imported"
     target_dir.mkdir(exist_ok=True)
     target = target_dir / path.name
