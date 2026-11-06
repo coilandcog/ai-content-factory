@@ -88,6 +88,7 @@ Helper commands:
 - `factory metrics add <id> --platform youtube|tiktok --checkpoint 24h|72h|7d|28d [--views --stayed --avd-pct --avd-s --likes --comments --shares --subs --watch-min]` / `factory metrics show <id>`: numbers copied by hand from YouTube Studio or TikTok into `metrics` (`source = manual`); entering a checkpoint again replaces only the numbers given. Learning from results starts before the Analytics API (D-101).
 - `factory lessons learn|list|approve <n> [--text ...]|remove <n>`: Gemini turns failed clip reviews (every item's `clip_review.json`, each failure once) into short general lessons; only lessons you approve go into the film rules (new scripts, restages) and into `clips review`'s checks (clip lessons for clips, frame lessons for frames) (D-103).
 - `factory references add [--for N]|list|approve <n> [--note ...]|remove <n>`: the reference library: Gemini writes style notes (lighting, camera, composition, motion, materials, 3–6 prompt phrases) about images and clips you drop into `data/inbox/references/`; the files move to `data/references/` and are never used in a video; only notes you approve (newest 8) join the film rules for new scripts and restages (D-100); with `--for N` a note only shapes item N (D-104). For videos Gemini also listens: hook, narration, structure, pacing, sound, why it works and topic ideas; approved video notes feed script writing (storytelling) and ideation (topic ideas); a video too big to send (over 18 MB) is shrunk whole, with its sound, to fit (up to 10 min; longer ones keep their first 10 min) (D-109).
+- `factory metrics import-tiktok [<file.csv> ...]` (D-120): loads TikTok Studio Content CSVs (every CSV in `data/inbox/tiktok/` when no file is given; those move to `imported/`). Each row (views, likes, comments, shares; no watch time) is matched to its TikTok post by the video number in the link and stored as `source = csv` under the latest checkpoint the video had reached at the file's time (9 days old → `7d`; under 24 h → not stored); a checkpoint that already has numbers, typed or imported, is kept, so importing twice changes nothing. Unrecorded videos and broken files are listed by name.
 - `factory trends import`: loads Google Trends CSV files you downloaded into `data/inbox/trends/` (weekly, about 5 minutes).
 - `factory retry <content_id>`
 - `factory status [<content_id>]`
@@ -363,6 +364,7 @@ ai-content-factory/
 │   ├── blueprint/                # code-drawn films (D-111): canvas.py (grid, timing, facts check, render) + one module per machine
 │   ├── stages/
 │   │   ├── discover.py
+│   │   ├── tiktok_csv.py         # TikTok Studio Content CSV import (factory metrics import-tiktok, D-120)
 │   │   ├── trends.py             # Google Trends CSV import (factory trends import)
 │   │   ├── ideate.py
 │   │   ├── script.py
@@ -421,6 +423,7 @@ ai-content-factory/
     ├── logs/                     # factory-YYYY-MM-DD.jsonl
     ├── inbox/flow/<content_id>/  # owner drops Flow downloads here
     ├── inbox/trends/             # owner drops Google Trends CSV exports here (moved to imported/ after loading)
+    ├── inbox/tiktok/             # owner drops TikTok Studio Content CSVs here (moved to imported/ after loading)
     ├── inbox/references/         # owner drops images/clips they like (factory references add)
     ├── references/               # the studied reference files, kept for the record (never rendered)
     └── assets/<channel_slug>/<content_id>/

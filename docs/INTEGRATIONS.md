@@ -124,7 +124,8 @@ There is no API call here. **The owner** downloads the data by hand in a browser
 | Owner step | Open TikTok → inbox notification → edit → add a TikTok sound → switch on the **AI-generated content** label → caption from `metadata.json` → Post. Today (D-116): post the TikTok render from the app or tiktok.com/upload the same way, then `factory publish --manual --id N --platform tiktok --url <link> --ai-label-on` | ✔ |
 | Why not Direct Post | Unaudited apps can only post `SELF_ONLY` (private), and Direct Post requires an audit | ✔ |
 | Display API | `POST /v2/video/list/` (scope `video.list`) with fields `id,create_time,duration,view_count,like_count,comment_count,share_count` | Fields ✔ |
-| Retention | Not available in the API. A weekly CSV export from TikTok Studio, imported with `factory metrics import-tiktok <file.csv>` | ✔ |
+| Retention | Not available in the API, and **not in the Content CSV either** (checked 2026-10-31 on the owner's export): watch time and stayed-to-watch stay `factory metrics add` by hand | ✔ |
+| Studio CSV | TikTok Studio → Analytics → Content → download: `Content.csv` (UTF-8 with BOM), columns `"Time","Video title","Video link","Post time","Total likes","Total comments","Total shares","Total views"`: one row per video, totals at the download. Saved into `data/inbox/tiktok/`, imported with `factory metrics import-tiktok [<file.csv>]` (D-120): matched to `posts` by the `/video/<id>` number in the link (`posts.external_id`), stored as `source = csv` under the latest checkpoint reached at the file's own time, once per checkpoint; numbers like `1,234`, `1.2K`, `3M` | Header ✔ 2026-10-31 (the first export had no video rows yet); value formats are an assumption until an export with rows is imported |
 | Fallback | This is now the normal way (D-116): upload the TikTok render manually in the app (about 1 minute) | ✔ |
 | Errors | `spam_risk_*` errors → stop all TikTok actions for 24 h and alert the owner; 429 → retry | — |
 

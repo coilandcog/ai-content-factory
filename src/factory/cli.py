@@ -61,6 +61,7 @@ from factory.stages import report as report_stage
 from factory.stages import review as review_stage
 from factory.stages import script as script_stage
 from factory.stages import series as series_stage
+from factory.stages import tiktok_csv as tiktok_csv_stage
 from factory.stages import trends as trends_stage
 from factory.stages import voice as voice_stage
 from factory.stages.precheck import PrecheckError
@@ -1213,6 +1214,39 @@ def metrics_add(
         learn_stage.add_manual(ctx, content_id, platform, checkpoint, numbers)
         typer.echo(learn_stage.show(ctx, content_id))
         run.tally.processed = 1
+
+
+@metrics_app.command("import-tiktok")
+def metrics_import_tiktok(
+    files: Annotated[
+        list[Path] | None,
+        typer.Argument(help="CSV files; none = every CSV in data/inbox/tiktok/."),
+    ] = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Load TikTok Studio "Content" CSVs (D-120): each video's views, likes, comments and shares
+    go in under the latest checkpoint it had reached when you downloaded the file, once per
+    checkpoint. Inbox files move to imported/ afterwards."""
+    with _tracked_run("metrics import-tiktok", config_dir) as run:
+        ctx = _context(run, config_dir)
+        result = tiktok_csv_stage.import_files(ctx, files or None)
+        run.tally.processed, run.tally.failed = len(result.stored), len(result.broken)
+        if not result.files and not result.broken:
+            typer.echo(f"No CSV files in {tiktok_csv_stage.inbox(ctx)}")
+            return
+        typer.echo(f"Imported {result.files} file(s): {len(result.stored)} checkpoint(s) saved, "
+                   f"{result.kept} already had numbers")  # fmt: skip
+        for line in result.stored:
+            typer.echo(f"  {line}")
+        if result.too_new:
+            typer.echo(
+                f"  under 24 h old when downloaded (not stored): {', '.join(result.too_new)}"
+            )
+        for title in result.unmatched:
+            typer.echo(f"  no TikTok post recorded for {title!r}: run `factory publish --manual "
+                       f"--id <N> --platform tiktok --url <link> --ai-label-on` first")  # fmt: skip
+        for problem in result.broken:
+            typer.echo(f"Not imported (left in place): {problem}", err=True)
 
 
 @metrics_app.command("show")
