@@ -225,9 +225,10 @@ def test_script_takes_planned_and_manual_items_but_not_waiting_ideas(ctx: AppCon
                          pillar="vehicles")  # fmt: skip
     ideate.run(ctx, llm=llm(fixture_reply("ideate_batch"))[0])
     turbo = items(ctx)["turbocharger"]["id"]
+    # far in the future: the manual item (created now) must stay first whatever day the test runs
     ctx.conn.execute(
         """
-        UPDATE contents SET planned_publish_at = '2026-11-04T16:00:00Z',
+        UPDATE contents SET planned_publish_at = '2099-11-04T16:00:00Z',
             hook_type = 'why_question', beat_order = 'classic' WHERE id = ?
         """,
         (turbo,),
