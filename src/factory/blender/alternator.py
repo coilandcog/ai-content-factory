@@ -44,16 +44,18 @@ FACTS: dict[str, Fact] = {
     ),
 }
 
-# The film's scenes, in order (roles as in blueprint films: hook, body..., note, close).
+# The film's scenes, in order (roles as in blueprint films: hook, body..., note, close). Each line
+# says what the narration explains while that scene plays, never what the picture looks like, so
+# Gemini can't copy picture descriptions into the narration.
 ROLES = ("hook", "body", "body", "body", "note", "close")
 OUTLINE = (
-    "hook: the whole alternator, closed, the pulley turning",
-    "body part 1: the housing opens; the belt-driven pulley turns the claw-pole rotor, and its "
-    "magnetic field appears",
-    "body part 2: the stator's copper coils around the spinning rotor light up in turn: "
-    "three-phase alternating current",
-    "body part 3: the 6 rectifier diodes turn it into direct current, which leaves through the "
-    "output terminal",
-    "Engineer's Note: a slow look around the opened alternator",
-    "close: the alternator closes again, the pulley still turning",
+    "hook: the whole alternator",
+    "body part 1: the rotor: the engine's belt turns it, and its field coil, fed by a small direct "
+    "current, makes it a spinning electromagnet",
+    "body part 2: the stator: the moving magnetic field induces alternating current in its 3 sets "
+    "of copper windings (three-phase)",
+    "body part 3: the rectifier: 6 diodes turn that alternating current into the direct current "
+    "the battery and the car's electronics need",
+    "Engineer's Note: the opened alternator as a whole (the note may be about any part)",
+    "close: the whole alternator again",
 )

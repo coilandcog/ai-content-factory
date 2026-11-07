@@ -819,3 +819,22 @@ def test_approved_reference_videos_teach_the_script_their_craft(ctx: AppContext)
     assert content(ctx, content_id)["status"] == "scripted"
     assert "Storytelling notes from reference videos the owner approved" in prompt  # D-109
     assert "Hook: a surprising number in the first second | Structure: hook > why" in prompt
+
+
+def test_a_code_made_film_script_explains_instead_of_narrating_the_picture(
+    ctx: AppContext,
+) -> None:
+    content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="short",
+                             pillar="vehicles", style="blender")  # fmt: skip
+    clean = json.loads((LLM_FIXTURES / "script_short_alternator.json").read_text())
+    clean["body"] = clean["body"].replace(" near fourteen volts", " steady")  # digits only here
+    clean["engineer_note_draft"] = "A small current in the spinning rotor controls the output."
+    narrating = {**clean, "body": "The copper coils light up in turn. " + clean["body"]}
+    sdk = FakeGenaiClient(reply(json.dumps(narrating)), reply(json.dumps(clean)))
+
+    run_stage(ctx, sdk)
+
+    assert content(ctx, content_id)["status"] == "scripted"
+    assert "the narration says 'light up'" in sdk.calls[1]["contents"]
+    assert "never narrate it" in sdk.calls[0]["contents"]  # the rule is in the first request too
+    assert "6 diodes turn that alternating current" in sdk.calls[0]["contents"]

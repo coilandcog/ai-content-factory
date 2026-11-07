@@ -18,11 +18,12 @@ If the narration gives a number, it must be one of these, written in digits (1,6
 exactly what it describes; otherwise describe without numbers (a ton is fine, a guess is not).
 {% endif %}
 {%- if film_outline is defined and film_outline %}
-The film is rendered from a 3D model and shows, in this order:
+The film is rendered from a 3D model; the narration plays over its scenes in this order, each line saying what to explain:
 {% for line in film_outline %}- {{ line }}
 {% endfor -%}
-The hook matches the first scene. Write the body in the same order as its parts, with about the same number of sentences
-for each part, and never describe a part or an effect the film doesn't show.
+Write the body in the same order as its parts, with about the same number of sentences for each part. Explain what each
+part does and why it matters; the viewer already sees the picture, so never narrate it ("lights up", "you can see", "watch
+as", "on screen"). Never mention a part or an effect that is not in the list.
 {% endif %}
 {% set told = (references or []) | selectattr("kind", "equalto", "video") | list %}
 Hook: pick hook_type from {{ allowed_hooks | join(", ") }}.

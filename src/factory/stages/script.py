@@ -102,6 +102,15 @@ CLAIM_PHRASES = re.compile(
 )
 
 
+# A film made by code shows the machine: its narration explains, it never narrates the picture
+# (Gemini copied scene descriptions like "the coils light up in turn" into a script, 2026-11-07).
+PICTURE_TALK = re.compile(
+    r"\blights? up\b|\blit up\b|\byou can see\b|\bwe see\b|\bwatch (?:as|how)\b|"
+    r"\bon screen\b|\bin this (?:shot|scene|view|clip)\b|\blook (?:at|closely)\b",
+    re.IGNORECASE,
+)
+
+
 # --- the ScriptDraft schema ----------------------------------------------------------------
 
 
@@ -325,6 +334,11 @@ def _rule_problems(draft: Any) -> list[str]:
         problems.append(
             f"write numbers as digits so they can be checked against the verified facts, "
             f"not as words ({', '.join(dict.fromkeys(w.lower() for w in spelled))})"
+        )
+    if draft.drawn and (talk := PICTURE_TALK.search(draft.narration())):
+        problems.append(
+            f"the narration says '{talk.group(0)}': explain what the part does and why; the "
+            "viewer already sees the picture"
         )
     if draft.drawn:  # the film is drawn by code (D-111): the Flow shot list rules don't apply
         problems += _source_problems(draft)
