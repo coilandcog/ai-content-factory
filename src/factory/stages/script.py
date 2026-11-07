@@ -19,7 +19,7 @@ from urllib.parse import quote, unquote
 import httpx
 from pydantic import BaseModel, Field, create_model, model_validator
 
-from factory import blueprint
+from factory import films
 from factory.blueprint.canvas import NUMBER, Fact
 from factory.budgets import check_and_record
 from factory.config import ChannelConfig
@@ -248,7 +248,7 @@ class ScriptDraftBase(BaseModel):
     # the film can never disagree; None = no limit. A series part ends on a statement.
     verified_facts: ClassVar[tuple[str, ...] | None] = None
     in_series: ClassVar[bool] = False
-    drawn: ClassVar[bool] = False  # a blueprint item: the film is drawn by code, not from shots
+    drawn: ClassVar[bool] = False  # a film made by code (blueprint, Blender), not from Flow shots
 
     def narration(self) -> str:
         """Everything the narrator says, in order (stored as scripts.body_text)."""
@@ -568,11 +568,9 @@ def _script_one(
         planned=(row["hook_type"], row["beat_order"])
         if row["planned_publish_at"] and row["hook_type"] and row["beat_order"]
         else None,
-        verified_facts=[f.text for f in facts]
-        if (facts := blueprint_facts(row)) is not None
-        else None,
+        verified_facts=[f.text for f in facts] if (facts := film_facts(row)) is not None else None,
         in_series=(part := series_stage.context(conn, row["id"])) is not None,
-        drawn=row["visual_style"] == "blueprint",
+        drawn=row["visual_style"] in films.CODE_FILM_STYLES,
     )
     system, user = _prompts(ctx, row, schema, reference, feedback, part, facts)
     draft = llm.generate_json(
@@ -595,11 +593,10 @@ def _script_one(
                  f"{system.version}+{user.version}", match.score)  # fmt: skip
 
 
-def blueprint_facts(row: sqlite3.Row) -> list[Fact] | None:
-    """The drawing's verified facts for a blueprint item, None for a Flow item (D-111)."""
-    if row["visual_style"] != "blueprint" or row["object_name"] not in blueprint.MODULES:
-        return None
-    return list(blueprint.MODULES[row["object_name"]].FACTS.values())
+def film_facts(row: sqlite3.Row) -> list[Fact] | None:
+    """The verified facts of a film made by code (blueprint drawing, Blender model), None for a
+    Flow item (D-111, D-123)."""
+    return films.facts(row)
 
 
 def visual_rules_template(ctx: AppContext) -> str:
@@ -705,6 +702,7 @@ def _prompts(
         feedback=feedback,
         series_part=series_part,
         verified_facts=verified_facts,
+        film_outline=films.outline(row),
     )
     return system, user
 

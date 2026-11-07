@@ -18,6 +18,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from factory import films
 from factory.context import AppContext, StageResult
 from factory.db import note_reason, set_status
 from factory.errors import BudgetExceededError, FactoryError
@@ -100,7 +101,7 @@ def _qa_inputs(
 ) -> qa.QaInputs:
     script = generate.current_script(ctx, row["id"])
     shots = json.loads(script["shot_list_json"])
-    blueprint_film = row["visual_style"] == "blueprint"
+    code_film = row["visual_style"] in films.CODE_FILM_STYLES
     video_format = getattr(ctx.channel.formats, row["format"])
     source = ctx.conn.execute(
         """
@@ -114,9 +115,9 @@ def _qa_inputs(
         aspect=video_format.aspect,
         min_s=video_format.min_s,
         max_s=video_format.max_s,
-        # a blueprint film draws its diagrams itself, so there are no separate cards (D-111)
-        min_diagrams=0 if blueprint_film else MIN_DIAGRAMS[row["format"]],
-        diagram_shots=[] if blueprint_film else [s["n"] for s in shots if s["kind"] == "diagram"],
+        # a film made by code shows its labels itself, so there are no separate cards (D-111)
+        min_diagrams=0 if code_film else MIN_DIAGRAMS[row["format"]],
+        diagram_shots=[] if code_film else [s["n"] for s in shots if s["kind"] == "diagram"],
         subtitle_font=voice.subtitle_font(ctx),
         music_source=source["source"] if source else None,
         variety=(
@@ -138,12 +139,12 @@ def _metadata_problems(ctx: AppContext, content_id: int) -> list[str] | None:
 
 def _pick_cover(ctx: AppContext, content_id: int, folder: Path) -> Path:
     """cover.jpg: the sharpest frame of the Cutaway clip (else the first clip), 1080x1920, no
-    text (DESIGN_SYSTEM.md §9); for a blueprint item the sharpest frame of its film (D-111).
-    The owner confirms it at Gate 2."""
-    film = folder / generate.BLUEPRINT_FILE
+    text (DESIGN_SYSTEM.md §9); for a film made by code (blueprint, Blender) the sharpest frame of
+    the film (D-111, D-123). The owner confirms it at Gate 2."""
     style = ctx.conn.execute("SELECT visual_style FROM contents WHERE id = ?", (content_id,))
-    if style.fetchone()[0] == "blueprint":
-        chosen, clip, licence = {"n": None}, film, "own_work"
+    visual_style = style.fetchone()[0]
+    if visual_style in films.CODE_FILM_STYLES:
+        chosen, clip, licence = {"n": None}, folder / films.FILM_FILES[visual_style], "own_work"
     else:
         shots = json.loads(generate.current_script(ctx, content_id)["shot_list_json"])
         clips = [s for s in shots if s["kind"] == "flow_clip"]
@@ -177,8 +178,8 @@ def _assemble(ctx: AppContext, row: sqlite3.Row) -> bool:
     track = pick_track(ctx)
     with tempfile.TemporaryDirectory(prefix=".assemble-", dir=folder) as tmp:
         work = Path(tmp)
-        if row["visual_style"] == "blueprint":  # the drawn film is the whole picture (D-111)
-            film = folder / generate.BLUEPRINT_FILE
+        if row["visual_style"] in films.CODE_FILM_STYLES:  # the film is the whole picture
+            film = folder / films.FILM_FILES[row["visual_style"]]
             if not film.is_file():
                 raise FactoryError(f"missing {film.name}: run `factory generate` again")
             segments = [compose.Segment(1, "flow_clip", film, _seconds(film), voice_s)]

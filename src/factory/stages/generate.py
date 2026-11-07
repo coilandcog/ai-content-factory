@@ -8,6 +8,9 @@ clips into the asset folder and record them, then make the animated stills and d
 voice, subtitles, stills and diagrams.
 A blueprint item (D-111) needs no Flow: pass 1 renders the voice, then its code-drawn film
 (blueprint.mp4), and it moves on to "generated" in the same run.
+A Blender item (D-123): pass 1 renders the voice and writes the render job zip
+(data/outbox/blender/job_<id>.zip) for the render PC; pass 2 takes the rendered film from
+data/inbox/blender/<id>/ once it checks out (size, frame rate, frame count) -> generated.
 """
 
 from __future__ import annotations
@@ -26,7 +29,8 @@ from pathlib import Path
 
 from PIL import Image
 
-from factory import blueprint
+from factory import blender, blueprint, films
+from factory.blender import jobs as blender_jobs
 from factory.blueprint.canvas import H, W, count_sentences, render_film
 from factory.budgets import check_and_record, daily_limits, usage_today
 from factory.context import AppContext, StageResult
@@ -78,7 +82,8 @@ PROMPTS_FILE = script_stage.FLOW_PROMPTS_FILE  # the prompts issued, read back w
 ISSUED_FILE = "flow_issued.json"
 STILL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")  # optional owner images: still_NN.<ext>
 STILL_SAFE_AREA = "upper third and the lower quarter"  # where labels and subtitles go
-BLUEPRINT_FILE = "blueprint.mp4"  # the code-drawn film of a blueprint item (D-111)
+BLUEPRINT_FILE = films.FILM_FILES["blueprint"]  # the code-drawn film of a blueprint item (D-111)
+BLENDER_FILE = films.FILM_FILES["blender"]  # the rendered film of a Blender item (D-123)
 
 
 def run(
@@ -122,6 +127,13 @@ def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
         voice.render(ctx, content_id, speech)
         set_status(ctx.conn, content_id, "awaiting_clips", reason="blueprint film next")
         return _draw(ctx, row)
+    if row["visual_style"] == "blender":
+        if row["object_name"] not in blender.MODELS:  # no model yet: wait, do no work
+            log.warning("#%s: %s", content_id, blender.missing_message(row["object_name"]),
+                        extra={"content_id": content_id, "event": "blender_missing"})  # fmt: skip
+            return False
+        voice.render(ctx, content_id, speech)
+        return _issue_render_job(ctx, row)
     sheet = _write_sheet(ctx, row)
     voice.render(ctx, content_id, speech)
     set_status(ctx.conn, content_id, "awaiting_clips")
@@ -566,11 +578,58 @@ def _draw(ctx: AppContext, row: sqlite3.Row) -> bool:
     return True
 
 
+def _issue_render_job(ctx: AppContext, row: sqlite3.Row) -> bool:
+    """Write the Blender render job zip for the render PC (D-123); the item waits for its film."""
+    content_id = row["id"]
+    job = blender_jobs.job_for(ctx, row)
+    inbox = blender_jobs.inbox_dir(ctx, content_id)
+    inbox.mkdir(parents=True, exist_ok=True)
+    out = blender_jobs.write_zip(ctx, job, windows_path(inbox))
+    set_status(ctx.conn, content_id, "awaiting_clips", reason=f"Blender render: {out.name}")
+    log.info("#%s: Blender job %s ready: %s (%d frames) -> render it, then put %s in %s",
+             content_id, job.job_id, windows_path(out), job.spec["frames"], job.film_name,
+             windows_path(inbox),
+             extra={"content_id": content_id, "event": "blender_job_issued"})  # fmt: skip
+    return True
+
+
+def _collect_render(ctx: AppContext, row: sqlite3.Row) -> bool:
+    """Take the rendered film of this item's current job once it checks out (D-123)."""
+    content_id = row["id"]
+    job = blender_jobs.job_for(ctx, row)
+    if blender_jobs.zip_job_id(ctx, content_id) != job.job_id:  # deleted, or the model changed
+        inbox = blender_jobs.inbox_dir(ctx, content_id)
+        out = blender_jobs.write_zip(ctx, job, windows_path(inbox))
+        log.warning("#%s: Blender job rewritten as %s (%s): render the new zip",
+                    content_id, job.job_id, windows_path(out),
+                    extra={"content_id": content_id, "event": "blender_job_issued"})  # fmt: skip
+    film, problems = blender_jobs.find_film(ctx, job)
+    if film is None:
+        log.info("#%s waiting for the Blender film: %s", content_id, "; ".join(problems),
+                 extra={"content_id": content_id, "event": "film_waiting"})  # fmt: skip
+        return False
+    folder = asset_dir(ctx, content_id)
+    target = blender_jobs.copy_film(film, folder / BLENDER_FILE)
+    spec = job.spec
+    replace_assets(ctx, content_id, "blender", [{
+        "path": target, "generator": "blender", "model": f"blender/{spec['machine']}",
+        "prompt": f"job {job.job_id}", "license": "own_work",
+        "duration_s": round(spec["frames"] / spec["fps"], 3), "width": spec["width"],
+        "height": spec["height"],
+    }])  # fmt: skip
+    set_status(ctx.conn, content_id, "generated")
+    log.info("#%s: Blender film %s in place -> generated", content_id, film.name,
+             extra={"content_id": content_id, "event": "blender_film_collected"})  # fmt: skip
+    return True
+
+
 def _collect(ctx: AppContext, row: sqlite3.Row) -> bool:
     """Move a complete, playable clip set into the project. False = still waiting."""
     content_id = row["id"]
     if row["visual_style"] == "blueprint":
         return _draw(ctx, row)
+    if row["visual_style"] == "blender":
+        return _collect_render(ctx, row)
     script = current_script(ctx, content_id)
     shots = _flow_shots(script)
     inbox = inbox_dir(ctx, content_id)

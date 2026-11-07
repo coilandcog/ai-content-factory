@@ -70,17 +70,32 @@ def migrate(conn: sqlite3.Connection, migrations_dir: Path = MIGRATIONS_DIR) -> 
     """
     current = schema_version(conn)
     applied: list[str] = []
-    for number, path in _migration_files(migrations_dir):
-        if number <= current:
-            continue
-        # One transaction per file: if any statement fails, none of the file is applied.
-        script = f"BEGIN;\n{path.read_text(encoding='utf-8')}\nPRAGMA user_version = {number};\n"
-        try:
-            conn.executescript(script + "COMMIT;")
-        except sqlite3.Error:
-            conn.rollback()
-            raise
-        applied.append(path.name)
+    # A migration may rebuild a table that others point at (009 rebuilds `contents`): SQLite's
+    # documented way is foreign keys off while the file runs, then a full check before COMMIT.
+    # The switch only works outside a transaction, so it wraps each file.
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        for number, path in _migration_files(migrations_dir):
+            if number <= current:
+                continue
+            # One transaction per file: if any statement fails, none of the file is applied.
+            sql = path.read_text(encoding="utf-8")
+            script = f"BEGIN;\n{sql}\nPRAGMA user_version = {number};\n"
+            try:
+                conn.executescript(script)
+                broken = conn.execute("PRAGMA foreign_key_check").fetchall()
+                if broken:
+                    raise FactoryError(
+                        f"{path.name} would leave {len(broken)} broken references "
+                        f"(first: table {broken[0][0]}, row {broken[0][1]}); nothing was applied"
+                    )
+                conn.execute("COMMIT")
+            except (sqlite3.Error, FactoryError):
+                conn.rollback()
+                raise
+            applied.append(path.name)
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
     return applied
 
 
@@ -193,7 +208,7 @@ def add_content(
 
     The format must be enabled and the pillar must exist in the channel YAML; the database has
     no fixed pillar list because pillars differ per channel. `style` overrides the channel's
-    video_style (flow | blueprint, D-111).
+    video_style (flow | blueprint | blender, D-111, D-123).
     """
     name = " ".join(object_name.split()).lower()  # "  CVT  Gearbox " -> "cvt gearbox"
     if not name:

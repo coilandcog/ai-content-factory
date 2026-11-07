@@ -45,6 +45,7 @@ class Fact:
     source: str
     value: float | None = None  # for counters that count up to it
     about: str = ""  # what the number describes, so a script can't use it for something else
+    second_source: str = ""  # an independent page that agrees; required for Blender models (D-122)
 
 
 def lerp(a: float, b: float, f: float) -> float:

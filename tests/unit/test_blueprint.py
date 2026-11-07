@@ -166,7 +166,7 @@ NARRATION = ("The alternator makes power. A belt turns it. Magnets spin inside. 
 
 def approved_item(ctx: AppContext, object_name: str = "alternator") -> int:
     content_id = add_content(ctx.conn, ctx.channel, object_name=object_name, fmt="short",
-                             pillar="vehicles")  # fmt: skip
+                             pillar="vehicles", style="blueprint")  # fmt: skip
     with ctx.conn:
         ctx.conn.execute(
             "INSERT INTO scripts (content_id, version, body_text, engineer_note, shot_list_json) "
@@ -190,14 +190,14 @@ def fast_render(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_new_items_get_the_channel_style_unless_told_otherwise(ctx: AppContext) -> None:
-    assert ctx.channel.video_style == "blueprint"  # the channel default (D-111)
+    assert ctx.channel.video_style == "blender"  # the channel default since D-123
     first = add_content(ctx.conn, ctx.channel, object_name="cvt gearbox", fmt="short",
                         pillar="vehicles")  # fmt: skip
     second = add_content(ctx.conn, ctx.channel, object_name="turbo", fmt="short",
                          pillar="vehicles", style="flow")  # fmt: skip
 
     styles = dict(ctx.conn.execute("SELECT id, visual_style FROM contents").fetchall())
-    assert styles == {first: "blueprint", second: "flow"}
+    assert styles == {first: "blender", second: "flow"}
 
 
 def test_blueprint_item_is_drawn_and_generated_in_one_run(

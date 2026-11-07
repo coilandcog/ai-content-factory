@@ -15,7 +15,7 @@ from typing import Annotated
 import click
 import typer
 
-from factory import music
+from factory import films, music
 from factory.budgets import check_and_record, usage_date, usage_today
 from factory.config import (
     CONFIG_DIR,
@@ -817,15 +817,16 @@ def new(
     fmt: Annotated[str, typer.Option("--format", help="short | deep_dive (enabled formats).")],
     pillar: Annotated[str, typer.Option(help="One of the channel's pillars, e.g. vehicles.")],
     style: Annotated[
-        str | None, typer.Option(help="flow | blueprint; default: the channel's video_style.")
+        str | None,
+        typer.Option(help="flow | blueprint | blender; default: the channel's video_style."),
     ] = None,
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
     """Create a content item by hand, with status 'idea' (ROADMAP 1.1)."""
     with _tracked_run("new", config_dir) as run:
         channel = load_channel(run.env.factory_channel, config_dir)
-        if style not in (None, "flow", "blueprint"):
-            raise FactoryError("--style must be flow or blueprint")
+        if style is not None and style not in films.STYLES:
+            raise FactoryError(f"--style must be one of {', '.join(films.STYLES)}")
         content_id = add_content(
             run.conn, channel, object_name=object_name, fmt=fmt, pillar=pillar, style=style
         )
@@ -899,13 +900,14 @@ STYLE_CHANGEABLE = ("idea", "scripted", "script_approved", "awaiting_clips")
 @app.command()
 def style(
     content_id: Annotated[int, typer.Argument(help="The item to switch.")],
-    visual_style: Annotated[str, typer.Argument(help="flow | blueprint")],
+    visual_style: Annotated[str, typer.Argument(help="flow | blueprint | blender")],
     config_dir: ConfigDirOption = CONFIG_DIR,
 ) -> None:
-    """Switch an item between Flow clips and a blueprint film before its pictures exist (D-111)."""
+    """Switch an item's picture style (Flow clips, blueprint film, Blender film) before its
+    pictures exist (D-111, D-123)."""
     with _tracked_run("style", config_dir) as run:
-        if visual_style not in ("flow", "blueprint"):
-            raise FactoryError("the style must be flow or blueprint")
+        if visual_style not in films.STYLES:
+            raise FactoryError(f"the style must be one of {', '.join(films.STYLES)}")
         row = run.conn.execute("SELECT status FROM contents WHERE id = ?", (content_id,)).fetchone()
         if row is None:
             raise FactoryError(f"content #{content_id} does not exist")

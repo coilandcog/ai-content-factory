@@ -246,9 +246,10 @@ class ChannelConfig(StrictModel):
     # Optional: how Flow video prompts are written (D-105). "brief" = the short product-film
     # prompts that made the alternator and turbo videos; "story" = story shots with chained images.
     video_prompts: Literal["brief", "story"] = "brief"
-    # Optional: how new items get their picture (D-111). "flow" = Flow clips made by hand;
-    # "blueprint" = a film drawn by code, so the mechanism is calculated, not guessed.
-    video_style: Literal["flow", "blueprint"] = "flow"
+    # Optional: how new items get their picture (D-111, D-123). "flow" = Flow clips made by hand;
+    # "blueprint" = a 2D film drawn by code; "blender" = a 3D film rendered from a Blender model on
+    # the render PC. In both code styles the mechanism is built, not guessed.
+    video_style: Literal["flow", "blueprint", "blender"] = "flow"
     prompts_dir: Path = Path("prompts/default")
 
     @model_validator(mode="after")

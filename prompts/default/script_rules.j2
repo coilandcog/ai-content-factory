@@ -17,6 +17,13 @@ Verified facts (the film shows exactly these; each number belongs only to what i
 If the narration gives a number, it must be one of these, written in digits (1,600, not "sixteen hundred"), and used for
 exactly what it describes; otherwise describe without numbers (a ton is fine, a guess is not).
 {% endif %}
+{%- if film_outline is defined and film_outline %}
+The film is rendered from a 3D model and shows, in this order:
+{% for line in film_outline %}- {{ line }}
+{% endfor -%}
+The hook matches the first scene. Write the body in the same order as its parts, with about the same number of sentences
+for each part, and never describe a part or an effect the film doesn't show.
+{% endif %}
 {% set told = (references or []) | selectattr("kind", "equalto", "video") | list %}
 Hook: pick hook_type from {{ allowed_hooks | join(", ") }}.
 {%- set formulas = {

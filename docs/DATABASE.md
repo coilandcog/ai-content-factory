@@ -1,6 +1,6 @@
 # DATABASE.md
 
-*Last updated: 2026-10-23. Engine: SQLite 3 at `data/factory.db`. Migrations: `migrations/NNN_name.sql`, applied in order by `factory db migrate`. Upgrade path: Postgres (Phase 4).*
+*Last updated: 2026-11-07. Engine: SQLite 3 at `data/factory.db`. Migrations: `migrations/NNN_name.sql`, applied in order by `factory db migrate`. Upgrade path: Postgres (Phase 4).*
 
 ## 1. Conventions
 
@@ -13,7 +13,7 @@
 - Money isn't stored at this stage.
 - Never delete content rows; use the status `archived`.
 - `PRAGMA journal_mode = WAL` lets readers and writers work at the same time, so the Telegram bot and the stages don't block each other.
-- **Migrations** are applied in number order, each in one transaction. The number of the last applied file is stored in SQLite's built-in `PRAGMA user_version`, so there's no migrations table (D-054). `factory db init` creates the file, applies pending migrations and upserts the channel rows from YAML; it's safe to re-run.
+- **Migrations** are applied in number order, each in one transaction. The number of the last applied file is stored in SQLite's built-in `PRAGMA user_version`, so there's no migrations table (D-054). Foreign keys are switched off while a file runs (so a migration can rebuild a table others point at, as 009 does with `contents`) and every reference is checked with `PRAGMA foreign_key_check` before the file commits; a broken reference rolls the whole file back (D-123). `factory db init` creates the file, applies pending migrations and upserts the channel rows from YAML; it's safe to re-run.
 - **Rules the database enforces itself** (D-054), so a code bug can't break them: `posts.ai_disclosure` must be 1 (D-039); `contents.affiliate_links_json` must be `NULL` (D-009); a `reviews` row with `reject` or `redo` needs a non-empty `reason`; at most one `scripts` row per content has `is_current = 1` (partial unique index); `scripts` has `UNIQUE(content_id, version)`. `contents.pillar` and `contents.hook_type` have no `CHECK`, because their values come from each channel's YAML and the content strategy.
 
 ## 2. Entity relationships
@@ -87,7 +87,7 @@ Rows are created or updated from the channel YAML (`platforms.*`) when the first
 | pillar | TEXT | One of the channel YAML's pillar ids, e.g. `vehicles` \| `air_and_sea` \| `industry_and_energy` (items made before D-073 keep `machines` / `everyday_things`) |
 | object_name | TEXT | e.g. `alternator` |
 | series_id / part_n | INTEGER | Migration 008 (D-112): the series this item is a part of, and which part (NULL for a normal video) |
-| visual_style | TEXT | Migration 007 (D-111): `flow` (Flow clips made by hand) \| `blueprint` (a film drawn by code, `blueprint.mp4`). New items take the channel's `video_style`; older items stay `flow` |
+| visual_style | TEXT | Migration 007 (D-111): `flow` (Flow clips made by hand) \| `blueprint` (a film drawn by code, `blueprint.mp4`) \| `blender` (migration 009, D-123: a 3D film rendered from a Blender model on the render PC, `blender.mp4`; the table was rebuilt to widen the CHECK). New items take the channel's `video_style`; older items keep theirs |
 | working_title | TEXT | |
 | angle | TEXT | One sentence: what's new or interesting |
 | hook_type | TEXT | See `CONTENT_STRATEGY.md` §6 |
@@ -145,7 +145,7 @@ At least 2 sources are required before Gate 1.
 |---|---|---|
 | id | INTEGER PK | |
 | content_id | INTEGER FK | |
-| kind | TEXT | `flow_sheet` \| `flow_clip` \| `still` \| `still_anim` \| `diagram` \| `voiceover` \| `subtitles` \| `music` \| `render_youtube` \| `render_tiktok` \| `preview` \| `cover` \| `thumbnail` \| `metadata` \| `blueprint` (migration 007, D-111: the code-drawn film; the table was rebuilt because SQLite can't change a CHECK) |
+| kind | TEXT | `flow_sheet` \| `flow_clip` \| `still` \| `still_anim` \| `diagram` \| `voiceover` \| `subtitles` \| `music` \| `render_youtube` \| `render_tiktok` \| `preview` \| `cover` \| `thumbnail` \| `metadata` \| `blueprint` (migration 007, D-111: the code-drawn film; the table was rebuilt because SQLite can't change a CHECK) \| `blender` (migration 009, D-123: the rendered Blender film; `generator = blender`, `model = blender/<machine>`, `prompt = job <job id>`) |
 | shot_n | INTEGER | Shot number for clips, stills and diagrams; otherwise NULL |
 | path | TEXT | Relative to the repo root |
 | sha256 | TEXT | Detects changed or duplicate files |

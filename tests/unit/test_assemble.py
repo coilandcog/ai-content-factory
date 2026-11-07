@@ -236,6 +236,51 @@ def test_blueprint_film_is_the_whole_picture(
     assert tuple(cover) == ("frame of blueprint", "own_work")
 
 
+def test_blender_film_is_the_whole_picture(
+    ctx: AppContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from factory.blender import jobs
+
+    monkeypatch.setattr(jobs, "MIN_SCENE_S", 0.3)  # a 4 s test voice has very short scenes
+    content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="short",
+                             pillar="vehicles", style="blender")  # fmt: skip
+    narration = ("The alternator charges your battery. A belt turns it. Magnets spin. Coils catch "
+                 "it. As an engineer, I like it. It never stops.")  # fmt: skip
+    with ctx.conn:
+        ctx.conn.execute(
+            "INSERT INTO scripts (content_id, version, body_text, engineer_note, est_duration_s, "
+            "shot_list_json) VALUES (?, 1, ?, 'As an engineer, I like it.', 4, '[]')",
+            (content_id, narration),
+        )
+        for url in ("https://en.wikipedia.org/wiki/Alternator", "https://example.edu/alternators"):
+            ctx.conn.execute(
+                "INSERT INTO sources (content_id, url, title, publisher) VALUES (?, ?, 'T', 'P')",
+                (content_id, url),
+            )
+    set_status(ctx.conn, content_id, "scripted")
+    set_status(ctx.conn, content_id, "script_approved")
+    tts = make_fake_tts(seconds=VOICE_S, amplitude=0.05)
+    generate.run(ctx, tts=lambda: tts)  # voice + the render job
+    row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
+    job = jobs.job_for(ctx, row)
+    film = jobs.inbox_dir(ctx, content_id) / job.film_name  # what the render PC sends back
+    run_ffmpeg(["-f", "lavfi", "-i", "testsrc=size=1080x1920:rate=30", "-frames:v",
+                str(job.spec["frames"]), "-c:v", "libx264", "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p", str(film)])  # fmt: skip
+    generate.run(ctx, tts=lambda: tts)  # takes the film
+    add_music(ctx)
+
+    result = assemble.run(ctx, llm=fake_llm())
+
+    assert (result.processed, result.failed) == (1, 0)
+    folder = generate.asset_dir(ctx, content_id)
+    info = probe(folder / "render_youtube.mp4")
+    assert float(info["format"]["duration"]) == pytest.approx(VOICE_S + 1.0, abs=0.15)
+    assert ctx.conn.execute("SELECT status FROM contents").fetchone()[0] == "assembled"
+    [cover] = ctx.conn.execute("SELECT model, license FROM assets WHERE kind = 'cover'").fetchall()
+    assert tuple(cover) == ("frame of blender", "own_work")
+
+
 @pytest.mark.slow
 def test_broken_item_stays_generated_with_the_reason(ctx: AppContext) -> None:
     content_id = generated_item(ctx)

@@ -95,7 +95,7 @@ def check(
     if script is None:
         raise FactoryError(f"content #{content_id} has no script")
     narration = " ".join((narration or script["body_text"]).split())
-    facts = script_stage.blueprint_facts(row)
+    facts = script_stage.film_facts(row)
     fact_texts = [f.text for f in facts] if facts is not None else None
     result = Precheck(problems=number_problems(narration, fact_texts))
     claims = _claims(ctx, row, script, narration, fact_texts, llm)
