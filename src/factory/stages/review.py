@@ -22,6 +22,7 @@ from factory.errors import FactoryError
 from factory.integrations.gemini import GeminiClient
 from factory.stages import metadata
 from factory.stages import precheck as precheck_stage
+from factory.stages import scenes as scenes_stage
 from factory.stages import script as script_stage
 from factory.stages.voice import asset_dir
 
@@ -323,6 +324,7 @@ def final_report(ctx: AppContext, content_id: int) -> str:
         f"TIKTOK CAPTION:  {data['tiktok']['caption']}",
         f"MUSIC (YouTube only):  {music.get('title', '-')} by {music.get('artist') or '?'}",
         "",
+        *scenes_stage.summary(ctx.conn, content_id),  # Blender films only (D-124)
         "AUTOMATED QA:",
         *(qa_lines or ["  (no qa_report.json)"]),
     ]

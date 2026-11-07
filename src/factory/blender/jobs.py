@@ -1,10 +1,11 @@
-"""Blender render jobs (D-123): the zip the render PC renders, and the check of the film it sends
-back.
+"""Blender render jobs (D-123, D-124): the zip the render PC renders, and the check of the scene
+clips it sends back.
 
 A job zip holds everything Blender needs and nothing else (no project code, no keys): render.py,
-the shared kit, the machine's model, job.json (size, frame rate and when each scene starts, from
-the narration's word timings), the label font and HOW_TO_RUN.txt. The film comes back as
-film_<job id>.mp4, so a film from an older job (e.g. before a script redo) is never taken.
+the shared kit, the machine's model, job.json (size, frame rate, each scene's start and frames,
+from the narration's word timings, and which scenes to render), the label font and HOW_TO_RUN.txt.
+Each scene comes back as scene_<job id>_NN.mp4, so a clip from an older job (e.g. before the
+model changed) is never taken.
 """
 
 from __future__ import annotations
@@ -37,9 +38,13 @@ class Job:
     spec: dict  # job.json
     job_id: str  # first 8 characters of the spec's fingerprint
 
-    @property
-    def film_name(self) -> str:
-        return f"film_{self.job_id}.mp4"
+    def clip_name(self, n: int) -> str:
+        return clip_name(self.job_id, n)
+
+
+def clip_name(job_id: str, n: int) -> str:
+    """What the render PC calls scene n's clip (render.py uses the same pattern)."""
+    return f"scene_{job_id}_{n:02d}.mp4"
 
 
 def outbox_dir(ctx: AppContext) -> Path:
@@ -48,7 +53,7 @@ def outbox_dir(ctx: AppContext) -> Path:
 
 
 def inbox_dir(ctx: AppContext, content_id: int) -> Path:
-    """data/inbox/blender/<id as 6 digits>/: where the rendered film goes."""
+    """data/inbox/blender/<id as 6 digits>/: where the rendered scene clips go."""
     return ctx.root / ctx.settings.paths.inbox_dir / "blender" / f"{content_id:06d}"
 
 
@@ -88,6 +93,10 @@ def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
         raise FactoryError(f"scenes shorter than {MIN_SCENE_S} s: {', '.join(short)}; "
                            "the narration needs more sentences per scene")  # fmt: skip
     width, height = SIZES[aspect]
+    frames = math.ceil(duration * FPS)  # the film is never shorter than the voice
+    firsts = [1] + [round(s * FPS) + 1 for s in starts[1:]]
+    lasts = [f - 1 for f in firsts[1:]] + [frames]
+    rows = zip(model.ROLES, starts, firsts, lasts, strict=True)
     spec = {
         "content_id": content_id,
         "machine": model.MACHINE,
@@ -96,9 +105,11 @@ def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
         "width": width,
         "height": height,
         "duration_s": round(duration, 3),
-        "frames": math.ceil(duration * FPS),  # the film is never shorter than the voice
-        "scenes": [{"role": r, "start": round(s, 3)}
-                   for r, s in zip(model.ROLES, starts, strict=True)],
+        "frames": frames,
+        "scenes": [
+            {"n": n, "role": r, "start": round(s, 3), "first_frame": a, "last_frame": b}
+            for n, (r, s, a, b) in enumerate(rows, 1)
+        ],
         "voice_sha256": hashlib.sha256(voice_wav.read_bytes()).hexdigest(),
     }  # fmt: skip
     files_sha = hashlib.sha256()
@@ -111,18 +122,20 @@ def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
     return Job(spec, fingerprint[:8])
 
 
-def zip_job_id(ctx: AppContext, content_id: int) -> str | None:
-    """The job id inside the outbox zip, None when there is no readable zip."""
+def zip_job(ctx: AppContext, content_id: int) -> tuple[str, list[int]] | None:
+    """(job id, scenes to render) of the outbox zip, None when there is no readable zip."""
     try:
         with zipfile.ZipFile(zip_path(ctx, content_id)) as z:
-            return json.loads(z.read("job.json"))["job_id"]
+            spec = json.loads(z.read("job.json"))
+        return spec["job_id"], spec["render"]
     except (OSError, KeyError, zipfile.BadZipFile, json.JSONDecodeError):
         return None
 
 
-def write_zip(ctx: AppContext, job: Job, inbox_windows: str) -> Path:
-    """data/outbox/blender/job_<id>.zip; replaced in one step, never half-written."""
-    spec = job.spec
+def write_zip(ctx: AppContext, job: Job, render: list[int], inbox_windows: str) -> Path:
+    """data/outbox/blender/job_<id>.zip rendering the given scenes; replaced in one step, never
+    half-written."""
+    spec = {**job.spec, "render": sorted(render)}
     out = zip_path(ctx, spec["content_id"])
     out.parent.mkdir(parents=True, exist_ok=True)
     fonts = ctx.root / ctx.settings.paths.assets_static_dir / "fonts"
@@ -133,19 +146,27 @@ def write_zip(ctx: AppContext, job: Job, inbox_windows: str) -> Path:
             z.write(JOB_FILES / name, name)
         for name in FONT_FILES:
             z.write(fonts / name, name)
-        z.writestr("HOW_TO_RUN.txt", how_to_run(job, inbox_windows))
+        z.writestr("HOW_TO_RUN.txt", how_to_run(job, spec["render"], inbox_windows))
     tmp.replace(out)
     return out
 
 
-def how_to_run(job: Job, inbox_windows: str) -> str:
+def how_to_run(job: Job, render: list[int], inbox_windows: str) -> str:
     spec = job.spec
-    minutes = spec["frames"] * 3.2 / 60  # EEVEE on the GTX 750 Ti (D-121)
+    scenes = [s for s in spec["scenes"] if s["n"] in render]
+    frames = sum(s["last_frame"] - s["first_frame"] + 1 for s in scenes)
+    minutes = frames * 3.2 / 60  # EEVEE on the GTX 750 Ti (D-121)
     folder = f"job_{spec['content_id']:06d}"
+    which = (
+        "all scenes"
+        if len(scenes) == len(spec["scenes"])
+        else (f"only scene {', '.join(str(s['n']) for s in scenes)} (a redo)")
+    )
+    clips = "\n".join(f"       out\\{job.clip_name(s['n'])}" for s in scenes)
     return f"""COIL & COG RENDER JOB #{spec["content_id"]} ({spec["machine"]}, job {job.job_id})
 {"=" * 60}
-{spec["frames"]} frames, {spec["width"]}x{spec["height"]} at {spec["fps"]} fps
-({spec["duration_s"]:.1f} s; about {minutes:.0f} min in EEVEE on the GTX 750 Ti).
+Renders {which}: {frames} frames, {spec["width"]}x{spec["height"]} at {spec["fps"]} fps
+(about {minutes:.0f} min in EEVEE on the GTX 750 Ti).
 
 On the render PC (Windows, PowerShell)
 1. Unzip this file to D:\\coilcog\\{folder}\\ and go there:
@@ -153,37 +174,36 @@ On the render PC (Windows, PowerShell)
 2. Optional check of the look first (one picture per scene, a few minutes):
        & "<your blender.exe>" -b -P render.py -- --sample
    then open the pictures in out\\sample_eevee\\
-3. The film:
+3. The scenes:
        & "<your blender.exe>" -b -P render.py
    <your blender.exe> is the full path in quotes, e.g.
        "D:\\blender 4.5 lts\\blender-4.5.15-windows-x64\\blender.exe"
    If it stops (sleep, power cut, Ctrl+C), run the same line again: finished frames are kept.
-4. When it says "done", copy ONLY out\\{job.film_name} (the frames are big)
+4. When it says "done", copy ONLY these clips (the frames are big):
+{clips}
    into the factory inbox:
        {inbox_windows}
-   (USB, email or Drive is fine: the film holds no secrets.)
+   (USB, email or Drive is fine: the clips hold no secrets. Download from Drive, don't save
+   from its video player.)
 
 On the laptop
-5. uv run factory generate      (checks the film and moves the item on)
+5. uv run factory generate          (checks each clip; a bad one is refused by name)
+6. uv run factory scenes show {spec["content_id"]}   (watch each scene, then approve or redo it)
 """
 
 
-def find_film(ctx: AppContext, job: Job) -> tuple[Path | None, list[str]]:
-    """The film for this job in the inbox, or None plus what is wrong or missing."""
-    inbox = inbox_dir(ctx, job.spec["content_id"])
-    film = inbox / job.film_name
-    if film.is_file():
-        problem = check_film(film, job.spec)
-        return (None, [f"{film.name} {problem}"]) if problem else (film, [])
-    others = sorted(p.name for p in inbox.glob("*.mp4"))
-    if others:
-        return None, [f"{', '.join(others)} in the inbox, but this job's film is {job.film_name} "
-                      "(an older job's film, or not renamed)"]  # fmt: skip
-    return None, [f"{job.film_name} not in the inbox yet"]
+def find_clip(ctx: AppContext, job: Job, n: int) -> tuple[Path | None, str | None]:
+    """Scene n's clip for this job in the inbox, or None plus what is wrong or missing."""
+    clip = inbox_dir(ctx, job.spec["content_id"]) / job.clip_name(n)
+    if not clip.is_file():
+        return None, f"{clip.name} not in the inbox yet"
+    scene = next(s for s in job.spec["scenes"] if s["n"] == n)
+    problem = check_clip(clip, job.spec, scene["last_frame"] - scene["first_frame"] + 1)
+    return (None, f"{clip.name} {problem}") if problem else (clip, None)
 
 
-def check_film(path: Path, spec: dict) -> str | None:
-    """A short reason why the film can't be used, or None."""
+def check_clip(path: Path, spec: dict, frames: int) -> str | None:
+    """A short reason why a scene clip can't be used, or None."""
     try:
         info = probe(path)
     except FactoryError:
@@ -196,16 +216,16 @@ def check_film(path: Path, spec: dict) -> str | None:
         return f"is {size[0]}x{size[1]}, not {spec['width']}x{spec['height']}"
     if video.get("r_frame_rate") != f"{spec['fps']}/1":
         return f"runs at {video.get('r_frame_rate')} fps, not {spec['fps']}"
-    frames = video.get("nb_frames")
-    if frames is not None and int(frames) != spec["frames"]:
-        return f"has {frames} frames, not {spec['frames']} (render not finished?)"
+    counted = video.get("nb_frames")
+    if counted is not None and int(counted) != frames:
+        return f"has {counted} frames, not {frames} (render not finished?)"
     duration = float(info["format"].get("duration", 0))
-    if abs(duration - spec["frames"] / spec["fps"]) > 1.5 / spec["fps"]:
-        return f"lasts {duration:.2f} s, not {spec['frames'] / spec['fps']:.2f} s"
+    if abs(duration - frames / spec["fps"]) > 1.5 / spec["fps"]:
+        return f"lasts {duration:.2f} s, not {frames / spec['fps']:.2f} s"
     return None
 
 
-def copy_film(film: Path, target: Path) -> Path:
+def copy_clip(clip: Path, target: Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(film, target)  # copy: the inbox keeps the render PC's original
+    shutil.copy2(clip, target)  # copy: the inbox keeps the render PC's original
     return target

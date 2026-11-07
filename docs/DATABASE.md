@@ -145,7 +145,7 @@ At least 2 sources are required before Gate 1.
 |---|---|---|
 | id | INTEGER PK | |
 | content_id | INTEGER FK | |
-| kind | TEXT | `flow_sheet` \| `flow_clip` \| `still` \| `still_anim` \| `diagram` \| `voiceover` \| `subtitles` \| `music` \| `render_youtube` \| `render_tiktok` \| `preview` \| `cover` \| `thumbnail` \| `metadata` \| `blueprint` (migration 007, D-111: the code-drawn film; the table was rebuilt because SQLite can't change a CHECK) \| `blender` (migration 009, D-123: the rendered Blender film; `generator = blender`, `model = blender/<machine>`, `prompt = job <job id>`) |
+| kind | TEXT | `flow_sheet` \| `flow_clip` \| `still` \| `still_anim` \| `diagram` \| `voiceover` \| `subtitles` \| `music` \| `render_youtube` \| `render_tiktok` \| `preview` \| `cover` \| `thumbnail` \| `metadata` \| `blueprint` (migration 007, D-111: the code-drawn film; the table was rebuilt because SQLite can't change a CHECK) \| `blender` (migration 009, D-123: a rendered Blender scene clip since D-124, one row per scene with `shot_n` = scene number; `generator = blender`, `model = blender/<machine>`, `prompt = job <job id>`) |
 | shot_n | INTEGER | Shot number for clips, stills and diagrams; otherwise NULL |
 | path | TEXT | Relative to the repo root |
 | sha256 | TEXT | Detects changed or duplicate files |
@@ -277,6 +277,27 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 | created_at | TEXT | |
 
 The parts are normal `contents` rows with `series_id` and `part_n` (1..parts).
+
+### `scenes` and `scene_reviews` (migration 010, D-124)
+A Blender film is made of scene clips, each rendered, checked, approved or redone on its own.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | |
+| content_id | INTEGER FK → contents | |
+| chapter | INTEGER | 1 for now; long videos in chapters come with ROADMAP 2.30 |
+| n | INTEGER | Order within the video; unique per item and chapter |
+| role | TEXT | The model's scene: `hook` \| `body` \| `note` \| `close` |
+| start_s / end_s | REAL | On the narration's timeline |
+| first_frame / last_frame | INTEGER | 1-based frames of the whole film at 30 fps; the scenes follow each other with no gap |
+| narration | TEXT | The words spoken while the scene is on screen (from `voice_words.json`) |
+| status | TEXT | `waiting` (no clip yet) \| `rendered` (clip in place, not approved) \| `approved` \| `redo` (asked again, with `reason`) |
+| path / sha256 | TEXT | The clip in the asset folder (`scenes/scene_NN.mp4`) and its fingerprint |
+| approved_sha256 | TEXT | The fingerprint the owner approved; a clip whose fingerprint differs is not approved (assembly refuses it) |
+| reason | TEXT | Why the scene is being redone |
+| updated_at | TEXT | |
+
+`scene_reviews` keeps every decision: `scene_id`, `decision` (`approve` \| `redo`), the `sha256` of the clip it was about, `reason` (required for a redo) and `decided_at`. Rows are created when the render job is first issued (`factory generate`), replacing any older ones.
 
 ### `reference_notes` (migration 002, D-100)
 | Column | Type | Notes |

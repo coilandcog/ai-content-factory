@@ -12,7 +12,7 @@ from factory.blueprint.canvas import Fact
 
 STYLES = ("flow", "blueprint", "blender")
 CODE_FILM_STYLES = frozenset({"blueprint", "blender"})
-FILM_FILES = {"blueprint": "blueprint.mp4", "blender": "blender.mp4"}  # in the asset folder
+FILM_FILES = {"blueprint": "blueprint.mp4"}  # in the asset folder; a Blender film is scenes/
 
 
 def module_for(row: sqlite3.Row) -> ModuleType | None:

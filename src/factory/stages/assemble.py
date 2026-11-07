@@ -28,6 +28,7 @@ from factory.media.audio import measure_loudness, normalize_file
 from factory.media.ffmpeg import probe
 from factory.music import Track, pick_track
 from factory.stages import generate, metadata, voice
+from factory.stages import scenes as scenes_stage
 from factory.stages.script import MIN_DIAGRAMS, previous_variety
 from factory.stages.voice import asset_dir
 
@@ -71,6 +72,12 @@ def _assemble_and_check(
     ctx: AppContext, row: sqlite3.Row, force: bool, llm: GeminiClient | None
 ) -> bool:
     content_id = row["id"]
+    if row["visual_style"] == "blender" and (waiting := scenes_stage.not_ready(ctx, content_id)):
+        reason = f"scenes not approved yet: {'; '.join(waiting)} (factory scenes show {content_id})"
+        note_reason(ctx.conn, content_id, reason)
+        log.info("#%s %s", content_id, reason,
+                 extra={"content_id": content_id, "event": "scenes_waiting"})  # fmt: skip
+        return False
     if force or not _rendered(ctx, content_id):
         _assemble(ctx, row)
     folder = asset_dir(ctx, content_id)
@@ -143,7 +150,11 @@ def _pick_cover(ctx: AppContext, content_id: int, folder: Path) -> Path:
     the film (D-111, D-123). The owner confirms it at Gate 2."""
     style = ctx.conn.execute("SELECT visual_style FROM contents WHERE id = ?", (content_id,))
     visual_style = style.fetchone()[0]
-    if visual_style in films.CODE_FILM_STYLES:
+    if visual_style == "blender":  # the first explaining scene (D-124)
+        scene_rows = scenes_stage.rows(ctx.conn, content_id)
+        scene = next((r for r in scene_rows if r["role"] == "body"), scene_rows[0])
+        chosen, clip, licence = {"n": scene["n"]}, ctx.root / scene["path"], "own_work"
+    elif visual_style in films.CODE_FILM_STYLES:
         chosen, clip, licence = {"n": None}, folder / films.FILM_FILES[visual_style], "own_work"
     else:
         shots = json.loads(generate.current_script(ctx, content_id)["shot_list_json"])
@@ -178,7 +189,9 @@ def _assemble(ctx: AppContext, row: sqlite3.Row) -> bool:
     track = pick_track(ctx)
     with tempfile.TemporaryDirectory(prefix=".assemble-", dir=folder) as tmp:
         work = Path(tmp)
-        if row["visual_style"] in films.CODE_FILM_STYLES:  # the film is the whole picture
+        if row["visual_style"] == "blender":  # the approved scene clips, in order (D-124)
+            segments = scenes_stage.segments(ctx, row["id"], voice_s)
+        elif row["visual_style"] in films.CODE_FILM_STYLES:  # the film is the whole picture
             film = folder / films.FILM_FILES[row["visual_style"]]
             if not film.is_file():
                 raise FactoryError(f"missing {film.name}: run `factory generate` again")

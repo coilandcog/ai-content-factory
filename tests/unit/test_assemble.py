@@ -240,6 +240,7 @@ def test_blender_film_is_the_whole_picture(
     ctx: AppContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from factory.blender import jobs
+    from factory.stages import scenes
 
     monkeypatch.setattr(jobs, "MIN_SCENE_S", 0.3)  # a 4 s test voice has very short scenes
     content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="short",
@@ -263,13 +264,23 @@ def test_blender_film_is_the_whole_picture(
     generate.run(ctx, tts=lambda: tts)  # voice + the render job
     row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
     job = jobs.job_for(ctx, row)
-    film = jobs.inbox_dir(ctx, content_id) / job.film_name  # what the render PC sends back
-    run_ffmpeg(["-f", "lavfi", "-i", "testsrc=size=1080x1920:rate=30", "-frames:v",
-                str(job.spec["frames"]), "-c:v", "libx264", "-preset", "ultrafast",
-                "-pix_fmt", "yuv420p", str(film)])  # fmt: skip
-    generate.run(ctx, tts=lambda: tts)  # takes the film
+    for scene in job.spec["scenes"]:  # what the render PC sends back: one clip per scene
+        frames = scene["last_frame"] - scene["first_frame"] + 1
+        clip = jobs.inbox_dir(ctx, content_id) / job.clip_name(scene["n"])
+        run_ffmpeg(["-f", "lavfi", "-i", "testsrc=size=1080x1920:rate=30", "-frames:v",
+                    str(frames), "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt",
+                    "yuv420p", str(clip)])  # fmt: skip
+    generate.run(ctx, tts=lambda: tts)  # takes the clips
     add_music(ctx)
 
+    waiting = assemble.run(ctx, llm=fake_llm())  # nothing is joined before the owner approves
+
+    assert (waiting.processed, waiting.skipped) == (0, 1)
+    assert not (generate.asset_dir(ctx, content_id) / "render_youtube.mp4").exists()
+    reason = ctx.conn.execute("SELECT status_reason FROM contents").fetchone()[0]
+    assert reason.startswith("scenes not approved yet: scene 1 is rendered")
+
+    scenes.approve(ctx, content_id)
     result = assemble.run(ctx, llm=fake_llm())
 
     assert (result.processed, result.failed) == (1, 0)
@@ -278,7 +289,7 @@ def test_blender_film_is_the_whole_picture(
     assert float(info["format"]["duration"]) == pytest.approx(VOICE_S + 1.0, abs=0.15)
     assert ctx.conn.execute("SELECT status FROM contents").fetchone()[0] == "assembled"
     [cover] = ctx.conn.execute("SELECT model, license FROM assets WHERE kind = 'cover'").fetchall()
-    assert tuple(cover) == ("frame of blender", "own_work")
+    assert tuple(cover) == ("frame of scene_02", "own_work")  # the first explaining scene
 
 
 @pytest.mark.slow

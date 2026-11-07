@@ -59,6 +59,7 @@ from factory.stages import publish as publish_stage
 from factory.stages import references as references_stage
 from factory.stages import report as report_stage
 from factory.stages import review as review_stage
+from factory.stages import scenes as scenes_stage
 from factory.stages import script as script_stage
 from factory.stages import series as series_stage
 from factory.stages import tiktok_csv as tiktok_csv_stage
@@ -109,6 +110,11 @@ references_app = typer.Typer(
 app.add_typer(references_app, name="references")
 series_app = typer.Typer(help="One topic as several linked videos (D-112).", no_args_is_help=True)
 app.add_typer(series_app, name="series")
+scenes_app = typer.Typer(
+    help="The scenes of a Blender film: watch, approve or redo each one (D-124).",
+    no_args_is_help=True,
+)
+app.add_typer(scenes_app, name="scenes")
 app.add_typer(clips_app, name="clips")
 app.add_typer(trends_app, name="trends")
 
@@ -605,11 +611,11 @@ def generate(
         )
 
 
-def _shot_numbers(text: str) -> tuple[int, ...]:
+def _shot_numbers(text: str, option: str = "--shots") -> tuple[int, ...]:
     try:
         return tuple(int(part) for part in text.split(",") if part.strip())
     except ValueError:
-        raise FactoryError(f"--shots must be numbers like '3' or '2,4', not '{text}'") from None
+        raise FactoryError(f"{option} must be numbers like '3' or '2,4', not '{text}'") from None
 
 
 def assemble(
@@ -892,6 +898,55 @@ def series_show(
     """Show a series: its parts, their items and where each one stands."""
     with _tracked_run("series show", config_dir) as run:
         typer.echo(series_stage.show(run.conn, series_id))
+
+
+SceneOption = Annotated[str | None, typer.Option("--scene", help="Scene numbers: 3 or 2,4.")]
+
+
+@scenes_app.command("show")
+def scenes_show(
+    content_id: Annotated[int, typer.Argument(help="The Blender item.")],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Every scene: its words, time, status and the clip to open in Windows."""
+    with _tracked_run("scenes show", config_dir) as run:
+        typer.echo(scenes_stage.report(_context(run, config_dir), content_id))
+
+
+@scenes_app.command("approve")
+def scenes_approve(
+    content_id: Annotated[int, typer.Argument(help="The Blender item.")],
+    scene: SceneOption = None,
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Approve scenes you have watched (default: every rendered scene). The approval holds the
+    clip's fingerprint: a changed file is no longer approved."""
+    with _tracked_run("scenes approve", config_dir) as run:
+        ctx = _context(run, config_dir)
+        numbers = list(_shot_numbers(scene, "--scene")) if scene else None
+        approved = scenes_stage.approve(ctx, content_id, numbers)
+        run.tally.processed = len(approved)
+        typer.echo(f"#{content_id} scenes approved: {', '.join(map(str, approved)) or 'none'}")
+        waiting = scenes_stage.not_ready(ctx, content_id)
+        typer.echo("Next: uv run factory assemble" if not waiting
+                   else f"Still open: {'; '.join(waiting)}")  # fmt: skip
+
+
+@scenes_app.command("redo")
+def scenes_redo(
+    content_id: Annotated[int, typer.Argument(help="The Blender item.")],
+    scene: Annotated[str, typer.Option("--scene", help="Scene numbers: 3 or 2,4.")],
+    reason: Annotated[str, typer.Option(help="What is wrong, kept with the scene.")],
+    config_dir: ConfigDirOption = CONFIG_DIR,
+) -> None:
+    """Render only these scenes again: writes a job zip for just them; the other scenes and
+    their approvals stay."""
+    with _tracked_run("scenes redo", config_dir) as run:
+        ctx = _context(run, config_dir)
+        out = scenes_stage.redo(ctx, content_id, list(_shot_numbers(scene, "--scene")), reason)
+        run.tally.processed = 1
+        typer.echo(f"#{content_id}: render {generate_stage.windows_path(out)} on the render PC, "
+                   "put the new clip(s) in the inbox, then uv run factory generate")  # fmt: skip
 
 
 STYLE_CHANGEABLE = ("idea", "scripted", "script_approved", "awaiting_clips")

@@ -1,15 +1,16 @@
 """Coil & Cog render job (D-123): run it with Blender 4.5 LTS on the render PC.
 
-    blender.exe -b -P render.py                  # the whole film -> out/film_<job id>.mp4
+    blender.exe -b -P render.py                  # the scenes -> out/scene_<job id>_NN.mp4
     blender.exe -b -P render.py -- --sample      # one still per scene, to check the look first
 
 -b = no window; -P = run this file; options go after "--":
     --engine cycles   Cycles instead of EEVEE (photoreal, about 15x slower on a GTX 750 Ti)
-    --frames 1-300    only these frames (no MP4)
-    --scale 50        half size (quick checks, no MP4)
+    --frames 1-300    only these frames (no MP4s)
+    --scale 50        half size (quick checks, no MP4s)
     --samples 16      fewer samples: faster, noisier
     --save-blend      also save out/film.blend to open in Blender
 
+job.json lists the scenes to render ("render"): all of them, or only the ones being redone.
 Frames already rendered are kept and skipped, so after a stop or a power cut run the same command
 again. Times go to out/render_log.txt. Everything this needs is in this folder.
 """
@@ -82,13 +83,24 @@ def main() -> None:
         frames = [kit.frame_at(t) for t in mids]
         kit.render_frames(scene, frames, OUT / f"sample_{opts['engine']}", "sample", log)
         return
-    lo, hi = opts["frames"] or (1, job["frames"])
+    chosen = [s for s in job["scenes"] if s["n"] in job["render"]]
+    if opts["frames"]:
+        lo, hi = opts["frames"]
+        frames = list(range(lo, hi + 1))
+    else:
+        frames = [f for s in chosen for f in range(s["first_frame"], s["last_frame"] + 1)]
     folder = OUT / f"frames_{opts['engine']}"
-    kit.render_frames(scene, list(range(lo, hi + 1)), folder, "film", log)
-    if opts["frames"] is None and opts["scale"] == 100:
-        name = f"film_{job['job_id']}.mp4"
-        if kit.encode(folder, OUT / name, job["frames"], size, log):
-            log(f"done: copy out/{name} to the factory's inbox (see HOW_TO_RUN.txt)")
+    kit.render_frames(scene, frames, folder, "scenes", log)
+    if opts["frames"] or opts["scale"] != 100:
+        return
+    names = []
+    for s in chosen:  # one clip per scene, named like the factory expects (jobs.clip_name)
+        name = f"scene_{job['job_id']}_{s['n']:02d}.mp4"
+        if kit.encode(folder, OUT / name, s["first_frame"], s["last_frame"], size, log):
+            names.append(name)
+    if len(names) == len(chosen):
+        log(f"done: copy these {len(names)} clips from out/ to the factory's inbox "
+            f"(see HOW_TO_RUN.txt): {', '.join(names)}")  # fmt: skip
 
 
 main()

@@ -571,24 +571,27 @@ def render_frames(scene, frames, folder: Path, name: str, log) -> None:
         log(f"{name}: all {done} frames were already rendered")
 
 
-def encode(frames_dir: Path, out_file: Path, frames: int, size, log) -> bool:
-    """Join the PNG frames into an H.264 MP4 with Blender's own video encoder."""
-    missing = [f for f in range(1, frames + 1) if not (frames_dir / f"{f:04d}.png").is_file()]
+def encode(frames_dir: Path, out_file: Path, first: int, last: int, size, log) -> bool:
+    """Join PNG frames first..last into an H.264 MP4 with Blender's own video encoder."""
+    wanted = range(first, last + 1)
+    missing = [f for f in wanted if not (frames_dir / f"{f:04d}.png").is_file()]
     if missing:
-        log(f"not encoding: {len(missing)} frames missing (first: {missing[0]})")
+        log(f"not encoding {out_file.name}: {len(missing)} frames missing (first: {missing[0]})")
         return False
-    scene = bpy.data.scenes.new("Encode")
+    count = len(wanted)
+    scene = bpy.data.scenes.new(f"Encode {out_file.stem}")
     scene.render.resolution_x, scene.render.resolution_y = size
     scene.render.resolution_percentage = 100
     scene.render.fps = FPS
-    scene.frame_start, scene.frame_end = 1, frames
+    scene.frame_start, scene.frame_end = 1, count
     scene.view_settings.view_transform = "Standard"
     editor = scene.sequence_editor_create()
     strips = getattr(editor, "strips", None) or editor.sequences
-    first = strips.new_image("frames", str(frames_dir / "0001.png"), channel=1, frame_start=1)
-    for f in range(2, frames + 1):
-        first.elements.append(f"{f:04d}.png")
-    first.frame_final_duration = frames
+    strip = strips.new_image("frames", str(frames_dir / f"{first:04d}.png"), channel=1,
+                             frame_start=1)  # fmt: skip
+    for f in wanted[1:]:
+        strip.elements.append(f"{f:04d}.png")
+    strip.frame_final_duration = count
     scene.render.image_settings.file_format = "FFMPEG"
     scene.render.ffmpeg.format = "MPEG4"
     scene.render.ffmpeg.codec = "H264"
@@ -598,5 +601,5 @@ def encode(frames_dir: Path, out_file: Path, frames: int, size, log) -> bool:
     scene.render.filepath = str(out_file)
     with bpy.context.temp_override(scene=scene):
         bpy.ops.render.render(animation=True, scene=scene.name)
-    log(f"film written: {out_file}")
+    log(f"clip written: {out_file}")
     return True

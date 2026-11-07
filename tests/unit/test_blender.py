@@ -21,9 +21,8 @@ from factory.context import AppContext
 from factory.db import add_content, connect, migrate, schema_version, set_status, upsert_channel
 from factory.errors import FactoryError
 from factory.media.ffmpeg import run_ffmpeg
-from factory.stages import generate
+from factory.stages import generate, scenes
 from factory.stages import script as script_stage
-from factory.stages.voice import asset_dir
 
 NARRATION = ("The alternator makes power for the car. A belt turns its pulley. Magnets spin "
              "inside the coils. Six diodes make direct current. As an engineer, I like its "
@@ -98,7 +97,12 @@ def test_job_zip_has_everything_blender_needs_and_nothing_else(ctx: AppContext) 
     assert starts[0] == 0 and starts == sorted(starts) and starts[-1] < spec["duration_s"]
     assert spec["frames"] == math.ceil(spec["duration_s"] * 30)  # never shorter than the voice
     assert (spec["width"], spec["height"], spec["fps"]) == (1080, 1920, 30)
-    assert f"film_{spec['job_id']}.mp4" in how_to and "000001" in how_to
+    # the scenes' frames follow each other with no gap or overlap and fill the whole film
+    ranges = [(s["first_frame"], s["last_frame"]) for s in spec["scenes"]]
+    assert ranges[0][0] == 1 and ranges[-1][1] == spec["frames"]
+    assert all(b[0] == a[1] + 1 for a, b in zip(ranges, ranges[1:], strict=False))
+    assert spec["render"] == [1, 2, 3, 4, 5, 6]  # a first job renders every scene
+    assert f"scene_{spec['job_id']}_06.mp4" in how_to and "000001" in how_to
     assert jobs.inbox_dir(ctx, content_id).is_dir()
 
 
@@ -136,7 +140,10 @@ def test_the_job_id_changes_when_the_model_changes(
 
     assert jobs.job_for(ctx, row(ctx, content_id)).job_id != first
     generate.run(ctx, tts=lambda: make_fake_tts(seconds=VOICE_S))  # the zip is written again
-    assert jobs.zip_job_id(ctx, content_id) == jobs.job_for(ctx, row(ctx, content_id)).job_id
+    assert jobs.zip_job(ctx, content_id) == (
+        jobs.job_for(ctx, row(ctx, content_id)).job_id,
+        [1, 2, 3, 4, 5, 6],
+    )
 
 
 def test_a_machine_without_a_model_waits_without_work(ctx: AppContext) -> None:
@@ -171,32 +178,129 @@ def test_too_short_scenes_are_refused(ctx: AppContext) -> None:
 # --- the film coming back ----------------------------------------------------------------------
 
 
-def test_only_this_jobs_complete_film_is_taken(ctx: AppContext) -> None:
+def deliver(ctx: AppContext, job: jobs.Job, numbers: list[int], **kw) -> None:
+    """What the render PC sends back: one clip per scene, named for this job."""
+    for scene in job.spec["scenes"]:
+        if scene["n"] in numbers:
+            frames = scene["last_frame"] - scene["first_frame"] + 1
+            make_film(jobs.inbox_dir(ctx, job.spec["content_id"]) / job.clip_name(scene["n"]),
+                      kw.get("frames", frames), kw.get("size", "1080x1920"))  # fmt: skip
+
+
+def run_generate(ctx: AppContext) -> None:
+    generate.run(ctx, tts=lambda: make_fake_tts(seconds=VOICE_S))
+
+
+def scene_status(ctx: AppContext, content_id: int) -> dict[int, str]:
+    return {r["n"]: r["status"] for r in scenes.rows(ctx.conn, content_id)}
+
+
+def test_each_scene_clip_is_checked_on_its_own(ctx: AppContext) -> None:
     content_id = issue(ctx)
     job = jobs.job_for(ctx, row(ctx, content_id))
+    assert [r["narration"] for r in scenes.rows(ctx.conn, content_id)][0].startswith("The")
     inbox = jobs.inbox_dir(ctx, content_id)
-    tts = lambda: make_fake_tts(seconds=VOICE_S)  # noqa: E731
 
-    make_film(inbox / "film_0ldj0b00.mp4", job.spec["frames"])  # an older job's film
-    generate.run(ctx, tts=tts)
+    deliver(ctx, job, [1, 2, 3, 4, 5])  # scene 6 not rendered yet
+    make_film(inbox / "scene_0ldj0b00_06.mp4", 30)  # an older job's clip is never taken
+    deliver(ctx, job, [3], size="1920x1080")  # scene 3 the wrong way round
+    run_generate(ctx)
+
     assert status(ctx, content_id) == "awaiting_clips"
+    expected = {1: "rendered", 2: "rendered", 3: "waiting", 4: "rendered", 5: "rendered"}
+    assert scene_status(ctx, content_id) == {**expected, 6: "waiting"}
+    assert "is 1920x1080, not 1080x1920" in jobs.find_clip(ctx, job, 3)[1]
 
-    make_film(inbox / job.film_name, job.spec["frames"], size="1920x1080")  # wrong way round
-    assert "is 1920x1080, not 1080x1920" in jobs.find_film(ctx, job)[1][0]
-    make_film(inbox / job.film_name, job.spec["frames"] - 30)  # a render that stopped early
-    assert "frames, not" in jobs.find_film(ctx, job)[1][0]
-    generate.run(ctx, tts=tts)
-    assert status(ctx, content_id) == "awaiting_clips"
-
-    make_film(inbox / job.film_name, job.spec["frames"])
-    generate.run(ctx, tts=tts)
+    deliver(ctx, job, [3, 6])
+    run_generate(ctx)
 
     assert status(ctx, content_id) == "generated"
-    assert (asset_dir(ctx, content_id) / generate.BLENDER_FILE).is_file()
-    asset = ctx.conn.execute(
-        "SELECT generator, model, license, width, height FROM assets WHERE kind = 'blender'"
-    ).fetchone()
-    assert tuple(asset) == ("blender", "blender/alternator", "own_work", 1080, 1920)
+    assert set(scene_status(ctx, content_id).values()) == {"rendered"}
+    shots = [r[0] for r in ctx.conn.execute(
+        "SELECT shot_n FROM assets WHERE kind = 'blender' ORDER BY shot_n")]  # fmt: skip
+    assert shots == [1, 2, 3, 4, 5, 6]
+    assert scenes.clip_path(ctx, content_id, 6).is_file()
+
+
+def generated(ctx: AppContext) -> tuple[int, jobs.Job]:
+    content_id = issue(ctx)
+    job = jobs.job_for(ctx, row(ctx, content_id))
+    deliver(ctx, job, [1, 2, 3, 4, 5, 6])
+    run_generate(ctx)
+    assert status(ctx, content_id) == "generated"
+    return content_id, job
+
+
+def test_an_approval_holds_the_file_it_was_given_for(ctx: AppContext) -> None:
+    content_id, job = generated(ctx)
+
+    assert scenes.approve(ctx, content_id, [2]) == [2]
+    assert "scene 1 is rendered" in scenes.not_ready(ctx, content_id)
+    assert scenes.approve(ctx, content_id) == [1, 2, 3, 4, 5, 6]
+    assert scenes.not_ready(ctx, content_id) == []
+
+    clip = scenes.clip_path(ctx, content_id, 4)
+    clip.write_bytes(clip.read_bytes() + b"changed")  # someone replaced the file by hand
+
+    assert scenes.not_ready(ctx, content_id) == ["scene 4 changed since it was approved"]
+    assert "CHANGED since approval" in scenes.report(ctx, content_id)
+    history = ctx.conn.execute("SELECT count(*) FROM scene_reviews WHERE decision = 'approve'")
+    assert history.fetchone()[0] == 7  # scene 2 twice: every decision is kept
+
+
+def test_a_redo_renders_only_its_scene_and_keeps_the_others(ctx: AppContext) -> None:
+    content_id, job = generated(ctx)
+    scenes.approve(ctx, content_id)
+    kept = scenes.clip_path(ctx, content_id, 2).read_bytes()
+
+    out = scenes.redo(ctx, content_id, [3], "the stator glow starts too late")
+
+    assert status(ctx, content_id) == "awaiting_clips"
+    assert scene_status(ctx, content_id)[3] == "redo"
+    assert [s for n, s in scene_status(ctx, content_id).items() if n != 3] == ["approved"] * 5
+    assert jobs.zip_job(ctx, content_id) == (job.job_id, [3])
+    with zipfile.ZipFile(out) as z:
+        how_to = z.read("HOW_TO_RUN.txt").decode()
+    assert "only scene 3 (a redo)" in how_to and job.clip_name(2) not in how_to
+    inbox = jobs.inbox_dir(ctx, content_id)
+    assert (inbox / f"old_{job.clip_name(3)}").is_file()  # the old clip is never taken again
+    run_generate(ctx)
+    assert status(ctx, content_id) == "awaiting_clips"  # still waiting for the new scene 3
+
+    deliver(ctx, job, [3])
+    run_generate(ctx)
+
+    assert status(ctx, content_id) == "generated"
+    assert scene_status(ctx, content_id)[3] == "rendered"
+    assert scenes.clip_path(ctx, content_id, 2).read_bytes() == kept
+    assert scenes.not_ready(ctx, content_id) == ["scene 3 is rendered"]
+    with pytest.raises(FactoryError, match="needs a reason"):
+        scenes.redo(ctx, content_id, [1], "  ")
+    with pytest.raises(FactoryError, match="has no scene 9"):
+        scenes.redo(ctx, content_id, [9], "no such scene")
+
+
+def test_gate_2_lists_the_scene_approvals(ctx: AppContext) -> None:
+    content_id, _ = generated(ctx)
+    scenes.approve(ctx, content_id, [1, 2])
+
+    lines = scenes.summary(ctx.conn, content_id)
+
+    assert lines[0] == "SCENES: 2/6 approved"
+    assert "  scene 3 (body): rendered" in lines
+
+
+def test_an_item_issued_before_scenes_existed_gets_them(ctx: AppContext) -> None:
+    content_id = issue(ctx)
+    with ctx.conn:  # as a 2.26 job left it: no scene rows
+        ctx.conn.execute("DELETE FROM scenes WHERE content_id = ?", (content_id,))
+    job = jobs.job_for(ctx, row(ctx, content_id))
+    deliver(ctx, job, [1, 2, 3, 4, 5, 6])
+
+    run_generate(ctx)
+
+    assert status(ctx, content_id) == "generated"
+    assert len(scenes.rows(ctx.conn, content_id)) == 6
 
 
 # --- scripts and styles ------------------------------------------------------------------------
@@ -217,8 +321,8 @@ def test_scripts_of_a_blender_item_use_the_models_facts_and_scenes(ctx: AppConte
 # --- migration 009 -----------------------------------------------------------------------------
 
 
-def _first_migrations(tmp_path: Path, n: int) -> Path:
-    folder = tmp_path / f"first_{n}"
+def _first_migrations(tmp_path: Path, n: int, name: str | None = None) -> Path:
+    folder = tmp_path / (name or f"first_{n}")
     folder.mkdir()
     for path in sorted((REPO_ROOT / "migrations").glob("*.sql"))[:n]:
         shutil.copy(path, folder / path.name)
@@ -235,7 +339,7 @@ def test_migration_009_keeps_every_row_and_accepts_blender(tmp_path: Path) -> No
         conn.execute("INSERT INTO scripts (content_id, version, body_text) VALUES (1, 1, 'x')")
         conn.execute("INSERT INTO assets (content_id, kind, path) VALUES (1, 'blueprint', 'b.mp4')")
 
-    migrate(conn)
+    migrate(conn, _first_migrations(tmp_path, 9, "first_9"))
 
     assert schema_version(conn) == 9
     assert conn.execute("SELECT visual_style FROM contents").fetchone()[0] == "blueprint"
@@ -249,15 +353,34 @@ def test_migration_009_keeps_every_row_and_accepts_blender(tmp_path: Path) -> No
 
 
 def test_a_migration_that_breaks_references_is_not_applied(tmp_path: Path) -> None:
-    folder = _first_migrations(tmp_path, 9)
-    (folder / "010_broken.sql").write_text(
+    folder = _first_migrations(tmp_path, 10)
+    (folder / "011_broken.sql").write_text(
         "INSERT INTO scripts (content_id, version, body_text) VALUES (42, 1, 'orphan');"
     )
     conn = connect(tmp_path / "test.db")
 
-    with pytest.raises(FactoryError, match="010_broken.sql would leave 1 broken references"):
+    with pytest.raises(FactoryError, match="011_broken.sql would leave 1 broken references"):
         migrate(conn, folder)
 
-    assert schema_version(conn) == 9
+    assert schema_version(conn) == 10
     assert conn.execute("SELECT count(*) FROM scripts").fetchone()[0] == 0
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+
+
+def test_scenes_commands_explain_an_item_without_scenes(config_dir: Path) -> None:
+    from typer.testing import CliRunner
+
+    from factory.cli import app
+
+    runner, opts = CliRunner(), ["--config-dir", str(config_dir)]
+    runner.invoke(app, ["db", "init", *opts])
+    runner.invoke(app, ["new", "--object", "alternator", "--format", "short", "--pillar",
+                        "vehicles", *opts])  # fmt: skip
+
+    shown = runner.invoke(app, ["scenes", "show", "1", *opts])
+    approve = runner.invoke(app, ["scenes", "approve", "1", "--scene", "x", *opts])
+    redo = runner.invoke(app, ["scenes", "redo", "1", "--scene", "2", "--reason", "x", *opts])
+
+    assert shown.exit_code == 0 and "has no scenes yet" in shown.output
+    assert approve.exit_code == 1 and "--scene must be numbers" in approve.output
+    assert redo.exit_code == 1 and "is idea: scenes can be redone" in redo.output

@@ -8,9 +8,10 @@ clips into the asset folder and record them, then make the animated stills and d
 voice, subtitles, stills and diagrams.
 A blueprint item (D-111) needs no Flow: pass 1 renders the voice, then its code-drawn film
 (blueprint.mp4), and it moves on to "generated" in the same run.
-A Blender item (D-123): pass 1 renders the voice and writes the render job zip
-(data/outbox/blender/job_<id>.zip) for the render PC; pass 2 takes the rendered film from
-data/inbox/blender/<id>/ once it checks out (size, frame rate, frame count) -> generated.
+A Blender item (D-123, D-124): pass 1 renders the voice, makes one row per scene and writes the
+render job zip (data/outbox/blender/job_<id>.zip) for the render PC; pass 2 takes each scene's clip
+from data/inbox/blender/<id>/ once it checks out (size, frame rate, frame count) and moves the
+item to generated when every scene has one.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from factory.media.ffmpeg import probe
 from factory.prompts import render_prompt
 from factory.stages import lessons as lessons_stage
 from factory.stages import references as references_stage
+from factory.stages import scenes as scenes_stage
 from factory.stages import script as script_stage
 from factory.stages import voice
 from factory.stages.voice import Synthesizer, asset_dir
@@ -83,7 +85,6 @@ ISSUED_FILE = "flow_issued.json"
 STILL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")  # optional owner images: still_NN.<ext>
 STILL_SAFE_AREA = "upper third and the lower quarter"  # where labels and subtitles go
 BLUEPRINT_FILE = films.FILM_FILES["blueprint"]  # the code-drawn film of a blueprint item (D-111)
-BLENDER_FILE = films.FILM_FILES["blender"]  # the rendered film of a Blender item (D-123)
 
 
 def run(
@@ -579,47 +580,47 @@ def _draw(ctx: AppContext, row: sqlite3.Row) -> bool:
 
 
 def _issue_render_job(ctx: AppContext, row: sqlite3.Row) -> bool:
-    """Write the Blender render job zip for the render PC (D-123); the item waits for its film."""
+    """Write the Blender render job zip for the render PC and one row per scene (D-123, D-124);
+    the item waits for the scene clips."""
     content_id = row["id"]
     job = blender_jobs.job_for(ctx, row)
+    scenes_stage.create(ctx, content_id, job)
     inbox = blender_jobs.inbox_dir(ctx, content_id)
     inbox.mkdir(parents=True, exist_ok=True)
-    out = blender_jobs.write_zip(ctx, job, windows_path(inbox))
+    render = scenes_stage.pending(ctx.conn, content_id)
+    out = blender_jobs.write_zip(ctx, job, render, windows_path(inbox))
     set_status(ctx.conn, content_id, "awaiting_clips", reason=f"Blender render: {out.name}")
-    log.info("#%s: Blender job %s ready: %s (%d frames) -> render it, then put %s in %s",
-             content_id, job.job_id, windows_path(out), job.spec["frames"], job.film_name,
-             windows_path(inbox),
+    log.info("#%s: Blender job %s ready: %s (%d scenes, %d frames) -> render it, then put the "
+             "scene clips in %s", content_id, job.job_id, windows_path(out), len(render),
+             job.spec["frames"], windows_path(inbox),
              extra={"content_id": content_id, "event": "blender_job_issued"})  # fmt: skip
     return True
 
 
 def _collect_render(ctx: AppContext, row: sqlite3.Row) -> bool:
-    """Take the rendered film of this item's current job once it checks out (D-123)."""
+    """Take each waiting scene's clip once it checks out (D-124); `generated` when every scene
+    has one. The owner then approves the scenes (`factory scenes`) before assembly."""
     content_id = row["id"]
     job = blender_jobs.job_for(ctx, row)
-    if blender_jobs.zip_job_id(ctx, content_id) != job.job_id:  # deleted, or the model changed
-        inbox = blender_jobs.inbox_dir(ctx, content_id)
-        out = blender_jobs.write_zip(ctx, job, windows_path(inbox))
-        log.warning("#%s: Blender job rewritten as %s (%s): render the new zip",
-                    content_id, job.job_id, windows_path(out),
+    if not scenes_stage.rows(ctx.conn, content_id):  # issued before scenes existed (2.26)
+        scenes_stage.create(ctx, content_id, job)
+    render = scenes_stage.pending(ctx.conn, content_id)
+    if render and blender_jobs.zip_job(ctx, content_id) != (job.job_id, render):
+        inbox = blender_jobs.inbox_dir(ctx, content_id)  # deleted, or the model changed
+        out = blender_jobs.write_zip(ctx, job, render, windows_path(inbox))
+        log.warning("#%s: Blender job rewritten as %s for scene %s (%s): render the new zip",
+                    content_id, job.job_id, ", ".join(map(str, render)), windows_path(out),
                     extra={"content_id": content_id, "event": "blender_job_issued"})  # fmt: skip
-    film, problems = blender_jobs.find_film(ctx, job)
-    if film is None:
-        log.info("#%s waiting for the Blender film: %s", content_id, "; ".join(problems),
-                 extra={"content_id": content_id, "event": "film_waiting"})  # fmt: skip
+    problems = scenes_stage.collect(ctx, content_id, job)
+    replace_assets(ctx, content_id, "blender", scenes_stage.asset_rows(ctx, content_id, job))
+    if problems:
+        log.info("#%s waiting for scene clips: %s", content_id, "; ".join(problems),
+                 extra={"content_id": content_id, "event": "clips_waiting"})  # fmt: skip
         return False
-    folder = asset_dir(ctx, content_id)
-    target = blender_jobs.copy_film(film, folder / BLENDER_FILE)
-    spec = job.spec
-    replace_assets(ctx, content_id, "blender", [{
-        "path": target, "generator": "blender", "model": f"blender/{spec['machine']}",
-        "prompt": f"job {job.job_id}", "license": "own_work",
-        "duration_s": round(spec["frames"] / spec["fps"], 3), "width": spec["width"],
-        "height": spec["height"],
-    }])  # fmt: skip
     set_status(ctx.conn, content_id, "generated")
-    log.info("#%s: Blender film %s in place -> generated", content_id, film.name,
-             extra={"content_id": content_id, "event": "blender_film_collected"})  # fmt: skip
+    log.info("#%s: every scene clip in place -> generated; watch and approve them: "
+             "factory scenes show %s", content_id, content_id,
+             extra={"content_id": content_id, "event": "blender_scenes_collected"})  # fmt: skip
     return True
 
 
