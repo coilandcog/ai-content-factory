@@ -232,7 +232,8 @@ def variety(
                                           strict=True) if a and a == b]  # fmt: skip
     if repeats:
         return False, f"same {' and '.join(repeats)} as the previous video"
-    return True, f"hook {current[0]} / beats {current[1]} differ from the previous video"
+    beats = current[1] or "set by the film's drawing or model"
+    return True, f"hook {current[0]} / beats {beats} differ from the previous video"
 
 
 def similarity(score: float | None, threshold: float) -> tuple[bool | None, str]:

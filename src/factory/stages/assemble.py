@@ -127,15 +127,22 @@ def _qa_inputs(
         diagram_shots=[] if code_film else [s["n"] for s in shots if s["kind"] == "diagram"],
         subtitle_font=voice.subtitle_font(ctx),
         music_source=source["source"] if source else None,
-        variety=(
-            (row["hook_type"], row["beat_order"]),
-            previous_variety(ctx.conn, row["channel_id"], row["id"]),
-        ),
+        variety=_variety(ctx, row, code_film),
         metadata_problems=_metadata_problems(ctx, row["id"]),
         metadata_error=metadata_error,
         similarity_max=script["similarity_max"],
         similarity_threshold=ctx.channel.scoring.similarity_block_threshold,
     )
+
+
+def _variety(ctx: AppContext, row: sqlite3.Row, code_film: bool) -> tuple[tuple, tuple]:
+    """(this video's, the previous video's) hook type and beat order for the variety check. A
+    film made by code has its scene order fixed by its drawing or model, so only the hook can
+    vary there and only the hook is compared (D-127)."""
+    previous = previous_variety(ctx.conn, row["channel_id"], row["id"])
+    if code_film:
+        return (row["hook_type"], None), (previous[0], None)
+    return (row["hook_type"], row["beat_order"]), previous
 
 
 def _metadata_problems(ctx: AppContext, content_id: int) -> list[str] | None:

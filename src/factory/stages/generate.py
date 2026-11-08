@@ -602,7 +602,7 @@ def _collect_render(ctx: AppContext, row: sqlite3.Row) -> bool:
     has one. The owner then approves the scenes (`factory scenes`) before assembly."""
     content_id = row["id"]
     job = blender_jobs.job_for(ctx, row)
-    if not scenes_stage.rows(ctx.conn, content_id):  # issued before scenes existed (2.26)
+    if not scenes_stage.matches(ctx.conn, content_id, job):  # none yet (2.26) or new timings
         scenes_stage.create(ctx, content_id, job)
     render = scenes_stage.pending(ctx.conn, content_id)
     if render and blender_jobs.zip_job(ctx, content_id) != (job.job_id, render):

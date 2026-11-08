@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import shutil
 import sqlite3
 import zipfile
@@ -20,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from factory import blender
-from factory.blueprint.canvas import count_sentences, scene_starts, sentences
+from factory.blueprint.canvas import LEAD_S, count_sentences, scene_starts, sentences
 from factory.context import AppContext
 from factory.errors import FactoryError
 from factory.media.ffmpeg import probe
@@ -85,7 +86,9 @@ def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
     note = ctx.conn.execute(
         "SELECT engineer_note FROM scripts WHERE content_id = ? AND is_current = 1", (content_id,)
     ).fetchone()
-    starts = scene_starts(model.ROLES, sentences(words), count_sentences(note[0] or ""), duration)
+    note_n = count_sentences(note[0] or "")
+    starts = scene_starts(model.ROLES, sentences(words), note_n, duration)
+    starts = _body_starts_by_topic(model, words, note_n, starts)
     lengths = [b - a for a, b in zip(starts, [*starts[1:], duration], strict=True)]
     short = [f"{role} {s:.1f} s" for role, s in zip(model.ROLES, lengths, strict=True)
              if s < MIN_SCENE_S]  # fmt: skip
@@ -120,6 +123,49 @@ def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
     ).hexdigest()
     spec["job_id"] = fingerprint[:8]
     return Job(spec, fingerprint[:8])
+
+
+def _body_starts_by_topic(
+    model, words: list[dict], note_n: int, starts: list[float]
+) -> list[float]:
+    """Each body scene after the first starts on the first body sentence that names its part
+    (the model's SCENE_KEYWORDS), so the picture changes when the narration does. Counting
+    sentences alone put the stator on screen while the narration still explained the rotor
+    (#20, 2026-11-07). A script that never names a part in order is refused (D-126)."""
+    keywords = getattr(model, "SCENE_KEYWORDS", None)
+    if keywords is None:
+        return starts
+    texts = _sentence_texts(words)
+    spoken = sentences(words)
+    body = list(range(1, len(spoken) - 1 - note_n))  # sentence numbers between hook and note
+    out, after = list(starts), body[0] if body else 1
+    for k, (role, pattern) in enumerate(zip(model.ROLES, keywords, strict=True)):
+        if role != "body" or pattern is None:
+            continue
+        if k == model.ROLES.index("body"):  # the first body scene starts the body
+            continue
+        found = next((i for i in body if i > after and re.search(pattern, texts[i], re.I)), None)
+        if found is None:
+            raise FactoryError(
+                f"the narration never names scene {k + 1}'s part ({pattern}) after the earlier "
+                "parts, so the film would show the wrong part: redo the script so the body "
+                "explains the parts in the film's order"
+            )
+        out[k], after = max(0.0, spoken[found][0] - LEAD_S), found
+    return out
+
+
+def _sentence_texts(words: list[dict]) -> list[str]:
+    """The text of each spoken sentence, split like canvas.sentences."""
+    out, current = [], []
+    for w in words:
+        current.append(w["text"])
+        if w["text"].rstrip().endswith((".", "?", "!")):
+            out.append(" ".join(current))
+            current = []
+    if current:
+        out.append(" ".join(current))
+    return out
 
 
 def zip_job(ctx: AppContext, content_id: int) -> tuple[str, list[int]] | None:

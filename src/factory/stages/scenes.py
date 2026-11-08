@@ -67,6 +67,24 @@ def create(ctx: AppContext, content_id: int, job: jobs.Job) -> None:
             )  # fmt: skip
 
 
+def matches(conn: sqlite3.Connection, content_id: int, job: jobs.Job) -> bool:
+    """True when the rows have the job's scenes and frames. False when there are none or the
+    timings changed (e.g. D-126) before any clip arrived, so they can be made again; changed
+    timings after clips arrived would mix two cuts of the film, so that stops with a reason."""
+    scene_rows = rows(conn, content_id)
+    have = [(r["n"], r["role"], r["first_frame"], r["last_frame"]) for r in scene_rows]
+    want = [(s["n"], s["role"], s["first_frame"], s["last_frame"]) for s in job.spec["scenes"]]
+    if have == want:
+        return True
+    if any(r["path"] for r in scene_rows):
+        raise FactoryError(
+            f"#{content_id}'s scene timings changed after clips arrived; to start over, redo "
+            f"every scene: factory scenes redo {content_id} --scene "
+            f"{','.join(str(n) for n, *_ in want)} --reason ..."
+        )
+    return False
+
+
 def collect(ctx: AppContext, content_id: int, job: jobs.Job) -> list[str]:
     """Take every waiting scene's clip that checks out; returns what is still missing or wrong."""
     problems: list[str] = []

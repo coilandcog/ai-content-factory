@@ -24,8 +24,8 @@ from factory.media.ffmpeg import run_ffmpeg
 from factory.stages import generate, scenes
 from factory.stages import script as script_stage
 
-NARRATION = ("The alternator makes power for the car. A belt turns its pulley. Magnets spin "
-             "inside the coils. Six diodes make direct current. As an engineer, I like its "
+NARRATION = ("The alternator makes power for the car. A belt turns its rotor. The stator coils "
+             "catch the current. Six diodes make direct current. As an engineer, I like its "
              "slip rings. It never stops charging.")  # fmt: skip
 VOICE_S = 12.0  # six sentences of about 2 s: every scene is long enough
 
@@ -384,3 +384,91 @@ def test_scenes_commands_explain_an_item_without_scenes(config_dir: Path) -> Non
     assert shown.exit_code == 0 and "has no scenes yet" in shown.output
     assert approve.exit_code == 1 and "--scene must be numbers" in approve.output
     assert redo.exit_code == 1 and "is idea: scenes can be redone" in redo.output
+
+
+def scripted_item(ctx: AppContext, narration: str) -> int:
+    content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="short",
+                             pillar="vehicles", style="blender")  # fmt: skip
+    with ctx.conn:
+        ctx.conn.execute(
+            "INSERT INTO scripts (content_id, version, body_text, engineer_note, shot_list_json) "
+            "VALUES (?, 1, ?, 'As an engineer, I like its slip rings.', '[]')",
+            (content_id, narration),
+        )
+    set_status(ctx.conn, content_id, "scripted")
+    set_status(ctx.conn, content_id, "script_approved")
+    generate.run(ctx, tts=lambda: make_fake_tts(seconds=20.0))  # every sentence over 1.5 s
+    return content_id
+
+
+def test_each_part_scene_starts_where_the_narration_names_that_part(ctx: AppContext) -> None:
+    """Two rotor sentences: counting sentences would put the stator on screen during the second
+    one (#20, 2026-11-07); the stator scene must wait for the stator sentence (D-126)."""
+    content_id = scripted_item(ctx, (
+        "Why does the battery stay full? A belt turns the rotor. Its field coil makes a magnet. "
+        "The stator windings catch the current. Six diodes make direct current. As an engineer, "
+        "I like its slip rings. It never stops charging."
+    ))  # fmt: skip
+
+    said = {r["n"]: r["narration"] for r in scenes.rows(ctx.conn, content_id)}
+
+    assert said[2] == "A belt turns the rotor. Its field coil makes a magnet."
+    assert said[3] == "The stator windings catch the current."
+    assert said[4] == "Six diodes make direct current."
+
+
+def test_a_script_that_skips_a_part_is_refused_before_any_render(ctx: AppContext) -> None:
+    content_id = scripted_item(ctx, (
+        "Why does the battery stay full? A belt turns the rotor. Its field coil makes a magnet. "
+        "Six diodes make direct current. It is clever. As an engineer, I like its slip rings. "
+        "It never stops charging."
+    ))  # fmt: skip
+
+    assert status(ctx, content_id) == "failed"
+    assert "never names scene 3's part" in row(ctx, content_id)["status_reason"]
+    assert not jobs.zip_path(ctx, content_id).exists()
+
+
+def test_scene_rows_follow_new_timings_until_a_clip_arrives(ctx: AppContext) -> None:
+    content_id = issue(ctx)
+    with ctx.conn:  # rows from an older timing (as #20's were before D-126)
+        ctx.conn.execute("UPDATE scenes SET last_frame = last_frame - 10 WHERE n = 2 AND "
+                         "content_id = ?", (content_id,))  # fmt: skip
+        ctx.conn.execute("UPDATE scenes SET first_frame = first_frame - 10 WHERE n = 3 AND "
+                         "content_id = ?", (content_id,))  # fmt: skip
+
+    run_generate(ctx)  # no clip yet: the rows are simply made again
+
+    job = jobs.job_for(ctx, row(ctx, content_id))
+    want = [(s["first_frame"], s["last_frame"]) for s in job.spec["scenes"]]
+    assert [(r["first_frame"], r["last_frame"]) for r in scenes.rows(ctx.conn, content_id)] == want
+
+    deliver(ctx, job, [1])
+    run_generate(ctx)
+    with ctx.conn:
+        ctx.conn.execute("UPDATE scenes SET last_frame = last_frame - 10 WHERE n = 2 AND "
+                         "content_id = ?", (content_id,))  # fmt: skip
+    run_generate(ctx)  # a clip exists: never mix two cuts of the film
+
+    assert status(ctx, content_id) == "failed"
+    assert "timings changed after clips arrived" in row(ctx, content_id)["status_reason"]
+
+
+def test_variety_compares_only_the_hook_for_films_made_by_code(ctx: AppContext) -> None:
+    from factory.media import qa
+    from factory.stages import assemble
+
+    first, second = approved_item(ctx), approved_item(ctx)
+    with ctx.conn:  # same beat order on both: a Blender film can't change its scene order
+        ctx.conn.execute("UPDATE contents SET hook_type = 'reveal', beat_order = 'classic' "
+                         "WHERE id = ?", (first,))  # fmt: skip
+        ctx.conn.execute("UPDATE contents SET hook_type = 'why_question', beat_order = 'classic' "
+                         "WHERE id = ?", (second,))  # fmt: skip
+
+    current, previous = assemble._variety(ctx, row(ctx, second), code_film=True)
+
+    assert qa.variety(current, previous)[0] is True
+    with ctx.conn:
+        ctx.conn.execute("UPDATE contents SET hook_type = 'reveal' WHERE id = ?", (second,))
+    ok, detail = qa.variety(*assemble._variety(ctx, row(ctx, second), code_film=True))
+    assert not ok and detail == "same hook_type as the previous video"  # the hook still counts

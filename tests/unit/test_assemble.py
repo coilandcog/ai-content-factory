@@ -245,8 +245,8 @@ def test_blender_film_is_the_whole_picture(
     monkeypatch.setattr(jobs, "MIN_SCENE_S", 0.3)  # a 4 s test voice has very short scenes
     content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="short",
                              pillar="vehicles", style="blender")  # fmt: skip
-    narration = ("The alternator charges your battery. A belt turns it. Magnets spin. Coils catch "
-                 "it. As an engineer, I like it. It never stops.")  # fmt: skip
+    narration = ("The alternator charges your battery. A belt turns the rotor. The stator coils "
+                 "catch it. Diodes fix it. As an engineer, I like it. It never stops.")  # fmt: skip
     with ctx.conn:
         ctx.conn.execute(
             "INSERT INTO scripts (content_id, version, body_text, engineer_note, est_duration_s, "

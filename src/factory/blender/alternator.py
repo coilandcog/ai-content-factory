@@ -48,6 +48,9 @@ FACTS: dict[str, Fact] = {
 # says what the narration explains while that scene plays, never what the picture looks like, so
 # Gemini can't copy picture descriptions into the narration.
 ROLES = ("hook", "body", "body", "body", "note", "close")
+# What a body sentence must name for its scene to start there (D-126); None = placed by time.
+SCENE_KEYWORDS = (None, r"rotor|belt|field coil", r"stator|winding|induc", r"diode|rectif", None,
+                  None)  # fmt: skip
 OUTLINE = (
     "hook: the whole alternator",
     "body part 1: the rotor: the engine's belt turns it, and its field coil, fed by a small direct "
