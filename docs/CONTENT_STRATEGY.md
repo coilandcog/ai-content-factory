@@ -201,7 +201,7 @@ From 2026-11-06 each machine is made as **one long video (8–9 min, 16:9, 4 cha
 | # | Machine (pillar) | Already in the factory | Long video: working angle | Shorts from it | Effort |
 |---|---|---|---|---|---|
 | 1 | Alternator (vehicles) | #5 Short published; Blender trial model | *Inside an Alternator: How Your Car Makes Its Own Electricity* (belt and pulley, claw-pole rotor, stator, three-phase AC, diodes, regulator, why it fails) | Why alternators have diodes; the slip-ring trick; what the voltage regulator does | S (exists) |
-| 2 | Starter motor (vehicles) | new | *The 1-Second Motor That Starts Every Car* (solenoid, pinion engagement, overrunning clutch, gear reduction) | Why the starter clicks; the pinion that jumps forward; why it can't run for long | S |
+| 2 | Starter motor (vehicles) | model built (D-131); first long video | *The 1-Second Motor That Starts Every Car* (solenoid, pinion engagement, overrunning clutch, gear reduction) | Why the starter clicks; the pinion that jumps forward; why it can't run for long | S |
 | 3 | Electric car motor (vehicles) | #14 idea | *Inside an Electric Car Motor* (stator windings, permanent-magnet vs induction rotor, inverter, regenerative braking) | Why EVs need no gearbox; regen braking; magnet vs induction | M |
 | 4 | Turbocharger (vehicles) | #6 Short published (Flow) | *How a Turbocharger Turns Waste Heat into Power* (turbine, compressor, shaft, wastegate, intercooler, lag) | What turbo lag is; the wastegate; why intercoolers | S |
 | 5 | Disc brakes (vehicles) | seed topic | *What Happens When You Press the Brake* (master cylinder, hydraulics, caliper, pads, disc, heat) | Why discs are vented; how hydraulics multiply force; why brakes fade | S |

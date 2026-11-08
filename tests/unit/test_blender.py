@@ -156,6 +156,22 @@ def test_a_machine_without_a_model_waits_without_work(ctx: AppContext) -> None:
     assert "no Blender model for 'turbocharger'" in blender.missing_message("turbocharger")
 
 
+def test_a_model_for_long_videos_only_refuses_a_short_before_any_gemini_call(
+    ctx: AppContext,
+) -> None:
+    short = add_content(ctx.conn, ctx.channel, object_name="starter motor", fmt="short",
+                        pillar="vehicles", style="blender")  # fmt: skip
+    episode = add_content(ctx.conn, ctx.channel, object_name="starter motor", fmt="episode",
+                          pillar="vehicles", style="blender")  # fmt: skip
+
+    with pytest.raises(FactoryError, match="no Short film yet"):
+        script_stage._script_one(ctx, row(ctx, short), llm=None, http=None)  # type: ignore[arg-type]
+    assert blender.film_message("starter motor", "episode") is None
+    assert blender.film_message("alternator", "short") is None
+    assert "no Blender model" in (blender.film_message("turbocharger", "episode") or "")
+    assert status(ctx, episode) == "idea"
+
+
 def test_jobs_are_9_16_or_16_9(ctx: AppContext) -> None:
     content_id = issue(ctx)
 

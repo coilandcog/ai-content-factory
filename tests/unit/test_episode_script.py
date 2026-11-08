@@ -290,11 +290,14 @@ def test_an_approved_long_video_gets_one_render_job_per_chapter(ctx: AppContext)
 
 
 def test_every_template_has_a_blender_scene() -> None:
+    from factory import blender
     from factory.blender import jobs
 
-    source = (jobs.JOB_FILES / alternator.MODEL_FILE).read_text()
-    for name in alternator.TEMPLATES:
-        assert name == "note" or f'"{name}"' in source, name  # "note" is the last, else branch
+    for model in blender.MODELS.values():
+        source = (jobs.JOB_FILES / model.MODEL_FILE).read_text()
+        for name, template in model.TEMPLATES.items():
+            assert f'"{name}"' in source, (model.MACHINE, name)
+            assert set(template.shows) <= {"*", *model.PARTS}, (model.MACHINE, name)
 
 
 def test_long_scripts_use_the_long_script_model(ctx: AppContext) -> None:

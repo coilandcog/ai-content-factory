@@ -129,8 +129,8 @@ def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
         set_status(ctx.conn, content_id, "awaiting_clips", reason="blueprint film next")
         return _draw(ctx, row)
     if row["visual_style"] == "blender":
-        if row["object_name"] not in blender.MODELS:  # no model yet: wait, do no work
-            log.warning("#%s: %s", content_id, blender.missing_message(row["object_name"]),
+        if problem := blender.film_message(row["object_name"], row["format"]):
+            log.warning("#%s: %s", content_id, problem,  # no model or film yet: wait, do no work
                         extra={"content_id": content_id, "event": "blender_missing"})  # fmt: skip
             return False
         voice.render(ctx, content_id, speech)

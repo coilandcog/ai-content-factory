@@ -11,7 +11,8 @@ from factory.blender import Template
 from factory.blueprint.canvas import Fact
 
 MACHINE = "alternator"
-MODEL_FILE = "alternator.py"  # in factory/blender/bpy/
+MODEL_FILE = "alternator.py"  # in factory/blender/job_files/
+SHORTS = True  # it has the 6-scene Short film (OUTLINE, ROLES, film())
 
 AUTO = "https://en.wikipedia.org/wiki/Alternator_(automotive)"
 ALTERNATOR = "https://en.wikipedia.org/wiki/Alternator"

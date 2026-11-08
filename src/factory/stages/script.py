@@ -19,7 +19,7 @@ from urllib.parse import quote, unquote
 import httpx
 from pydantic import BaseModel, Field, create_model, model_validator
 
-from factory import films
+from factory import blender, films
 from factory.blueprint.canvas import NUMBER, Fact
 from factory.budgets import check_and_record
 from factory.config import ChannelConfig
@@ -574,6 +574,9 @@ def _script_one(
         from factory.stages import episode_script  # here: it builds on this module
 
         return episode_script.write(ctx, row, llm, http, feedback)
+    blender_model = row["visual_style"] == "blender" and row["object_name"] in blender.MODELS
+    if blender_model and (problem := blender.film_message(row["object_name"], row["format"])):
+        raise FactoryError(problem)  # before any Gemini call (D-131)
     reference = page_summary(
         http, row["object_name"], before_call=lambda: check_and_record(conn, channel, "wikimedia")
     )
