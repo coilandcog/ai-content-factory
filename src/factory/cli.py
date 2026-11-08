@@ -943,10 +943,11 @@ def scenes_redo(
     their approvals stay."""
     with _tracked_run("scenes redo", config_dir) as run:
         ctx = _context(run, config_dir)
-        out = scenes_stage.redo(ctx, content_id, list(_shot_numbers(scene, "--scene")), reason)
+        zips = scenes_stage.redo(ctx, content_id, list(_shot_numbers(scene, "--scene")), reason)
         run.tally.processed = 1
-        typer.echo(f"#{content_id}: render {generate_stage.windows_path(out)} on the render PC, "
-                   "put the new clip(s) in the inbox, then uv run factory generate")  # fmt: skip
+        where = ", ".join(generate_stage.windows_path(z) for z in zips)
+        typer.echo(f"#{content_id}: render {where} on the render PC, put the new clip(s) in the "
+                   "inbox, then uv run factory generate")  # fmt: skip
 
 
 STYLE_CHANGEABLE = ("idea", "scripted", "script_approved", "awaiting_clips")

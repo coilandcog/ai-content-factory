@@ -544,17 +544,17 @@ def _glow_compositor(scene) -> None:
     nt.links.new(glare.outputs["Image"], comp.inputs["Image"])
 
 
-def render_frames(scene, frames, folder: Path, name: str, log) -> None:
+def render_frames(scene, frames, folder: Path, name: str, log, prefix: str = "") -> None:
     """Render frames one by one as PNGs; a frame only gets its final name when complete."""
     folder.mkdir(parents=True, exist_ok=True)
     done, times = 0, []
     for f in frames:
-        final = folder / f"{f:04d}.png"
+        final = folder / f"{prefix}{f:04d}.png"
         if final.is_file() and final.stat().st_size > 0:
             done += 1
             continue
         scene.frame_set(f)
-        tmp = folder / f"{f:04d}.tmp.png"
+        tmp = folder / f"{prefix}{f:04d}.tmp.png"
         scene.render.filepath = str(tmp)
         start = time.perf_counter()
         bpy.ops.render.render(write_still=True)

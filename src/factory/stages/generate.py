@@ -84,9 +84,6 @@ PROMPTS_FILE = script_stage.FLOW_PROMPTS_FILE  # the prompts issued, read back w
 ISSUED_FILE = "flow_issued.json"
 STILL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")  # optional owner images: still_NN.<ext>
 STILL_SAFE_AREA = "upper third and the lower quarter"  # where labels and subtitles go
-# Long videos wait at script_approved until their scene templates render chapter by chapter
-# (ROADMAP 2.30); tests of the 16:9 assembly switch this on (D-129).
-EPISODE_RENDERS = False
 BLUEPRINT_FILE = films.FILM_FILES["blueprint"]  # the code-drawn film of a blueprint item (D-111)
 
 
@@ -132,11 +129,6 @@ def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
         set_status(ctx.conn, content_id, "awaiting_clips", reason="blueprint film next")
         return _draw(ctx, row)
     if row["visual_style"] == "blender":
-        if row["format"] == "episode" and not EPISODE_RENDERS:  # chapter renders: ROADMAP 2.30
-            log.warning("#%s: long-video renders in chapters come with ROADMAP 2.30; it waits",
-                        content_id,
-                        extra={"content_id": content_id, "event": "episode_waits"})  # fmt: skip
-            return False
         if row["object_name"] not in blender.MODELS:  # no model yet: wait, do no work
             log.warning("#%s: %s", content_id, blender.missing_message(row["object_name"]),
                         extra={"content_id": content_id, "event": "blender_missing"})  # fmt: skip
@@ -588,19 +580,21 @@ def _draw(ctx: AppContext, row: sqlite3.Row) -> bool:
 
 
 def _issue_render_job(ctx: AppContext, row: sqlite3.Row) -> bool:
-    """Write the Blender render job zip for the render PC and one row per scene (D-123, D-124);
-    the item waits for the scene clips."""
+    """Write the Blender render job zip(s) for the render PC and one row per scene (D-123,
+    D-124): one zip for a Short, one per chapter for a long video (D-130). The item waits for the
+    scene clips."""
     content_id = row["id"]
-    job = blender_jobs.job_for(ctx, row)
-    scenes_stage.create(ctx, content_id, job)
+    item_jobs = blender_jobs.jobs_for(ctx, row)
+    scenes_stage.create(ctx, content_id, item_jobs)
     inbox = blender_jobs.inbox_dir(ctx, content_id)
     inbox.mkdir(parents=True, exist_ok=True)
-    render = scenes_stage.pending(ctx.conn, content_id)
-    out = blender_jobs.write_zip(ctx, job, render, windows_path(inbox))
-    set_status(ctx.conn, content_id, "awaiting_clips", reason=f"Blender render: {out.name}")
-    log.info("#%s: Blender job %s ready: %s (%d scenes, %d frames) -> render it, then put the "
-             "scene clips in %s", content_id, job.job_id, windows_path(out), len(render),
-             job.spec["frames"], windows_path(inbox),
+    zips = scenes_stage.write_zips(ctx, content_id, item_jobs, windows_path(inbox))
+    names = ", ".join(z.name for z in zips)
+    set_status(ctx.conn, content_id, "awaiting_clips", reason=f"Blender render: {names}")
+    frames = sum(job.spec["frames"] for job in item_jobs)
+    log.info("#%s: Blender job(s) ready: %s (%d scenes, %d frames) -> render them, then put the "
+             "scene clips in %s", content_id, ", ".join(windows_path(z) for z in zips),
+             len(scenes_stage.pending(ctx.conn, content_id)), frames, windows_path(inbox),
              extra={"content_id": content_id, "event": "blender_job_issued"})  # fmt: skip
     return True
 
@@ -609,18 +603,23 @@ def _collect_render(ctx: AppContext, row: sqlite3.Row) -> bool:
     """Take each waiting scene's clip once it checks out (D-124); `generated` when every scene
     has one. The owner then approves the scenes (`factory scenes`) before assembly."""
     content_id = row["id"]
-    job = blender_jobs.job_for(ctx, row)
-    if not scenes_stage.matches(ctx.conn, content_id, job):  # none yet (2.26) or new timings
-        scenes_stage.create(ctx, content_id, job)
-    render = scenes_stage.pending(ctx.conn, content_id)
-    if render and blender_jobs.zip_job(ctx, content_id) != (job.job_id, render):
-        inbox = blender_jobs.inbox_dir(ctx, content_id)  # deleted, or the model changed
-        out = blender_jobs.write_zip(ctx, job, render, windows_path(inbox))
-        log.warning("#%s: Blender job rewritten as %s for scene %s (%s): render the new zip",
-                    content_id, job.job_id, ", ".join(map(str, render)), windows_path(out),
-                    extra={"content_id": content_id, "event": "blender_job_issued"})  # fmt: skip
-    problems = scenes_stage.collect(ctx, content_id, job)
-    replace_assets(ctx, content_id, "blender", scenes_stage.asset_rows(ctx, content_id, job))
+    item_jobs = blender_jobs.jobs_for(ctx, row)
+    if not scenes_stage.matches(ctx.conn, content_id, item_jobs):  # none yet or new timings
+        scenes_stage.create(ctx, content_id, item_jobs)
+    waiting = set(scenes_stage.pending(ctx.conn, content_id))
+    inbox = blender_jobs.inbox_dir(ctx, content_id)
+    for job in item_jobs:  # a zip deleted, or the model changed: write it again
+        render = sorted(waiting & set(job.numbers))
+        written = blender_jobs.zip_job(ctx, content_id, job.chapter)
+        if render and written != (job.job_id, render):
+            out = blender_jobs.write_zip(ctx, job, render, windows_path(inbox))
+            log.warning("#%s: Blender job rewritten as %s for scene %s (%s): render the new zip",
+                        content_id, job.job_id, ", ".join(map(str, render)), windows_path(out),
+                        extra={"content_id": content_id,
+                               "event": "blender_job_issued"})  # fmt: skip
+    problems = scenes_stage.collect(ctx, content_id, item_jobs)
+    rows = scenes_stage.asset_rows(ctx, content_id, item_jobs)
+    replace_assets(ctx, content_id, "blender", rows)
     if problems:
         log.info("#%s waiting for scene clips: %s", content_id, "; ".join(problems),
                  extra={"content_id": content_id, "event": "clips_waiting"})  # fmt: skip

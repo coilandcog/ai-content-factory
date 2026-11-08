@@ -297,7 +297,7 @@ A Blender film is made of scene clips, each rendered, checked, approved or redon
 | content_id | INTEGER FK → contents | |
 | chapter | INTEGER | 1 for now; long videos in chapters come with ROADMAP 2.30 |
 | n | INTEGER | Order within the video; unique per item and chapter |
-| role | TEXT | The model's scene: `hook` \| `body` \| `note` \| `close` |
+| role | TEXT | Shorts: the model's scene `hook` \| `body` \| `note` \| `close`; long videos: the scene's template (`whole`, `rotor`, ...), and `chapter` is the script's chapter (D-130) |
 | start_s / end_s | REAL | On the narration's timeline |
 | first_frame / last_frame | INTEGER | 1-based frames of the whole film at 30 fps; the scenes follow each other with no gap |
 | narration | TEXT | The words spoken while the scene is on screen (from `voice_words.json`) |

@@ -44,36 +44,48 @@ def pending(conn: sqlite3.Connection, content_id: int) -> list[int]:
     return [r["n"] for r in rows(conn, content_id) if r["status"] in PENDING]
 
 
-def create(ctx: AppContext, content_id: int, job: jobs.Job) -> None:
-    """One row per scene of the job, with the words spoken while it is on screen. Any older rows
-    (and their history) are replaced: this runs when the item's render job is first issued."""
+def _all_scenes(item_jobs: list[jobs.Job]) -> list[dict]:
+    """Every scene of an item's jobs (one job for a Short, one per chapter: D-130), in order."""
+    return sorted((s for job in item_jobs for s in job.spec["scenes"]), key=lambda s: s["n"])
+
+
+def job_of(item_jobs: list[jobs.Job], n: int) -> jobs.Job:
+    """The job (chapter) that renders scene n."""
+    return next(job for job in item_jobs if n in job.numbers)
+
+
+def create(ctx: AppContext, content_id: int, item_jobs: list[jobs.Job]) -> None:
+    """One row per scene of the item's jobs, with the words spoken while it is on screen. Any
+    older rows (and their history) are replaced: this runs when the render jobs are first
+    issued."""
     words = json.loads((voice.asset_dir(ctx, content_id) / voice.WORDS_FILE).read_text())
-    spec = job.spec
-    ends = [s["start"] for s in spec["scenes"][1:]] + [spec["duration_s"]]
+    scenes = _all_scenes(item_jobs)
+    ends = [s["start"] for s in scenes[1:]] + [item_jobs[0].spec["duration_s"]]
     with ctx.conn:
         old = [r["id"] for r in rows(ctx.conn, content_id)]
         ctx.conn.executemany("DELETE FROM scene_reviews WHERE scene_id = ?", [(i,) for i in old])
         ctx.conn.execute("DELETE FROM scenes WHERE content_id = ?", (content_id,))
-        for scene, end in zip(spec["scenes"], ends, strict=True):
+        for scene, end in zip(scenes, ends, strict=True):
             spoken = " ".join(w["text"] for w in words if scene["start"] <= w["start_s"] < end)
             ctx.conn.execute(
                 """
-                INSERT INTO scenes (content_id, n, role, start_s, end_s, first_frame,
+                INSERT INTO scenes (content_id, chapter, n, role, start_s, end_s, first_frame,
                                     last_frame, narration)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (content_id, scene["n"], scene["role"], scene["start"], end,
-                 scene["first_frame"], scene["last_frame"], spoken),
+                (content_id, scene.get("chapter", 1), scene["n"], scene["role"], scene["start"],
+                 end, scene["first_frame"], scene["last_frame"], spoken),
             )  # fmt: skip
 
 
-def matches(conn: sqlite3.Connection, content_id: int, job: jobs.Job) -> bool:
+def matches(conn: sqlite3.Connection, content_id: int, item_jobs: list[jobs.Job]) -> bool:
     """True when the rows have the job's scenes and frames. False when there are none or the
     timings changed (e.g. D-126) before any clip arrived, so they can be made again; changed
     timings after clips arrived would mix two cuts of the film, so that stops with a reason."""
     scene_rows = rows(conn, content_id)
     have = [(r["n"], r["role"], r["first_frame"], r["last_frame"]) for r in scene_rows]
-    want = [(s["n"], s["role"], s["first_frame"], s["last_frame"]) for s in job.spec["scenes"]]
+    want = [(s["n"], s["role"], s["first_frame"], s["last_frame"])
+            for s in _all_scenes(item_jobs)]  # fmt: skip
     if have == want:
         return True
     if any(r["path"] for r in scene_rows):
@@ -85,11 +97,11 @@ def matches(conn: sqlite3.Connection, content_id: int, job: jobs.Job) -> bool:
     return False
 
 
-def collect(ctx: AppContext, content_id: int, job: jobs.Job) -> list[str]:
+def collect(ctx: AppContext, content_id: int, item_jobs: list[jobs.Job]) -> list[str]:
     """Take every waiting scene's clip that checks out; returns what is still missing or wrong."""
     problems: list[str] = []
     for n in pending(ctx.conn, content_id):
-        clip, problem = jobs.find_clip(ctx, job, n)
+        clip, problem = jobs.find_clip(ctx, job_of(item_jobs, n), n)
         if clip is None:
             problems.append(problem or f"scene {n} missing")
             continue
@@ -109,12 +121,13 @@ def collect(ctx: AppContext, content_id: int, job: jobs.Job) -> list[str]:
     return problems
 
 
-def asset_rows(ctx: AppContext, content_id: int, job: jobs.Job) -> list[dict]:
+def asset_rows(ctx: AppContext, content_id: int, item_jobs: list[jobs.Job]) -> list[dict]:
     """The scene clips as `assets` rows (kind blender, shot_n = scene number)."""
-    spec = job.spec
     out = []
     for r in rows(ctx.conn, content_id):
         if r["path"]:
+            job = job_of(item_jobs, r["n"])
+            spec = job.spec
             out.append({
                 "path": ctx.root / r["path"], "shot_n": r["n"], "generator": "blender",
                 "model": f"blender/{spec['machine']}", "prompt": f"job {job.job_id}",
@@ -152,10 +165,11 @@ def approve(ctx: AppContext, content_id: int, numbers: list[int] | None = None) 
     return approved
 
 
-def redo(ctx: AppContext, content_id: int, numbers: list[int], reason: str) -> Path:
+def redo(ctx: AppContext, content_id: int, numbers: list[int], reason: str) -> list[Path]:
     """Only these scenes get rendered again: their clips are set aside (old_*.mp4 in the inbox),
     their approvals end, any renders of the whole video are removed, the item waits for clips,
-    and a job zip that renders just these scenes is written. Returns the zip."""
+    and job zips that render just these scenes are written (one per chapter they are in).
+    Returns the zips."""
     from factory.stages.generate import windows_path  # here: generate imports this module
     from factory.stages.review import REDO_REMOVES
 
@@ -168,7 +182,7 @@ def redo(ctx: AppContext, content_id: int, numbers: list[int], reason: str) -> P
         raise FactoryError(f"content #{content_id} is {item['status']}: scenes can be redone "
                            f"while it is {', '.join(REDO_STATUSES)}")  # fmt: skip
     scenes = _scenes(ctx, content_id, numbers)
-    job = jobs.job_for(ctx, item)
+    item_jobs = jobs.jobs_for(ctx, item)
     inbox, folder = jobs.inbox_dir(ctx, content_id), voice.asset_dir(ctx, content_id)
     with ctx.conn:
         for r in scenes:
@@ -199,11 +213,20 @@ def redo(ctx: AppContext, content_id: int, numbers: list[int], reason: str) -> P
         which = ", ".join(str(r["n"]) for r in scenes)
         if item["status"] != "awaiting_clips":
             set_status(ctx.conn, content_id, "awaiting_clips", reason=f"redo of scene {which}")
-    out = jobs.write_zip(ctx, job, pending(ctx.conn, content_id), windows_path(inbox))
+    out = write_zips(ctx, content_id, item_jobs, windows_path(inbox))
     log.info("#%s redo of scene %s (%s): render %s", content_id, which, reason.strip(),
-             windows_path(out),
+             ", ".join(windows_path(z) for z in out),
              extra={"content_id": content_id, "event": "scenes_redo"})  # fmt: skip
     return out
+
+
+def write_zips(
+    ctx: AppContext, content_id: int, item_jobs: list[jobs.Job], inbox_windows: str
+) -> list[Path]:
+    """A zip for every job that still has waiting scenes, rendering just those scenes."""
+    waiting = set(pending(ctx.conn, content_id))
+    return [jobs.write_zip(ctx, job, sorted(waiting & set(job.numbers)), inbox_windows)
+            for job in item_jobs if waiting & set(job.numbers)]  # fmt: skip
 
 
 def not_ready(ctx: AppContext, content_id: int) -> list[str]:

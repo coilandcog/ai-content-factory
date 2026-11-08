@@ -305,3 +305,128 @@ def _animate(g, m, t, frames: int) -> None:
         for i, spark in enumerate(g["sparks"]):
             u = (s * 0.45 + i / len(g["sparks"])) % 1.0
             kit.key(spark, "location", n, kit.along(g["path"], u), "LINEAR")
+
+
+# --- long videos: one animated view per scene (D-130) --------------------------------------------
+# Each template is a scene of its own: the model is built, posed and animated over exactly the
+# scene's frames (local frame 1 = the scene's start). Cameras move slowly and smoothly; in a 16:9
+# frame (same height of view as 9:16) they come closer, so the machine fills more of the picture.
+
+EXPLODED = {
+    "front": (0, 0, 1.35),
+    "stator": (0, 0, -1.05),
+    "rear": (0, 0, -1.75),
+    "rectifier": (0, 0, -2.10),
+    "cover": (-1.6, -1.7, -2.6),
+    "brushes": (0, 0, 0),
+}
+LABELS = {"rotor": "ROTOR", "stator": "STATOR", "rectifier": "DIODES", "brushes": "SLIP RINGS"}
+
+
+def template(scene, spec: dict, job: dict) -> None:
+    """Build and animate one view of a long video: spec has template and frames (render.py)."""
+    name, frames = spec["template"], spec["frames"]
+    d = frames / kit.FPS  # the scene's length in seconds
+    wide = job["width"] > job["height"]
+    m = materials()
+    g = build(m)
+    kit.studio(scene)
+    for spin in g["spin"]:  # the rotor and pulley always turn
+        kit.key(spin, "rotation_euler", 1, 0.0, "LINEAR", index=2)
+        kit.key(spin, "rotation_euler", frames, rotor_angle(d), "LINEAR", index=2)
+    for loop in g["field"]:
+        loop.scale = (0, 0, 0)  # the magnetic field shows only where it is explained
+    for obj in [g["cable"], *g["sparks"]]:
+        kit.set_visible(obj, 1, False)
+    close = 0.8 if wide else 1.0  # how much closer a 16:9 camera comes for part views
+
+    def cam(*keys):  # (fraction of the scene, target, distance, azimuth °, elevation °)
+        return kit.camera_rig(scene, [(f * d, t, dist, az, el) for f, t, dist, az, el in keys])
+
+    if name == "whole":
+        camera = cam((0, (0, 0, 0.1), 5.6 * close, -70, 16), (1, (0, 0, 0.1), 5.2 * close, -30, 18))
+    elif name == "exploded":
+        f = kit.frame_at(min(2.0, 0.35 * d))
+        for part, offset in EXPLODED.items():
+            kit.move(g[part], 1, f, (0, 0, 0), offset)
+        camera = cam((0, (0, 0, 0.1), 5.6, -55, 16), (0.4, (0, 0, -0.4), 8.6, -40, 12),
+                     (1, (0, 0, -0.4), 8.4, -15, 10))  # fmt: skip
+    else:
+        _pose(g, stator_home=name in ("stator", "brushes"))
+        if name == "rotor":
+            camera = cam((0, (0, 0, 0), 3.8 * close, -35, 18), (1, (0, 0, 0), 3.4 * close, 5, 20))
+            _field(g, m, 0.15 * d)
+        elif name == "stator":
+            camera = cam((0, (0, 0, 0), 4.0 * close, -5, 38), (1, (0, 0, 0), 3.7 * close, 30, 36))
+            _field(g, m, 0.0)
+            _glow(m, frames, phases=(0.05 * d, 7.0))
+        elif name == "rectifier":
+            camera = cam((0, (0, 0, -2.75), 3.6 * close, 25, -30),
+                         (1, (0, 0, -2.75), 3.3 * close, 65, -28))  # fmt: skip
+            _glow(m, frames, diodes=0.1 * d, stud=0.35 * d)
+            _current(g, frames, 0.35 * d)
+        elif name == "brushes":
+            camera = cam((0, (0, 0, -0.7), 3.2 * close, 85, -12),
+                         (1, (0, 0, -0.7), 2.9 * close, 115, -9))  # fmt: skip
+            _glow(m, frames, slip=(0.2 * d, 2.5))
+        else:  # "note": a slow look around the whole opened machine
+            camera = cam((0, (0, 0, -0.6), 8.6, 95, 8), (1, (0, 0, -0.6), 8.2, 140, 10))
+            _field(g, m, 0.0)
+            _glow(m, frames, phases=(0.0, 3.0))
+    if name in LABELS:
+        group = {"rotor": "rotor", "stator": "stator", "rectifier": "rectifier",
+                 "brushes": "brushes"}[name]  # fmt: skip
+        where = {"rotor": kit.toward(-15, 0.5, 0.58), "stator": kit.toward(12, 0.55, 0.62),
+                 "rectifier": kit.toward(45, 0.8, -0.5),
+                 "brushes": kit.toward(100, 0.6, -0.95)}[name]  # fmt: skip
+        size = 0.08 if name == "brushes" else 0.13
+        obj = kit.label(LABELS[name], g[group], where, camera, m["label"], size)
+        kit.show_label(obj, min(0.6, 0.1 * d), max(d - 0.6, 0.9 * d))
+
+
+def _pose(g, stator_home: bool) -> None:
+    """The opened alternator, still: the parts apart, the stator around the rotor if wanted."""
+    for part, offset in EXPLODED.items():
+        g[part].location = (0, 0, 0) if part == "stator" and stator_home else offset
+
+
+def _field(g, m, t_on: float) -> None:
+    for loop in g["field"]:
+        full = (0.75, 1.0, 1.0)
+        kit.key(loop, "scale", kit.frame_at(t_on), (0, 0, 0))
+        kit.key(loop, "scale", kit.frame_at(t_on + 0.8), full)
+    kit.node_value(m["field"], "Glow", "Strength", kit.frame_at(t_on), 0.0)
+    kit.node_value(m["field"], "Glow", "Strength", kit.frame_at(t_on + 0.8), 6.0)
+
+
+def _glow(m, frames: int, phases=None, diodes=None, slip=None, stud=None) -> None:
+    """Three-phase glow, diode pulses and slip-ring glow over the scene (one key every 2 frames)."""
+    for n in range(1, frames + 1, 2):
+        s = (n - 1) / kit.FPS
+        waves = [max(0.0, math.cos(POLE_PAIRS * rotor_angle(s) - k * 2 * math.pi / 3)) ** 2
+                 for k in range(3)]  # fmt: skip
+        if phases is not None:
+            start, level = phases
+            for k in range(3):
+                kit.glow(m[f"phase{k}"], n, kit.ramp(s, start, start + 0.8, 0, level) * waves[k])
+        if diodes is not None:
+            kit.glow(
+                m["diode"], n, kit.ramp(s, diodes, diodes + 0.6, 0, 9) * (0.35 + 0.65 * max(waves))
+            )
+        if slip is not None:
+            start, level = slip
+            kit.glow(m["slip"], n, kit.ramp(s, start, start + 0.6, 0, level))
+        if stud is not None:  # direct current leaves through the output terminal
+            kit.glow(m["stud"], n, kit.ramp(s, stud, stud + 0.6, 0, 10))
+
+
+def _current(g, frames: int, t_on: float) -> None:
+    """Direct current leaving the B+ stud: steady one-way pulses along the cable."""
+    show = kit.frame_at(t_on)
+    for obj in [g["cable"], *g["sparks"]]:
+        kit.set_visible(obj, show, True)
+    for n in range(show, frames + 1, 2):
+        s = (n - show) / kit.FPS
+        for i, spark in enumerate(g["sparks"]):
+            u = (s * 0.45 + i / len(g["sparks"])) % 1.0
+            kit.key(spark, "location", n, kit.along(g["path"], u), "LINEAR")

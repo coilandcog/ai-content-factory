@@ -19,6 +19,7 @@ import sqlite3
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from factory import blender
 from factory.blueprint.canvas import LEAD_S, count_sentences, scene_starts, sentences
@@ -42,6 +43,15 @@ class Job:
     def clip_name(self, n: int) -> str:
         return clip_name(self.job_id, n)
 
+    @property
+    def chapter(self) -> int | None:
+        """The chapter a long video's job renders (D-130); None for a Short's single job."""
+        return self.spec.get("chapter")
+
+    @property
+    def numbers(self) -> list[int]:
+        return [s["n"] for s in self.spec["scenes"]]
+
 
 def clip_name(job_id: str, n: int) -> str:
     """What the render PC calls scene n's clip (render.py uses the same pattern)."""
@@ -58,12 +68,29 @@ def inbox_dir(ctx: AppContext, content_id: int) -> Path:
     return ctx.root / ctx.settings.paths.inbox_dir / "blender" / f"{content_id:06d}"
 
 
-def zip_path(ctx: AppContext, content_id: int) -> Path:
-    return outbox_dir(ctx) / f"job_{content_id:06d}.zip"
+def zip_path(ctx: AppContext, content_id: int, chapter: int | None = None) -> Path:
+    """job_000NNN.zip, or job_000NNN_chK.zip for chapter K of a long video (D-130)."""
+    suffix = f"_ch{chapter}" if chapter else ""
+    return outbox_dir(ctx) / f"job_{content_id:06d}{suffix}.zip"
 
 
-def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
-    """The render job for an item whose voice exists: scene times from the narration."""
+def jobs_for(ctx: AppContext, row: sqlite3.Row) -> list[Job]:
+    """An item's render jobs: one for a Short, one per chapter for a long video (D-130)."""
+    return episode_jobs(ctx, row) if row["format"] == "episode" else [job_for(ctx, row)]
+
+
+@dataclass(frozen=True)
+class _Basis:
+    """What every job of an item shares: its model, picture size and voice."""
+
+    model: Any
+    size: tuple[int, int]
+    words: list[dict]
+    duration: float
+    voice_sha: str
+
+
+def _basis(ctx: AppContext, row: sqlite3.Row) -> _Basis:
     content_id = row["id"]
     model = blender.model_for(row["object_name"])
     aspect = getattr(ctx.channel.formats, row["format"]).aspect
@@ -80,8 +107,85 @@ def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
     words_file, voice_wav = folder / voice.WORDS_FILE, folder / "voice.wav"
     if not voice_wav.is_file() or not words_file.is_file():
         raise FactoryError(f"voice missing: run `factory voice render {content_id}`")
-    words = json.loads(words_file.read_text())
-    duration = float(probe(voice_wav)["format"]["duration"])
+    return _Basis(model, SIZES[aspect], json.loads(words_file.read_text()),
+                  float(probe(voice_wav)["format"]["duration"]),
+                  hashlib.sha256(voice_wav.read_bytes()).hexdigest())  # fmt: skip
+
+
+def _finish(spec: dict, model: Any) -> Job:
+    """The job id: a fingerprint of job.json and the Blender files, so a changed model or new
+    timings make a new job whose clips can't be mixed up with older ones."""
+    files_sha = hashlib.sha256()
+    for name in ("render.py", "kit.py", model.MODEL_FILE):
+        files_sha.update((JOB_FILES / name).read_bytes())
+    fingerprint = hashlib.sha256(
+        (json.dumps(spec, sort_keys=True) + files_sha.hexdigest()).encode()
+    ).hexdigest()
+    spec["job_id"] = fingerprint[:8]
+    return Job(spec, fingerprint[:8])
+
+
+def _common(row: sqlite3.Row, b: _Basis) -> dict:
+    return {
+        "content_id": row["id"],
+        "machine": b.model.MACHINE,
+        "model_file": b.model.MODEL_FILE,
+        "fps": FPS,
+        "width": b.size[0],
+        "height": b.size[1],
+        "voice_sha256": b.voice_sha,
+    }
+
+
+def episode_jobs(ctx: AppContext, row: sqlite3.Row) -> list[Job]:
+    """A long video's jobs, one per chapter (D-130). Each scene uses its template from the
+    script and starts on its own first word (exact: the voice's words are the script's words)."""
+    b = _basis(ctx, row)
+    script = ctx.conn.execute(
+        "SELECT shot_list_json FROM scripts WHERE content_id = ? AND is_current = 1", (row["id"],)
+    ).fetchone()
+    plan = json.loads(script["shot_list_json"]) if script else []
+    if not plan or plan[0].get("kind") != "scene":
+        raise FactoryError(f"#{row['id']} has no long-video script in chapters (D-129)")
+    unknown = sorted({s["template"] for s in plan} - set(b.model.TEMPLATES))
+    if unknown:
+        raise FactoryError(f"the {b.model.MACHINE} model has no template {', '.join(unknown)}")
+    counts = [len(s["narration"].split()) for s in plan]
+    if sum(counts) != len(b.words):
+        raise FactoryError(f"the voice has {len(b.words)} words but the scenes {sum(counts)}: "
+                           f"run `factory voice render {row['id']}` again")  # fmt: skip
+    firsts_word = [sum(counts[:k]) for k in range(len(plan))]
+    starts = [0.0] + [max(0.0, b.words[i]["start_s"] - LEAD_S) for i in firsts_word[1:]]
+    frames = math.ceil(b.duration * FPS)
+    firsts = [1] + [round(t * FPS) + 1 for t in starts[1:]]
+    lasts = [f - 1 for f in firsts[1:]] + [frames]
+    short = [f"scene {s['n']} {(c - a + 1) / FPS:.1f} s"
+             for s, a, c in zip(plan, firsts, lasts, strict=True)
+             if (c - a + 1) / FPS < MIN_SCENE_S]  # fmt: skip
+    if short:
+        raise FactoryError(f"scenes shorter than {MIN_SCENE_S} s: {', '.join(short)}")
+    scenes = [{"n": s["n"], "role": s["template"], "template": s["template"],
+               "chapter": s["chapter"], "start": round(t, 3), "first_frame": a, "last_frame": c,
+               "frames": c - a + 1}
+              for s, t, a, c in zip(plan, starts, firsts, lasts, strict=True)]  # fmt: skip
+    chapters = sorted({s["chapter"] for s in scenes})
+    jobs = []
+    for chapter in chapters:
+        mine = [s for s in scenes if s["chapter"] == chapter]
+        spec = {**_common(row, b), "mode": "templates", "chapter": chapter,
+                "chapters": len(chapters), "duration_s": round(b.duration, 3),
+                "frames": sum(s["frames"] for s in mine), "scenes": mine}  # fmt: skip
+        jobs.append(_finish(spec, b.model))
+    return jobs
+
+
+def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
+    """A Short's single render job: scene times from the narration (D-123, D-126)."""
+    if row["format"] == "episode":
+        raise FactoryError("a long video has one job per chapter: use jobs_for (D-130)")
+    b = _basis(ctx, row)
+    model, words, duration = b.model, b.words, b.duration
+    content_id = row["id"]
     note = ctx.conn.execute(
         "SELECT engineer_note FROM scripts WHERE content_id = ? AND is_current = 1", (content_id,)
     ).fetchone()
@@ -94,34 +198,20 @@ def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
     if short:
         raise FactoryError(f"scenes shorter than {MIN_SCENE_S} s: {', '.join(short)}; "
                            "the narration needs more sentences per scene")  # fmt: skip
-    width, height = SIZES[aspect]
     frames = math.ceil(duration * FPS)  # the film is never shorter than the voice
     firsts = [1] + [round(s * FPS) + 1 for s in starts[1:]]
     lasts = [f - 1 for f in firsts[1:]] + [frames]
     rows = zip(model.ROLES, starts, firsts, lasts, strict=True)
     spec = {
-        "content_id": content_id,
-        "machine": model.MACHINE,
-        "model_file": model.MODEL_FILE,
-        "fps": FPS,
-        "width": width,
-        "height": height,
+        **_common(row, b),
         "duration_s": round(duration, 3),
         "frames": frames,
         "scenes": [
-            {"n": n, "role": r, "start": round(s, 3), "first_frame": a, "last_frame": b}
-            for n, (r, s, a, b) in enumerate(rows, 1)
+            {"n": n, "role": r, "start": round(s, 3), "first_frame": a, "last_frame": c}
+            for n, (r, s, a, c) in enumerate(rows, 1)
         ],
-        "voice_sha256": hashlib.sha256(voice_wav.read_bytes()).hexdigest(),
     }  # fmt: skip
-    files_sha = hashlib.sha256()
-    for name in ("render.py", "kit.py", model.MODEL_FILE):  # a changed model is a new job too
-        files_sha.update((JOB_FILES / name).read_bytes())
-    fingerprint = hashlib.sha256(
-        (json.dumps(spec, sort_keys=True) + files_sha.hexdigest()).encode()
-    ).hexdigest()
-    spec["job_id"] = fingerprint[:8]
-    return Job(spec, fingerprint[:8])
+    return _finish(spec, model)
 
 
 def _body_starts_by_topic(
@@ -167,10 +257,12 @@ def _sentence_texts(words: list[dict]) -> list[str]:
     return out
 
 
-def zip_job(ctx: AppContext, content_id: int) -> tuple[str, list[int]] | None:
+def zip_job(
+    ctx: AppContext, content_id: int, chapter: int | None = None
+) -> tuple[str, list[int]] | None:
     """(job id, scenes to render) of the outbox zip, None when there is no readable zip."""
     try:
-        with zipfile.ZipFile(zip_path(ctx, content_id)) as z:
+        with zipfile.ZipFile(zip_path(ctx, content_id, chapter)) as z:
             spec = json.loads(z.read("job.json"))
         return spec["job_id"], spec["render"]
     except (OSError, KeyError, zipfile.BadZipFile, json.JSONDecodeError):
@@ -181,7 +273,7 @@ def write_zip(ctx: AppContext, job: Job, render: list[int], inbox_windows: str) 
     """data/outbox/blender/job_<id>.zip rendering the given scenes; replaced in one step, never
     half-written."""
     spec = {**job.spec, "render": sorted(render)}
-    out = zip_path(ctx, spec["content_id"])
+    out = zip_path(ctx, spec["content_id"], job.chapter)
     out.parent.mkdir(parents=True, exist_ok=True)
     fonts = ctx.root / ctx.settings.paths.assets_static_dir / "fonts"
     tmp = out.with_suffix(".zip.part")
@@ -201,14 +293,16 @@ def how_to_run(job: Job, render: list[int], inbox_windows: str) -> str:
     scenes = [s for s in spec["scenes"] if s["n"] in render]
     frames = sum(s["last_frame"] - s["first_frame"] + 1 for s in scenes)
     minutes = frames * 3.2 / 60  # EEVEE on the GTX 750 Ti (D-121)
-    folder = f"job_{spec['content_id']:06d}"
+    folder = f"job_{spec['content_id']:06d}" + (f"_ch{job.chapter}" if job.chapter else "")
+    part = f", chapter {job.chapter} of {spec['chapters']}" if job.chapter else ""
     which = (
         "all scenes"
         if len(scenes) == len(spec["scenes"])
         else (f"only scene {', '.join(str(s['n']) for s in scenes)} (a redo)")
     )
     clips = "\n".join(f"       out\\{job.clip_name(s['n'])}" for s in scenes)
-    return f"""COIL & COG RENDER JOB #{spec["content_id"]} ({spec["machine"]}, job {job.job_id})
+    title = f"#{spec['content_id']} ({spec['machine']}{part}, job {job.job_id})"
+    return f"""COIL & COG RENDER JOB {title}
 {"=" * 60}
 Renders {which}: {frames} frames, {spec["width"]}x{spec["height"]} at {spec["fps"]} fps
 (about {minutes:.0f} min in EEVEE on the GTX 750 Ti).

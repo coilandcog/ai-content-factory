@@ -351,23 +351,30 @@ def test_a_long_video_is_16_9_youtube_only_with_chapters(
     from factory.blender import jobs
     from factory.stages import scenes
 
-    monkeypatch.setattr(generate, "EPISODE_RENDERS", True)  # chapter renders come with 2.30
     # Test renders are about 37 s, so this test channel accepts 25-45 s long videos.
     episode = ctx.channel.formats.episode.model_copy(update={"min_s": 25, "max_s": 45})
     formats = ctx.channel.formats.model_copy(update={"episode": episode})
     ctx = replace(ctx, channel=ctx.channel.model_copy(update={"formats": formats}))
     content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="episode",
                              pillar="vehicles", style="blender")  # fmt: skip
-    narration = (
-        "Why does your car battery stay charged? The engine's belt turns the rotor inside. The "
-        "stator windings catch a changing current. Six diodes turn it into direct current. As an "
-        "engineer, I like the slip rings. It never stops."
-    )
+    sentences = [  # one scene each, three chapters of two scenes (D-129 plan, D-130 jobs)
+        ("whole", "Why does your car battery stay charged?"),
+        ("exploded", "The engine's belt turns the rotor inside."),
+        ("rotor", "The stator windings catch a changing current."),
+        ("stator", "Six diodes turn it into direct current."),
+        ("note", "As an engineer, I like the slip rings."),
+        ("whole", "It never stops."),
+    ]
+    plan = [{"n": n, "kind": "scene", "chapter": (n + 1) // 2, "chapter_title": "x",
+             "template": t, "narration": text, "beat": t, "description": text,
+             "duration_s": 6, "prompt_vars": {}}
+            for n, (t, text) in enumerate(sentences, 1)]  # fmt: skip
+    narration = " ".join(text for _, text in sentences)
     with ctx.conn:
         ctx.conn.execute(
             "INSERT INTO scripts (content_id, version, body_text, engineer_note, est_duration_s, "
-            "shot_list_json) VALUES (?, 1, ?, 'As an engineer, I like the slip rings.', 31, '[]')",
-            (content_id, narration),
+            "shot_list_json) VALUES (?, 1, ?, 'As an engineer, I like the slip rings.', 31, ?)",
+            (content_id, narration, json.dumps(plan)),
         )
         for url in ("https://en.wikipedia.org/wiki/Alternator", "https://example.edu/alternators"):
             ctx.conn.execute(
@@ -379,21 +386,22 @@ def test_a_long_video_is_16_9_youtube_only_with_chapters(
     tts = make_fake_tts(seconds=36.0, amplitude=0.05)
     generate.run(ctx, tts=lambda: tts)
     row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
-    job = jobs.job_for(ctx, row)
-    assert (job.spec["width"], job.spec["height"]) == (1920, 1080)
-    for scene in job.spec["scenes"]:
-        frames = scene["last_frame"] - scene["first_frame"] + 1
-        run_ffmpeg(["-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=30", "-frames:v",
-                    str(frames), "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-                    str(jobs.inbox_dir(ctx, content_id) / job.clip_name(scene["n"]))])  # fmt: skip
+    chapter_jobs = jobs.jobs_for(ctx, row)
+    assert [j.chapter for j in chapter_jobs] == [1, 2, 3]  # one render job per chapter
+    assert all(jobs.zip_path(ctx, content_id, c).is_file() for c in (1, 2, 3))
+    for job in chapter_jobs:
+        assert (job.spec["width"], job.spec["height"]) == (1920, 1080)
+        for scene in job.spec["scenes"]:
+            clip = jobs.inbox_dir(ctx, content_id) / job.clip_name(scene["n"])
+            run_ffmpeg(["-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=30", "-frames:v",
+                        str(scene["frames"]), "-c:v", "libx264", "-preset", "ultrafast",
+                        "-pix_fmt", "yuv420p", str(clip)])  # fmt: skip
     generate.run(ctx, tts=lambda: tts)
     scenes.approve(ctx, content_id)
-    with ctx.conn:  # three chapters (2.29 will set these from the script)
+    with ctx.conn:  # the script stage saves these titles (D-129)
         for n, title in ((1, "Intro"), (2, "Rotor and stator"), (3, "Diodes")):
             ctx.conn.execute("INSERT INTO chapters (content_id, n, title) VALUES (?, ?, ?)",
                              (content_id, n, title))  # fmt: skip
-        ctx.conn.execute("UPDATE scenes SET chapter = CASE WHEN n <= 2 THEN 1 WHEN n <= 4 THEN 2 "
-                         "ELSE 3 END WHERE content_id = ?", (content_id,))  # fmt: skip
     add_music(ctx)
 
     result = assemble.run(ctx, llm=fake_llm())

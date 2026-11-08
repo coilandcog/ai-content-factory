@@ -243,18 +243,58 @@ def test_a_part_scene_must_name_what_it_shows(ctx: AppContext) -> None:
     assert "scene 4 [rotor] never names what it shows" in sdk.calls[2]["contents"]
 
 
-def test_long_videos_wait_before_rendering_until_2_30(ctx: AppContext) -> None:
+def test_an_approved_long_video_gets_one_render_job_per_chapter(ctx: AppContext) -> None:
+    import zipfile
+
     from fakes.fake_tts import make_fake_tts
 
-    from factory.stages import generate
+    from factory.blender import jobs
+    from factory.stages import generate, scenes
 
     content_id = episode(ctx)
     run(ctx, *all_answers())
     set_status(ctx.conn, content_id, "script_approved")
 
-    generate.run(ctx, tts=lambda: make_fake_tts(seconds=2.0))
+    generate.run(ctx, tts=lambda: make_fake_tts(seconds=520.0))  # the narrator's real pace
 
-    assert status(ctx, content_id)[0] == "script_approved"
+    assert status(ctx, content_id)[0] == "awaiting_clips"
+    scene_rows = scenes.rows(ctx.conn, content_id)
+    assert [r["chapter"] for r in scene_rows] == [1] * 4 + [2] * 4 + [3] * 4 + [4] * 4
+    assert [r["role"] for r in scene_rows][:3] == ["whole", "exploded", "rotor"]
+    assert scene_rows[1]["narration"].startswith("Every part has one job")  # its own words
+    for chapter in (1, 2, 3, 4):
+        with zipfile.ZipFile(jobs.zip_path(ctx, content_id, chapter)) as z:
+            spec = json.loads(z.read("job.json"))
+        assert (spec["mode"], spec["chapter"], spec["width"]) == ("templates", chapter, 1920)
+        assert [s["chapter"] for s in spec["scenes"]] == [chapter] * 4
+        assert spec["render"] == [s["n"] for s in spec["scenes"]]
+    with zipfile.ZipFile(jobs.zip_path(ctx, content_id, 2)) as z:
+        how_to = z.read("HOW_TO_RUN.txt").decode()
+    assert "chapter 2 of 4" in how_to and "D:\\coilcog\\job_000001_ch2" in how_to
+
+    # a redo of one scene writes a new zip for its chapter only (D-130)
+    for chapter in (1, 2, 3, 4):
+        jobs.zip_path(ctx, content_id, chapter).unlink()
+    with ctx.conn:
+        ctx.conn.execute(
+            "UPDATE scenes SET status = 'approved' WHERE content_id = ?", (content_id,)
+        )
+        ctx.conn.execute("UPDATE scenes SET status = 'redo' WHERE content_id = ? AND n = 6",
+                         (content_id,))  # fmt: skip
+    item = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
+    inbox = str(jobs.inbox_dir(ctx, content_id))
+    written = scenes.write_zips(ctx, content_id, jobs.jobs_for(ctx, item), inbox)
+
+    assert [z.name for z in written] == ["job_000001_ch2.zip"]
+    assert jobs.zip_job(ctx, content_id, 2)[1] == [6]
+
+
+def test_every_template_has_a_blender_scene() -> None:
+    from factory.blender import jobs
+
+    source = (jobs.JOB_FILES / alternator.MODEL_FILE).read_text()
+    for name in alternator.TEMPLATES:
+        assert name == "note" or f'"{name}"' in source, name  # "note" is the last, else branch
 
 
 def test_long_scripts_use_the_long_script_model(ctx: AppContext) -> None:

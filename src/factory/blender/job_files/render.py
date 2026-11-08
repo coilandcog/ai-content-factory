@@ -69,6 +69,9 @@ def main() -> None:
     size = (job["width"], job["height"])
     log(f"--- {time.strftime('%Y-%m-%d %H:%M')} Blender {bpy.app.version_string}: "
         f"#{job['content_id']} {job['machine']}, {job['frames']} frames")  # fmt: skip
+    if job.get("mode") == "templates":  # a long video's chapter: one view per scene (D-130)
+        render_templates(job, model, opts, size)
+        return
     kit.clear_scene()
     scene = bpy.context.scene
     model.film(scene, job)
@@ -99,6 +102,35 @@ def main() -> None:
         if kit.encode(folder, OUT / name, s["first_frame"], s["last_frame"], size, log):
             names.append(name)
     if len(names) == len(chosen):
+        log(f"done: copy these {len(names)} clips from out/ to the factory's inbox "
+            f"(see HOW_TO_RUN.txt): {', '.join(names)}")  # fmt: skip
+
+
+def render_templates(job: dict, model, opts: dict, size) -> None:
+    """Each scene of the chapter is built and animated on its own (model.template), rendered to
+    its own frame folder (kept after a stop) and encoded as scene_<job id>_NN.mp4."""
+    chosen = [s for s in job["scenes"] if s["n"] in job["render"]]
+    names = []
+    for s in chosen:
+        kit.clear_scene()
+        scene = bpy.context.scene
+        model.template(scene, s, job)
+        used = kit.setup_render(scene, opts["engine"], size, s["frames"], opts["scale"],
+                                opts["samples"])  # fmt: skip
+        log(f"scene {s['n']} ({s['template']}, {s['frames']} frames): {used}")
+        if opts["sample"]:  # the middle of the scene
+            middle, folder = [s["frames"] // 2 + 1], OUT / f"sample_{opts['engine']}"
+            kit.render_frames(scene, middle, folder, f"sample scene {s['n']}", log,
+                              prefix=f"scene_{s['n']:02d}_")  # fmt: skip
+            continue
+        folder = OUT / f"frames_{opts['engine']}" / f"scene_{s['n']:02d}"
+        kit.render_frames(scene, list(range(1, s["frames"] + 1)), folder, f"scene {s['n']}", log)
+        if opts["scale"] != 100 or opts["frames"]:
+            continue
+        name = f"scene_{job['job_id']}_{s['n']:02d}.mp4"
+        if kit.encode(folder, OUT / name, 1, s["frames"], size, log):
+            names.append(name)
+    if names and len(names) == len(chosen):
         log(f"done: copy these {len(names)} clips from out/ to the factory's inbox "
             f"(see HOW_TO_RUN.txt): {', '.join(names)}")  # fmt: skip
 

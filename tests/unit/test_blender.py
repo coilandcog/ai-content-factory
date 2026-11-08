@@ -257,7 +257,7 @@ def test_a_redo_renders_only_its_scene_and_keeps_the_others(ctx: AppContext) -> 
     scenes.approve(ctx, content_id)
     kept = scenes.clip_path(ctx, content_id, 2).read_bytes()
 
-    out = scenes.redo(ctx, content_id, [3], "the stator glow starts too late")
+    [out] = scenes.redo(ctx, content_id, [3], "the stator glow starts too late")
 
     assert status(ctx, content_id) == "awaiting_clips"
     assert scene_status(ctx, content_id)[3] == "redo"
