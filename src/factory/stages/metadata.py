@@ -125,6 +125,9 @@ def build(
     channel = ctx.channel
     title, caption = draft.youtube_title, draft.tiktok_caption
     description = [draft.youtube_summary]
+    lines, problem = chapters(ctx.conn, item["id"])
+    if lines and problem is None:  # YouTube turns these lines into chapters (D-128)
+        description += ["", *lines]
     part = series_stage.context(ctx.conn, item["id"])
     if part is not None:  # a series part: exact title, part number and links (D-112)
         title = part.title if len(part.title) <= TITLE_MAX else title
@@ -167,6 +170,47 @@ def build(
         },  # fmt: skip
         "cover": "cover.jpg",
     }
+
+
+CHAPTERS_MIN = 3  # YouTube's rules for chapters in a description
+CHAPTER_MIN_S = 10
+
+
+def chapters(conn: sqlite3.Connection, content_id: int) -> tuple[list[str], str | None]:
+    """YouTube chapter lines ("0:00 Intro", "2:05 The rotor") from the item's chapter titles
+    and each chapter's first scene, plus why they break YouTube's rules (first at 0:00, at least
+    3, each at least 10 s), or None. No chapters at all: ([], None)."""
+    rows = conn.execute(
+        """
+        SELECT c.n, c.title, MIN(s.start_s) AS start_s, MAX(s.end_s) AS end_s
+        FROM chapters c LEFT JOIN scenes s ON s.content_id = c.content_id AND s.chapter = c.n
+        WHERE c.content_id = ? GROUP BY c.n, c.title ORDER BY c.n
+        """,
+        (content_id,),
+    ).fetchall()
+    if not rows:
+        return [], None
+    empty = [r["n"] for r in rows if r["start_s"] is None]
+    if empty:
+        return [], f"chapter {', '.join(map(str, empty))} has no scenes"
+    starts = [int(r["start_s"]) for r in rows]
+    ends = [*starts[1:], int(rows[-1]["end_s"])]
+    lines = [f"{_timestamp(s)} {r['title'].strip()}" for s, r in zip(starts, rows, strict=True)]
+    problems = []
+    if starts[0] != 0:
+        problems.append(f"the first chapter starts at {_timestamp(starts[0])}, not 0:00")
+    if len(rows) < CHAPTERS_MIN:
+        problems.append(f"{len(rows)} chapters (YouTube needs at least {CHAPTERS_MIN})")
+    short = [r["n"] for r, a, b in zip(rows, starts, ends, strict=True) if b - a < CHAPTER_MIN_S]
+    if short:
+        problems.append(f"chapter {', '.join(map(str, short))} shorter than {CHAPTER_MIN_S} s")
+    return lines, "; ".join(problems) or None
+
+
+def _timestamp(seconds: int) -> str:
+    minutes, secs = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
 
 
 def load(ctx: AppContext, content_id: int) -> dict[str, Any]:

@@ -171,7 +171,7 @@ def test_both_renders_and_preview_are_made_and_tiktok_has_no_music(ctx: AppConte
     status = ctx.conn.execute("SELECT status FROM contents").fetchone()[0]
     assert status == "assembled"  # every QA check passed
     report = json.loads((folder / "qa_report.json").read_text())
-    assert {r["check"] for r in report if r["ok"] is not True} == {"similarity"}
+    assert {r["check"] for r in report if r["ok"] is not True} == {"similarity", "chapters"}
     meta = json.loads((folder / "metadata.json").read_text())
     assert meta["youtube"]["title"].startswith("Alternator in 40 seconds")
     cover = Image.open(folder / "cover.jpg")
@@ -231,7 +231,7 @@ def test_blueprint_film_is_the_whole_picture(
     status = ctx.conn.execute("SELECT status FROM contents").fetchone()[0]
     assert status == "assembled"  # no diagram cards needed: the film draws its own
     report = json.loads((folder / "qa_report.json").read_text())
-    assert {r["check"] for r in report if r["ok"] is not True} == {"similarity"}
+    assert {r["check"] for r in report if r["ok"] is not True} == {"similarity", "chapters"}
     [cover] = ctx.conn.execute("SELECT model, license FROM assets WHERE kind = 'cover'").fetchall()
     assert tuple(cover) == ("frame of blueprint", "own_work")
 
@@ -338,3 +338,78 @@ def test_least_used_track_is_picked_and_bad_files_are_refused(ctx: AppContext) -
         add_track(ctx, not_audio, title="Notes")
     with pytest.raises(FactoryError, match="file not found"):
         add_track(ctx, ctx.root / "missing.mp3", title="Missing")
+
+
+# --- long videos: 16:9, YouTube only, chapters (D-128) -------------------------------------------
+
+
+def test_a_long_video_is_16_9_youtube_only_with_chapters(
+    ctx: AppContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from factory.blender import jobs
+    from factory.stages import scenes
+
+    # Test renders are about 37 s, so this test channel accepts 25-45 s long videos.
+    episode = ctx.channel.formats.episode.model_copy(update={"min_s": 25, "max_s": 45})
+    formats = ctx.channel.formats.model_copy(update={"episode": episode})
+    ctx = replace(ctx, channel=ctx.channel.model_copy(update={"formats": formats}))
+    content_id = add_content(ctx.conn, ctx.channel, object_name="alternator", fmt="episode",
+                             pillar="vehicles", style="blender")  # fmt: skip
+    narration = (
+        "Why does your car battery stay charged? The engine's belt turns the rotor inside. The "
+        "stator windings catch a changing current. Six diodes turn it into direct current. As an "
+        "engineer, I like the slip rings. It never stops."
+    )
+    with ctx.conn:
+        ctx.conn.execute(
+            "INSERT INTO scripts (content_id, version, body_text, engineer_note, est_duration_s, "
+            "shot_list_json) VALUES (?, 1, ?, 'As an engineer, I like the slip rings.', 31, '[]')",
+            (content_id, narration),
+        )
+        for url in ("https://en.wikipedia.org/wiki/Alternator", "https://example.edu/alternators"):
+            ctx.conn.execute(
+                "INSERT INTO sources (content_id, url, title, publisher) VALUES (?, ?, 'T', 'P')",
+                (content_id, url),
+            )
+    set_status(ctx.conn, content_id, "scripted")
+    set_status(ctx.conn, content_id, "script_approved")
+    tts = make_fake_tts(seconds=36.0, amplitude=0.05)
+    generate.run(ctx, tts=lambda: tts)
+    row = ctx.conn.execute("SELECT * FROM contents WHERE id = ?", (content_id,)).fetchone()
+    job = jobs.job_for(ctx, row)
+    assert (job.spec["width"], job.spec["height"]) == (1920, 1080)
+    for scene in job.spec["scenes"]:
+        frames = scene["last_frame"] - scene["first_frame"] + 1
+        run_ffmpeg(["-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=30", "-frames:v",
+                    str(frames), "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                    str(jobs.inbox_dir(ctx, content_id) / job.clip_name(scene["n"]))])  # fmt: skip
+    generate.run(ctx, tts=lambda: tts)
+    scenes.approve(ctx, content_id)
+    with ctx.conn:  # three chapters (2.29 will set these from the script)
+        for n, title in ((1, "Intro"), (2, "Rotor and stator"), (3, "Diodes")):
+            ctx.conn.execute("INSERT INTO chapters (content_id, n, title) VALUES (?, ?, ?)",
+                             (content_id, n, title))  # fmt: skip
+        ctx.conn.execute("UPDATE scenes SET chapter = CASE WHEN n <= 2 THEN 1 WHEN n <= 4 THEN 2 "
+                         "ELSE 3 END WHERE content_id = ?", (content_id,))  # fmt: skip
+    add_music(ctx)
+
+    result = assemble.run(ctx, llm=fake_llm())
+
+    assert (result.processed, result.failed) == (1, 0)
+    folder = generate.asset_dir(ctx, content_id)
+    video = next(s for s in probe(folder / "render_youtube.mp4")["streams"]
+                 if s["codec_type"] == "video")  # fmt: skip
+    assert (video["width"], video["height"]) == (1920, 1080)
+    assert not (folder / "render_tiktok.mp4").exists()  # long videos are YouTube only
+    preview = next(s for s in probe(folder / "preview_720p.mp4")["streams"]
+                   if s["codec_type"] == "video")  # fmt: skip
+    assert (preview["width"], preview["height"]) == (1280, 720)
+    report = {r["check"]: r for r in json.loads((folder / "qa_report.json").read_text())}
+    assert {name for name, r in report.items() if r["ok"] is not True} == {"similarity"}
+    assert report["chapters"]["detail"].startswith("3 chapters: 0:00 Intro")
+    description = json.loads((folder / "metadata.json").read_text())["youtube"]["description"]
+    assert "0:00 Intro\n" in description and "Diodes" in description
+    assert Image.open(folder / "cover.jpg").size == (1920, 1080)
+    assert "PlayResX: 1920" in (folder / "subs.ass").read_text()

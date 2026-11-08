@@ -14,11 +14,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from factory.media.ffmpeg import run_ffmpeg
+from factory.media.ffmpeg import probe, run_ffmpeg
 from factory.media.subtitles import filter_arg
 
 FPS = 30
-WIDTH, HEIGHT = 1080, 1920
+WIDTH, HEIGHT = 1080, 1920  # Shorts; long videos are 16:9 (D-128)
+SIZES = {"9:16": (1080, 1920), "16:9": (1920, 1080)}
+PREVIEW_SIZES = {(1080, 1920): (720, 1280), (1920, 1080): (1280, 720)}
+PREVIEW_BUDGET_MB = 40  # the Telegram bot can send up to 50 MB; QA allows under 45
 MAX_SLOWDOWN = 1.25  # a clip may play at most 25% slower before it holds its last frame
 CARD_SLIDE_S = 8 / FPS  # DESIGN_SYSTEM.md §7: slides and fades of 6-10 frames
 CARD_SLIDE_PX = 140
@@ -82,14 +85,19 @@ def clip_fit(source_s: float, slot_s: float) -> tuple[float, float]:
 
 
 def render_video(
-    segments: Sequence[Segment], subs: Path, fonts_dir: Path, sting: Path, out_path: Path
+    segments: Sequence[Segment],
+    subs: Path,
+    fonts_dir: Path,
+    sting: Path,
+    out_path: Path,
+    size: tuple[int, int] = (WIDTH, HEIGHT),
 ) -> Path:
     """All segments in order, subtitles burned in, then the logo sting; video only (no audio)."""
     inputs: list[str] = []
     graph: list[str] = []
     for i, seg in enumerate(segments):
         inputs += ["-i", str(seg.source)]
-        graph.append(f"[{i}:v]{_fit_chain(seg)}[seg{i}]")
+        graph.append(f"[{i}:v]{_fit_chain(seg, size)}[seg{i}]")
     next_input = len(segments)
     labels = []
     for i, seg in enumerate(segments):
@@ -119,7 +127,7 @@ def render_video(
         labels.append(f"[dia{i}]")
         next_input += 1
     inputs += ["-i", str(sting)]
-    graph.append(f"[{next_input}:v]{_normalise_chain()},setpts=PTS-STARTPTS[sting]")
+    graph.append(f"[{next_input}:v]{_normalise_chain(size)},setpts=PTS-STARTPTS[sting]")
     graph.append(f"{''.join(labels)}concat=n={len(labels)}:v=1:a=0[body]")
     graph.append(f"[body]ass={filter_arg(subs)}:fontsdir={filter_arg(fonts_dir)}[subbed]")
     graph.append("[subbed][sting]concat=n=2:v=1:a=0[vout]")
@@ -131,15 +139,17 @@ def render_video(
     return out_path
 
 
-def _normalise_chain() -> str:
-    """Any input to 1080x1920 (cover + centre crop, sharp Lanczos upscaling), square pixels."""
+def _normalise_chain(size: tuple[int, int] = (WIDTH, HEIGHT)) -> str:
+    """Any input to the video's size (cover + centre crop, sharp Lanczos upscaling), square
+    pixels."""
+    width, height = size
     return (
-        f"scale={WIDTH}:{HEIGHT}:flags=lanczos:force_original_aspect_ratio=increase,"
-        f"crop={WIDTH}:{HEIGHT},setsar=1"
+        f"scale={width}:{height}:flags=lanczos:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},setsar=1"
     )
 
 
-def _fit_chain(seg: Segment) -> str:
+def _fit_chain(seg: Segment, size: tuple[int, int] = (WIDTH, HEIGHT)) -> str:
     if seg.kind == "flow_clip":
         factor, hold = clip_fit(seg.source_s, seg.slot_s)
         timing = f"setpts={factor:.4f}*(PTS-STARTPTS)"
@@ -148,7 +158,7 @@ def _fit_chain(seg: Segment) -> str:
     else:  # Ken Burns clips are stretched or squeezed slightly to fit exactly
         timing = f"setpts={seg.slot_s / seg.source_s:.4f}*(PTS-STARTPTS)"
     return (
-        f"{_normalise_chain()},{timing},fps={FPS},format=yuv420p,"
+        f"{_normalise_chain(size)},{timing},fps={FPS},format=yuv420p,"
         f"trim=duration={seg.slot_s:.3f},setpts=PTS-STARTPTS"
     )
 
@@ -228,10 +238,17 @@ def mux(video: Path, audio: Path, out_path: Path) -> Path:
 
 
 def preview(render: Path, out_path: Path) -> Path:
-    """A 720x1280 copy for review on a phone (kept small for Telegram's 50 MB limit later)."""
+    """A 720p copy for review on a phone, in the render's shape. Its video bitrate is capped so
+    even a 9-minute video stays under PREVIEW_BUDGET_MB for the Telegram bot (D-128)."""
+    info = probe(render)
+    video = next(s for s in info["streams"] if s["codec_type"] == "video")
+    width, height = PREVIEW_SIZES[(int(video["width"]), int(video["height"]))]
+    seconds = float(info["format"]["duration"])
+    kbps = max(300, int(PREVIEW_BUDGET_MB * 8_000 / seconds) - 128)  # minus the audio
     run_ffmpeg(
-        ["-i", str(render), "-vf", "scale=720:1280:flags=lanczos", "-c:v", "libx264",
-         "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
-         "-movflags", "+faststart", str(out_path)]
+        ["-i", str(render), "-vf", f"scale={width}:{height}:flags=lanczos", "-c:v", "libx264",
+         "-preset", "veryfast", "-crf", "26", "-maxrate", f"{kbps}k", "-bufsize", f"{2 * kbps}k",
+         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+         str(out_path)]
     )  # fmt: skip
     return out_path

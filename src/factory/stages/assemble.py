@@ -35,6 +35,7 @@ from factory.stages.voice import asset_dir
 log = logging.getLogger("factory.assemble")
 
 RENDERS = ("render_youtube.mp4", "render_tiktok.mp4")
+YOUTUBE_ONLY_FORMATS = frozenset({"episode"})  # long 16:9 videos are not posted to TikTok (D-128)
 PREVIEW = "preview_720p.mp4"
 QA_REPORT = "qa_report.json"
 SILENT_LUFS = -60.0  # quieter than this counts as "no sound" (e.g. a clip with a silent track)
@@ -57,15 +58,26 @@ def run(
     if not items:
         log.info("nothing to assemble", extra={"event": "assemble_nothing"})
         return result
-    if any(force or not _rendered(ctx, row["id"]) for row in items):
+    if any(force or not _rendered(ctx, row) for row in items):
         pick_track(ctx)  # stop before any work if the music library is empty
     for row in items:
         generate.run_safely(ctx, row, result, lambda r: _assemble_and_check(ctx, r, force, llm))
     return result
 
 
-def _rendered(ctx: AppContext, content_id: int) -> bool:
-    return all((asset_dir(ctx, content_id) / name).is_file() for name in RENDERS)
+def renders_for(fmt: str) -> tuple[str, ...]:
+    """The renders a format gets: YouTube and TikTok, or only YouTube for long videos."""
+    return RENDERS[:1] if fmt in YOUTUBE_ONLY_FORMATS else RENDERS
+
+
+def size_for(ctx: AppContext, fmt: str) -> tuple[int, int]:
+    """The picture size of a format: 1080x1920 for 9:16, 1920x1080 for 16:9 (D-128)."""
+    return compose.SIZES[getattr(ctx.channel.formats, fmt).aspect]
+
+
+def _rendered(ctx: AppContext, row: sqlite3.Row) -> bool:
+    folder = asset_dir(ctx, row["id"])
+    return all((folder / name).is_file() for name in renders_for(row["format"]))
 
 
 def _assemble_and_check(
@@ -78,10 +90,10 @@ def _assemble_and_check(
         log.info("#%s %s", content_id, reason,
                  extra={"content_id": content_id, "event": "scenes_waiting"})  # fmt: skip
         return False
-    if force or not _rendered(ctx, content_id):
+    if force or not _rendered(ctx, row):
         _assemble(ctx, row)
     folder = asset_dir(ctx, content_id)
-    _pick_cover(ctx, content_id, folder)
+    _pick_cover(ctx, content_id, folder, size_for(ctx, row["format"]))
     metadata_error = None
     try:
         metadata.ensure_metadata(ctx, content_id, llm=llm)
@@ -131,8 +143,20 @@ def _qa_inputs(
         metadata_problems=_metadata_problems(ctx, row["id"]),
         metadata_error=metadata_error,
         similarity_max=script["similarity_max"],
+        renders=renders_for(row["format"]),
+        chapters=_chapters_check(ctx, row),
         similarity_threshold=ctx.channel.scoring.similarity_block_threshold,
     )
+
+
+def _chapters_check(ctx: AppContext, row: sqlite3.Row) -> tuple[bool | None, str]:
+    """A long video needs a valid YouTube chapter list (D-128); other formats don't."""
+    lines, problem = metadata.chapters(ctx.conn, row["id"])
+    if row["format"] not in YOUTUBE_ONLY_FORMATS and not lines:
+        return None, "not a long video"
+    if problem or not lines:
+        return False, problem or "a long video needs chapters (the script sets them, 2.29)"
+    return True, f"{len(lines)} chapters: {'; '.join(lines)}"
 
 
 def _variety(ctx: AppContext, row: sqlite3.Row, code_film: bool) -> tuple[tuple, tuple]:
@@ -151,10 +175,12 @@ def _metadata_problems(ctx: AppContext, content_id: int) -> list[str] | None:
     return metadata.validate(metadata.load(ctx, content_id))
 
 
-def _pick_cover(ctx: AppContext, content_id: int, folder: Path) -> Path:
-    """cover.jpg: the sharpest frame of the Cutaway clip (else the first clip), 1080x1920, no
-    text (DESIGN_SYSTEM.md §9); for a film made by code (blueprint, Blender) the sharpest frame of
-    the film (D-111, D-123). The owner confirms it at Gate 2."""
+def _pick_cover(
+    ctx: AppContext, content_id: int, folder: Path, size: tuple[int, int] = (1080, 1920)
+) -> Path:
+    """cover.jpg in the video's size: the sharpest frame of the Cutaway clip (else the first
+    clip), no text (DESIGN_SYSTEM.md §9); for a film made by code (blueprint, Blender) the
+    sharpest frame of the film (D-111, D-123). The owner confirms it at Gate 2."""
     style = ctx.conn.execute("SELECT visual_style FROM contents WHERE id = ?", (content_id,))
     visual_style = style.fetchone()[0]
     if visual_style == "blender":  # the first explaining scene (D-124)
@@ -170,7 +196,7 @@ def _pick_cover(ctx: AppContext, content_id: int, folder: Path) -> Path:
         clip, licence = folder / "clips" / f"shot_{chosen['n']:02d}.mp4", "google_flow_output"
     with tempfile.TemporaryDirectory(prefix=".cover-", dir=folder) as tmp:
         frame = Image.open(stills.sharpest_frame(clip, Path(tmp) / "frame.png")).convert("RGB")
-        cover = ImageOps.fit(frame, (1080, 1920), Image.Resampling.LANCZOS)
+        cover = ImageOps.fit(frame, size, Image.Resampling.LANCZOS)
     path = folder / "cover.jpg"
     cover.save(path, quality=92)
     details = {
@@ -179,8 +205,8 @@ def _pick_cover(ctx: AppContext, content_id: int, folder: Path) -> Path:
         "generator": "ffmpeg",
         "model": f"frame of {clip.stem}",
         "license": licence,
-        "width": 1080,
-        "height": 1920,
+        "width": size[0],
+        "height": size[1],
     }
     generate.replace_assets(ctx, content_id, "cover", [details])
     return path
@@ -194,6 +220,7 @@ def _assemble(ctx: AppContext, row: sqlite3.Row) -> bool:
     voice_wav = folder / "voice.wav"
     voice_s = float(probe(voice_wav)["format"]["duration"])
     track = pick_track(ctx)
+    size = size_for(ctx, row["format"])
     with tempfile.TemporaryDirectory(prefix=".assemble-", dir=folder) as tmp:
         work = Path(tmp)
         if row["visual_style"] == "blender":  # the approved scene clips, in order (D-124)
@@ -205,18 +232,20 @@ def _assemble(ctx: AppContext, row: sqlite3.Row) -> bool:
             segments = [compose.Segment(1, "flow_clip", film, _seconds(film), voice_s)]
         else:
             segments = _segments(ctx, folder, shots, voice_s, work)
-        total_s = voice_s + _sting_seconds(ctx)
+        total_s = voice_s + _sting_seconds(ctx, size)
         video = compose.render_video(
             segments,
             folder / voice.SUBS_FILE,
             voice.fonts_dir(ctx),
-            _sting(ctx),
+            _sting(ctx, size),
             work / "video.mp4",
+            size,
         )
         mixes = {
             "render_youtube.mp4": (track.path, compose.MUSIC_LUFS - _loudness(track.path)),
             "render_tiktok.mp4": None,  # no music on TikTok: the owner adds a TikTok sound
         }
+        mixes = {name: music for name, music in mixes.items() if name in renders_for(row["format"])}
         for name, music in mixes.items():
             raw = compose.render_mix(voice_wav, segments, total_s, work / f"{name}.raw.wav", music)
             mastered = normalize_file(raw, work / f"{name}.wav")
@@ -230,7 +259,7 @@ def _assemble(ctx: AppContext, row: sqlite3.Row) -> bool:
                 extra={"content_id": content_id, "event": "rendered"},
             )
     compose.preview(folder / "render_youtube.mp4", folder / PREVIEW)
-    _record(ctx, content_id, folder, track, total_s)
+    _record(ctx, content_id, folder, track, total_s, size)
     return True
 
 
@@ -280,28 +309,38 @@ def _seconds(path: Path) -> float:
     return float(probe(path)["format"]["duration"])
 
 
-def _sting(ctx: AppContext) -> Path:
-    path = ctx.root / ctx.settings.paths.assets_static_dir / "logo" / "sting_1080x1920.mp4"
+def _sting(ctx: AppContext, size: tuple[int, int] = (1080, 1920)) -> Path:
+    name = f"sting_{size[0]}x{size[1]}.mp4"
+    path = ctx.root / ctx.settings.paths.assets_static_dir / "logo" / name
     if not path.is_file():
         raise FactoryError(f"logo sting missing: {path} (run `factory brand build`)")
     return path
 
 
-def _sting_seconds(ctx: AppContext) -> float:
-    return _seconds(_sting(ctx))
+def _sting_seconds(ctx: AppContext, size: tuple[int, int] = (1080, 1920)) -> float:
+    return _seconds(_sting(ctx, size))
 
 
-def _record(ctx: AppContext, content_id: int, folder: Path, track: Track, total_s: float) -> None:
+def _record(
+    ctx: AppContext,
+    content_id: int,
+    folder: Path,
+    track: Track,
+    total_s: float,
+    size: tuple[int, int] = (1080, 1920),
+) -> None:
     (folder / "music.txt").write_text(f"{track.id}\t{track.title}\n")
     common = {"generator": "ffmpeg", "license": "own_work", "duration_s": round(total_s, 2)}
-    full_hd = {**common, "width": 1080, "height": 1920}
+    full_hd = {**common, "width": size[0], "height": size[1]}
+    small = compose.PREVIEW_SIZES[size]
     outputs = (
         ("render_youtube", folder / "render_youtube.mp4", full_hd),
         ("render_tiktok", folder / "render_tiktok.mp4", full_hd),
-        ("preview", folder / PREVIEW, {**common, "width": 720, "height": 1280}),
+        ("preview", folder / PREVIEW, {**common, "width": small[0], "height": small[1]}),
     )
     for kind, path, details in outputs:
-        generate.replace_assets(ctx, content_id, kind, [{"path": path, **details}])
+        rows = [{"path": path, **details}] if path.is_file() else []  # no TikTok for long videos
+        generate.replace_assets(ctx, content_id, kind, rows)
     music_txt = (folder / "music.txt").relative_to(ctx.root).as_posix()
     with ctx.conn:
         ctx.conn.execute(

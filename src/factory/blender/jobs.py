@@ -29,7 +29,7 @@ from factory.stages import voice
 
 JOB_FILES = Path(__file__).resolve().parent / "job_files"
 FPS = 30  # the same as the assembly (media/compose.py)
-SIZES = {"9:16": (1080, 1920)}  # 16:9 long videos come with ROADMAP 2.28
+SIZES = {"9:16": (1080, 1920), "16:9": (1920, 1080)}  # Shorts; long videos (D-128)
 MIN_SCENE_S = 1.5  # shorter scenes can't hold their camera moves
 FONT_FILES = ("Inter-SemiBold.ttf", "OFL-Inter.txt")
 
@@ -68,8 +68,7 @@ def job_for(ctx: AppContext, row: sqlite3.Row) -> Job:
     model = blender.model_for(row["object_name"])
     aspect = getattr(ctx.channel.formats, row["format"]).aspect
     if aspect not in SIZES:
-        raise FactoryError(f"Blender films are {', '.join(SIZES)} for now; #{content_id} is "
-                           f"{aspect} (16:9 comes with ROADMAP 2.28)")  # fmt: skip
+        raise FactoryError(f"Blender films are {' or '.join(SIZES)}; #{content_id} is {aspect}")
     problems = [
         f"fact '{k}' needs two source pages (D-122)"
         for k, f in model.FACTS.items()

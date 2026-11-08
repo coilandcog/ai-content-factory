@@ -457,7 +457,10 @@ def camera_rig(scene, keys):
     target = empty("Camera target")
     data = bpy.data.cameras.new("Camera")
     data.lens = 50
-    data.sensor_fit = "AUTO"
+    # The same height of view in 9:16 and 16:9 (D-128): a long video shows the same machine with
+    # more room at the sides. For 9:16 this is exactly the earlier AUTO framing.
+    data.sensor_fit = "VERTICAL"
+    data.sensor_height = 36
     data.clip_start = 0.05
     cam = link(bpy.data.objects.new("Camera", data))
     track = cam.constraints.new("TRACK_TO")

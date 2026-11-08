@@ -156,14 +156,18 @@ def test_a_machine_without_a_model_waits_without_work(ctx: AppContext) -> None:
     assert "no Blender model for 'turbocharger'" in blender.missing_message("turbocharger")
 
 
-def test_16_9_waits_for_task_2_28(ctx: AppContext) -> None:
+def test_jobs_are_9_16_or_16_9(ctx: AppContext) -> None:
     content_id = issue(ctx)
-    short = ctx.channel.formats.short.model_copy(update={"aspect": "16:9"})
-    channel = ctx.channel.model_copy(
-        update={"formats": ctx.channel.formats.model_copy(update={"short": short})}
-    )
-    with pytest.raises(FactoryError, match="16:9 comes with ROADMAP 2.28"):
-        jobs.job_for(replace(ctx, channel=channel), row(ctx, content_id))
+
+    def with_aspect(aspect: str) -> AppContext:
+        short = ctx.channel.formats.short.model_copy(update={"aspect": aspect})
+        formats = ctx.channel.formats.model_copy(update={"short": short})
+        return replace(ctx, channel=ctx.channel.model_copy(update={"formats": formats}))
+
+    wide = jobs.job_for(with_aspect("16:9"), row(ctx, content_id)).spec
+    assert (wide["width"], wide["height"]) == (1920, 1080)  # long videos (D-128)
+    with pytest.raises(FactoryError, match="Blender films are 9:16 or 16:9"):
+        jobs.job_for(with_aspect("1:1"), row(ctx, content_id))
 
 
 def test_too_short_scenes_are_refused(ctx: AppContext) -> None:

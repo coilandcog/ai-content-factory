@@ -57,7 +57,7 @@ flowchart LR
 | **script** | `factory script` | `idea` contents that are in a weekly plan, or have no score (created with `factory new`); planned items must use the plan's hook and beat order (D-080) | `scripts`, `sources`; Gate 1 request | `idea` → `scripted`; blocklisted topic or similarity above the threshold → `archived` | Gemini; local embeddings (`all-MiniLM-L6-v2`) for the similarity check | Claude API |
 | **review (Gate 1)** | `factory review --gate script` | `scripted` | `reviews` row | → `script_approved` / `rejected` / back to `scripted` | Terminal, or Telegram buttons via `factory bot` (task 2.1) | — |
 | **generate** | `factory generate` | `script_approved` | Flow prompt sheet, voiceover, subtitles, stills, diagrams; for a **blueprint** item (D-111) voiceover, subtitles and `blueprint.mp4` (drawn by code, no Flow); for a **Blender** item (D-123, D-124) voiceover, subtitles, one `scenes` row per scene and the render job `data/outbox/blender/job_<id>.zip` for the render PC, then each scene's clip from `data/inbox/blender/<id>/scene_<job id>_NN.mp4` → `scenes/scene_NN.mp4` | → `awaiting_clips` (sheet + voice + subtitles issued) → `generated` (all clips in the inbox, then animated stills and diagram cards made); a blueprint item goes through both in one run, or waits at `script_approved` if its machine has no drawing yet; a Blender item waits at `awaiting_clips` until every scene's clip is in the inbox and checks out (size, 30 fps, the scene's frame count, this job's id; a bad clip is refused by name, good ones are kept), or at `script_approved` if its machine has no model yet | Google Flow (manual, Veo 3.1 Fast); Kokoro-82M; faster-whisper; Pillow; FLUX.1-schnell or Flow for stills | Google AI Pro for more Flow credits, about €22; ElevenLabs Starter, about €6 |
-| **assemble** | `factory assemble [--force]` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `preview_720p.mp4`, `music.txt`, `cover.jpg`, `qa_report.json`; `metadata.json` (task 1.11) | QA pass → `assembled`; QA failure → stays `generated` with the reasons in `status_reason` (renders are kept, so a re-run only re-checks); a Blender item waits at `generated` until every scene is approved and unchanged (D-124), then its approved scene clips are joined in order | FFmpeg only (D-068) | Not needed |
+| **assemble** | `factory assemble [--force]` | `generated` | `render_youtube.mp4`, `render_tiktok.mp4`, `preview_720p.mp4`, `music.txt`, `cover.jpg`, `qa_report.json`; `metadata.json` (task 1.11) | QA pass → `assembled`; QA failure → stays `generated` with the reasons in `status_reason` (renders are kept, so a re-run only re-checks); a Blender item waits at `generated` until every scene is approved and unchanged (D-124), then its approved scene clips are joined in order. Long videos (`episode`, D-128) are 1920×1080 with the 16:9 sting and subtitles, get **only** `render_youtube.mp4`, a preview capped under Telegram's limit, and need a valid chapter list in the description | FFmpeg only (D-068) | Not needed |
 | **review (Gate 2)** | `factory review --gate final` | `assembled` | `reviews` row | → `approved` / `rejected` / back to `generated` | Terminal, or Telegram buttons via `factory bot` (task 2.1) | — |
 | **publish** | `factory publish --id N` (YouTube, task 2.3, D-115); `factory publish --check`; `factory publish --manual` (D-072) | `approved` | `posts` rows | YouTube upload → `scheduled`; `--check` after it went public → `published`; a manual post goes `approved`/`scheduled` → `published` | Phase 1: you upload by hand, the factory records it. Phase 2: YouTube Data API (scheduled private → public); TikTok stays a manual post recorded with `--manual` (D-116) | Not needed |
 | **learn** | `factory learn [--id N]` (YouTube Analytics pull, task 2.5, D-117; also refreshes labels); `factory labels show/set`, `factory report weekly` (task 2.9, D-119) | `published` posts | `metrics` (`source = api` at the 24h/72h/7d/28d checkpoints, once final), `performance_labels`, weekly report | → `analyzed` (after 28-day metrics) | YouTube Analytics API; TikTok numbers by hand or from the weekly TikTok Studio CSV (no TikTok API, D-116) | Not needed |
@@ -210,7 +210,7 @@ niche:
 formats:
   short:     {enabled: true,  min_s: 30,  max_s: 50,  aspect: "9:16", series: "{object} in 40 seconds"}
   deep_dive: {enabled: true,  min_s: 65,  max_s: 150, aspect: "9:16", series: "Cutaway: {object}"}
-  episode:   {enabled: false, min_s: 300, max_s: 600, aspect: "16:9", series: "Coil & Cog: {theme}"}
+  episode:   {enabled: true,  min_s: 480, max_s: 560, aspect: "16:9", series: "Inside the {object}: How It Works"}  # long videos (D-128)
 
 cadence:
   publish_time: "17:00"
@@ -350,7 +350,8 @@ ai-content-factory/
 │   ├── 007_blueprint_films.sql
 │   ├── 008_series.sql
 │   ├── 009_blender_style.sql
-│   └── 010_scenes.sql
+│   ├── 010_scenes.sql
+│   └── 011_chapters.sql
 ├── src/factory/
 │   ├── __init__.py
 │   ├── cli.py                    # Typer app: one command per stage

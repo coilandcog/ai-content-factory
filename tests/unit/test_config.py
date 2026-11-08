@@ -65,7 +65,10 @@ def test_broken_yaml_reports_line_number(config_dir: Path) -> None:
         ({"gates.final": "optional"}, "gates.final: Input should be 'required'"),
         ({"platforms.tiktok.ai_disclosure": False}, "platforms.tiktok.ai_disclosure"),
         ({"formats.short.min_s": 60}, "min_s (60) must be smaller than max_s (50)"),
-        ({"cadence.weekly_plan.sat": "episode"}, "uses 'episode', which is not enabled"),
+        (
+            {"formats.episode.enabled": False, "cadence.weekly_plan.sat": "episode"},
+            "uses 'episode', which is not enabled",
+        ),
         ({"timezone": "Mars/Olympus"}, "unknown time zone 'Mars/Olympus'"),
         ({"brand.palette.bg": "blue"}, "brand.palette.bg"),
         (

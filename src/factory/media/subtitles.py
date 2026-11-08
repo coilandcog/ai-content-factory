@@ -26,6 +26,26 @@ LINES_PER_PAGE = 2
 # 160 px (x > 920) must stay free for the like/share buttons; 760 px keeps it inside (D-065).
 MAX_LINE_PX = 760
 BASELINE_Y = 1344  # about 30% from the bottom of a 1920 px frame
+
+
+@dataclass(frozen=True)
+class Layout:
+    """Subtitle size and place for one picture shape (D-128)."""
+
+    size: tuple[int, int]  # PlayResX, PlayResY
+    font_size: int
+    words_per_line: int
+    max_line_px: int
+    margin_v: int  # baseline height above the bottom edge
+    bottom_keep_free: int  # QA: what the platform covers at the bottom
+
+
+LAYOUTS = {
+    # Shorts: big words above the like/share buttons and the caption (D-065)
+    "9:16": Layout((1080, 1920), FONT_SIZE, WORDS_PER_LINE, MAX_LINE_PX, 1920 - BASELINE_Y, 480),
+    # Long videos: smaller, wider lines low in the frame, above YouTube's player controls
+    "16:9": Layout((1920, 1080), 58, 7, 1400, 80, 60),
+}
 NEW_PAGE_PAUSE_S = 0.6  # a longer pause starts a fresh page
 HOLD_S = 0.3  # how long the last page stays after its last word
 SENTENCE_END = re.compile(r"[.!?…]+[\"')\]]*$")
@@ -99,12 +119,14 @@ def _fill_gaps(timed: list, *, end_s: float) -> None:
 # --- pages and lines ---------------------------------------------------------------------------
 
 
-def build_pages(words: Sequence[Word], font_path: Path) -> list[list[list[Word]]]:
-    """Group words into pages of up to 2 lines, each line at most 4 words and MAX_LINE_PX wide.
+def build_pages(
+    words: Sequence[Word], font_path: Path, layout: Layout = LAYOUTS["9:16"]
+) -> list[list[list[Word]]]:
+    """Group words into pages of up to 2 lines, each line at most the layout's words and width.
 
     A sentence end or a long pause closes the page, so a page never mixes two sentences.
     """
-    font = ImageFont.truetype(str(font_path), FONT_SIZE)
+    font = ImageFont.truetype(str(font_path), layout.font_size)
     pages: list[list[list[Word]]] = []
     page: list[list[Word]] = []
     line: list[Word] = []
@@ -127,7 +149,8 @@ def build_pages(words: Sequence[Word], font_path: Path) -> list[list[list[Word]]
         if previous and word.start_s - previous.end_s > NEW_PAGE_PAUSE_S:
             close_page()
         candidate = " ".join(w.text for w in [*line, word])
-        if line and (len(line) >= WORDS_PER_LINE or font.getlength(candidate) > MAX_LINE_PX):
+        too_long = font.getlength(candidate) > layout.max_line_px
+        if line and (len(line) >= layout.words_per_line or too_long):
             close_line()
             if len(page) >= LINES_PER_PAGE:
                 close_page()
@@ -146,10 +169,11 @@ def write_ass(
     words: Sequence[Word], channel: ChannelConfig, font_path: Path, out_path: Path, aspect: str
 ) -> Path:
     """Write the subtitle file: one event per spoken word, showing its page with that word cyan."""
-    width, height = (1080, 1920) if aspect == "9:16" else (1920, 1080)
+    layout = LAYOUTS[aspect]
+    width, height = layout.size
     palette = channel.brand.palette
-    font_name = " ".join(ImageFont.truetype(str(font_path), FONT_SIZE).getname())
-    pages = build_pages(words, font_path)
+    font_name = " ".join(ImageFont.truetype(str(font_path), layout.font_size).getname())
+    pages = build_pages(words, font_path, layout)
     lines = [
         "[Script Info]",
         "; Coil & Cog word-highlight subtitles (DESIGN_SYSTEM.md §6)",
@@ -164,9 +188,9 @@ def write_ass(
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
         "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
         "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        f"Style: Default,{font_name},{FONT_SIZE},{ass_color(palette.text)},"
+        f"Style: Default,{font_name},{layout.font_size},{ass_color(palette.text)},"
         f"{ass_color(palette.electric)},{ass_color(palette.bg)},&H00000000,"
-        f"0,0,0,0,100,100,0,0,1,{OUTLINE_PX},0,2,0,0,{height - BASELINE_Y * height // 1920},1",
+        f"0,0,0,0,100,100,0,0,1,{OUTLINE_PX},0,2,0,0,{layout.margin_v},1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",

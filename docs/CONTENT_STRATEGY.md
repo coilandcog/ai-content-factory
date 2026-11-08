@@ -47,7 +47,7 @@ These are enforced by `niche.blocklist` in the YAML and checked at the ideate an
 |---|---|---|---|---|---|
 | **Short** | "{Object} in 40 seconds" | 30–50 s (~71–118 words) | 9:16 | YouTube Shorts, TikTok | Reach and followers |
 | **Deep Dive** | "Cutaway: {Object}" | 65–150 s (~154–355 words) | 9:16 | TikTok (earns money, since it's over 1 min), YouTube Shorts | First income on TikTok |
-| **Episode** (Phase 2) | "Coil & Cog: {Theme}" | 5–10 min | 16:9 | YouTube long-form | Watch hours (YPP) |
+| **Episode** (long video, D-128) | "Inside the {Object}: How It Works" | 8–9.3 min (480–560 s) | 16:9 | YouTube only (no TikTok render) | Watch hours (YPP); 3–4 Shorts are cut from each (§14) |
 
 Why: on YouTube, any vertical or square video of 3 minutes or less is a Short, and Shorts don't count toward watch hours. Only Episodes (over 3 min) build watch hours. TikTok only pays for videos over 1 minute.
 
@@ -94,6 +94,8 @@ The 4 beats are **Studio**, **Cutaway**, **Flow** and **In situ**. They form a m
 | `cold_open` | Cutaway → Flow → In situ → Studio (hero outro) | `myth_bust` |
 
 ## 8. Posting cadence
+
+- **Planned mix with long videos (owner, 2026-11-08, D-128):** 1 long video + 3 Shorts a week (Shorts Mon/Wed/Fri, the long video on Sunday); Deep Dives stop. It goes into `cadence.weekly_plan` with ROADMAP 2.31, when the first long video can really be produced; until then the plan below stays.
 
 - **Launch:** 5 videos/week, Mon–Fri at **17:00 Europe/Berlin**. Default weekly mix: Mon Short, Tue Deep Dive, Wed Short, Thu Deep Dive, Fri Short.
 - **After 2 stable weeks:** 7/week, adding Sat and Sun Shorts.

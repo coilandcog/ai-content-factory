@@ -49,7 +49,6 @@ def test_add_content_stores_an_idea(conn: sqlite3.Connection) -> None:
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"fmt": "episode"}, "format 'episode' is not enabled"),
         ({"fmt": "reel"}, "format 'reel' is not enabled"),
         ({"pillar": "weapons"}, "pillar 'weapons' is not defined"),
         ({"object_name": "   "}, "--object must not be empty"),

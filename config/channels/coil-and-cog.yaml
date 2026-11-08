@@ -65,7 +65,7 @@ niche:
 formats:
   short:     {enabled: true,  min_s: 30,  max_s: 50,  aspect: "9:16", series: "{object} in 40 seconds"}
   deep_dive: {enabled: true,  min_s: 65,  max_s: 150, aspect: "9:16", series: "Cutaway: {object}"}
-  episode:   {enabled: false, min_s: 300, max_s: 600, aspect: "16:9", series: "Coil & Cog: {theme}"}
+  episode:   {enabled: true,  min_s: 480, max_s: 560, aspect: "16:9", series: "Inside the {object}: How It Works"}  # long videos (D-128)
 
 cadence:
   publish_time: "17:00"

@@ -570,6 +570,8 @@ def _script_one(
     feedback: Feedback | None = None,
 ) -> int:
     channel, conn = ctx.channel, ctx.conn
+    if row["format"] == "episode":  # long videos are written in chapters (D-128)
+        raise FactoryError("long-video scripts in chapters come with ROADMAP 2.29")
     reference = page_summary(
         http, row["object_name"], before_call=lambda: check_and_record(conn, channel, "wikimedia")
     )

@@ -278,6 +278,16 @@ Flow credits are entered manually with `factory flow-log --credits 20`.
 
 The parts are normal `contents` rows with `series_id` and `part_n` (1..parts).
 
+### `chapters` (migration 011, D-128)
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | |
+| content_id | INTEGER FK → contents | A long video |
+| n | INTEGER | Chapter number; unique per item |
+| title | TEXT | Shown in YouTube's chapter list; must not be empty |
+
+A chapter's start time is its first scene's start (`scenes.chapter`). `metadata.chapters()` turns them into the description's chapter list ("0:00 Intro") and checks YouTube's rules (first at 0:00, at least 3, each at least 10 s); QA requires a valid list for every long video. ROADMAP 2.29 fills the titles from the script.
+
 ### `scenes` and `scene_reviews` (migration 010, D-124)
 A Blender film is made of scene clips, each rendered, checked, approved or redone on its own.
 

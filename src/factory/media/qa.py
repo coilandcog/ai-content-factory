@@ -25,7 +25,6 @@ LOUDNESS_TOLERANCE_LU = 1.0
 PREVIEW_MAX_MB = 45
 SILENCE_DB = -60.0  # quieter than this counts as silence
 STING_CHECK_S = 0.8  # the end of the render, under the logo sting: no voice, no clip sound
-BOTTOM_KEEP_FREE_PX = 480  # DESIGN_SYSTEM.md §6: no text in the bottom 480 px
 
 
 @dataclass(frozen=True)
@@ -55,23 +54,33 @@ class QaInputs:
     metadata_error: str | None = None  # why metadata.json could not be created, if it failed
     similarity_max: float | None = None  # stored by the script stage; None = made before 1.13
     similarity_threshold: float = 0.80
+    renders: Sequence[str] = ("render_youtube.mp4", "render_tiktok.mp4")  # YouTube only: D-128
+    chapters: tuple[bool | None, str] = (None, "not a long video")  # from metadata.chapters()
 
 
 def run_checks(inputs: QaInputs) -> list[Check]:
     """All checks, in a fixed order. A check that crashes counts as a failure, never a pass."""
     folder = inputs.folder
-    renders = [folder / "render_youtube.mp4", folder / "render_tiktok.mp4"]
+    renders = [folder / name for name in inputs.renders]
+    tiktok = folder / "render_tiktok.mp4" if "render_tiktok.mp4" in inputs.renders else None
     steps = [
         ("video format", lambda: video_format(renders, inputs.aspect)),
         ("duration", lambda: duration(renders[0], inputs.min_s, inputs.max_s)),
         ("loudness", lambda: loudness(renders)),
-        ("subtitles", lambda: subtitle_coverage(folder / "subs.ass", folder / "voice_words.json")),
+        (
+            "subtitles",
+            lambda: subtitle_coverage(
+                folder / "subs.ass", folder / "voice_words.json", inputs.aspect
+            ),
+        ),  # fmt: skip
         (
             "safe zones",
-            lambda: safe_zones(folder / "subs.ass", inputs.subtitle_font, _diagram_files(inputs)),
+            lambda: safe_zones(
+                folder / "subs.ass", inputs.subtitle_font, _diagram_files(inputs), inputs.aspect
+            ),
         ),  # fmt: skip
         ("diagrams", lambda: diagram_count(_diagram_files(inputs), inputs.min_diagrams)),
-        ("music", lambda: music_rules(inputs.music_source, renders[1])),
+        ("music", lambda: music_rules(inputs.music_source, tiktok)),
         ("variety", lambda: variety(*inputs.variety)),
         ("preview size", lambda: preview_size(folder / "preview_720p.mp4")),
     ]
@@ -83,6 +92,7 @@ def run_checks(inputs: QaInputs) -> list[Check]:
             ok, detail = False, f"could not check: {exc}"
         results.append(Check(name, ok, detail))
     results.append(Check("metadata", *metadata(inputs.metadata_problems, inputs.metadata_error)))
+    results.append(Check("chapters", *inputs.chapters))
     results.append(
         Check("similarity", *similarity(inputs.similarity_max, inputs.similarity_threshold))
     )
@@ -122,7 +132,8 @@ def video_format(renders: Sequence[Path], aspect: str) -> tuple[bool, str]:
             problems.append(f"{render.name} is {found}, needs {wanted}")
     return (
         not problems,
-        "; ".join(problems) or f"both renders {size[0]}x{size[1]}, 30 fps, H.264/AAC",
+        "; ".join(problems)
+        or f"{' and '.join(r.name for r in renders)}: {size[0]}x{size[1]}, 30 fps, H.264/AAC",
     )
 
 
@@ -144,9 +155,9 @@ def loudness(renders: Sequence[Path]) -> tuple[bool, str]:
     return (not problems, "; ".join(problems) or ", ".join(notes))
 
 
-def subtitle_coverage(subs: Path, words_json: Path) -> tuple[bool, str]:
+def subtitle_coverage(subs: Path, words_json: Path, aspect: str = "9:16") -> tuple[bool, str]:
     """subs.ass exists, its events run from the first to the last spoken word, and no page has
-    more than 2 lines or a line more than 4 words."""
+    more than 2 lines or a line longer than the layout's words (4 on Shorts)."""
     if not subs.is_file():
         return False, "subs.ass missing (run `factory voice render <id>`)"
     events = _events(subs)
@@ -161,28 +172,30 @@ def subtitle_coverage(subs: Path, words_json: Path) -> tuple[bool, str]:
         problems.append(f"subtitles end before the last word ({last_word:.2f} s)")
     for _, _, lines in events:
         if len(lines) > subtitles.LINES_PER_PAGE or any(
-            len(line.split()) > subtitles.WORDS_PER_LINE for line in lines
+            len(line.split()) > subtitles.LAYOUTS[aspect].words_per_line for line in lines
         ):
             problems.append(f"too much text on screen: {' / '.join(lines)}")
             break
     return (not problems, "; ".join(problems) or f"{len(events)} word events cover the narration")
 
 
-def safe_zones(subs: Path, font_path: Path, diagram_pngs: Sequence[Path]) -> tuple[bool, str]:
-    """Subtitle lines fit the 760 px column above the bottom button zone; diagram cards stay
-    inside the label box (DESIGN_SYSTEM.md §6-7)."""
+def safe_zones(
+    subs: Path, font_path: Path, diagram_pngs: Sequence[Path], aspect: str = "9:16"
+) -> tuple[bool, str]:
+    """Subtitle lines fit their column above what the platform covers at the bottom; diagram
+    cards stay inside the label box (DESIGN_SYSTEM.md §6-7; 16:9 layout D-128)."""
     problems = []
+    layout = subtitles.LAYOUTS[aspect]
     if subs.is_file():
-        font = ImageFont.truetype(str(font_path), subtitles.FONT_SIZE)
+        font = ImageFont.truetype(str(font_path), layout.font_size)
         margin_v = int(_style_field(subs, "MarginV"))
-        if margin_v < BOTTOM_KEEP_FREE_PX:
-            problems.append(f"subtitle baseline only {margin_v} px above the bottom (needs 480+)")
+        if margin_v < layout.bottom_keep_free:
+            problems.append(f"subtitle baseline only {margin_v} px above the bottom "
+                            f"(needs {layout.bottom_keep_free}+)")  # fmt: skip
         widest = max((font.getlength(line) for _, _, lines in _events(subs) for line in lines),
                      default=0)  # fmt: skip
-        if widest > subtitles.MAX_LINE_PX:
-            problems.append(
-                f"a subtitle line is {widest:.0f} px wide (max {subtitles.MAX_LINE_PX})"
-            )
+        if widest > layout.max_line_px:
+            problems.append(f"a subtitle line is {widest:.0f} px wide (max {layout.max_line_px})")
     left, top, right, bottom = diagrams.SAFE_BOX
     for png in diagram_pngs:
         if not png.is_file():
@@ -205,12 +218,14 @@ def diagram_count(diagram_pngs: Sequence[Path], minimum: int) -> tuple[bool, str
     return ok, f"{len(present)} diagram(s)" + ("" if ok else f" (needs at least {minimum})")
 
 
-def music_rules(music_source: str | None, tiktok_render: Path) -> tuple[bool, str]:
-    """The YouTube track comes from the Audio Library; the TikTok render has no music, checked
-    where nothing else plays: under the logo sting at the very end."""
+def music_rules(music_source: str | None, tiktok_render: Path | None) -> tuple[bool, str]:
+    """The YouTube track comes from the Audio Library; the TikTok render (none for long videos,
+    D-128) has no music, checked where nothing else plays: under the logo sting at the end."""
     problems = []
     if music_source != "youtube_audio_library":
         problems.append(f"YouTube music source is {music_source!r}, not the Audio Library")
+    if tiktok_render is None:
+        return not problems, "; ".join(problems) or "Audio Library track on YouTube"
     report = run_ffmpeg(["-sseof", f"-{STING_CHECK_S}", "-i", str(tiktok_render),
                          "-af", "volumedetect", "-f", "null", "-"])  # fmt: skip
     match = re.search(r"mean_volume: (-?[\d.]+|-inf) dB", report)
