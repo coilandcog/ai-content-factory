@@ -1,0 +1,38 @@
+Plan a long video (8-9 minutes, 16:9) about: {{ item.object_name }} (pillar: {{ item.pillar }}).
+{% if item.angle %}Angle: {{ item.angle }}
+{% endif %}Title pattern: "{{ series }}". working_title: a clear, honest title, at most 60 characters.
+
+The film is rendered from a 3D model of the machine. A scene is one view of that model, and the narration that plays over
+it explains what that view shows. These are the only views (templates) the model has:
+{% for name, t in model.TEMPLATES.items() %}- {{ name }}: {{ t.explains }}
+{% endfor %}
+Plan exactly {{ chapters }} chapters, about 2 minutes each, that build on each other: from what the machine is and why it
+matters, through how each part works, to what this means for the viewer. Each chapter has a short title (at most 40
+characters, it becomes a YouTube chapter) and {{ scenes[0] }}-{{ scenes[1] }} scenes. Each scene has a template and
+"explains": one sentence on what its narration will explain.
+- The first scene of the video uses template "whole": its narration opens with the hook.
+- Exactly one scene uses template "note", in chapter {{ chapters }}: the channel engineer's personal note.
+- The last scene of the video uses "whole" or "exploded": the closing line.
+- A template may be used several times, but a scene only explains what its template shows.
+
+Hook: pick hook_type from {{ allowed_hooks | join(", ") }} (why_question: why does the machine do something surprising;
+hidden_inside: seen often, never from inside; surprising_number: a striking verified number; myth_bust: a common belief,
+then the truth; what_if: what happens if a part fails; reveal: something surprising inside).
+
+Verified facts (the only numbers the video may use):
+{% for f in facts %}- {{ f.about }}: {{ f.text }}
+{% endfor %}
+Sources ("sources"): exactly 3 different real web pages that support the main facts, each with url, title, publisher and the claim it supports.
+{% include "script_source_rules.j2" %}
+{% if reference %}
+Reference text (Wikipedia, "{{ reference.title }}"). Base the facts on it, and list {{ reference.url }} as the first source:
+"""
+{{ reference.extract }}
+"""
+{% endif %}
+{% if feedback %}
+This is a new version. The channel's engineer reviewed the previous version and asked for these changes:
+"""
+{{ feedback.text }}
+"""
+{% endif %}

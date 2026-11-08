@@ -195,6 +195,9 @@ class Llm(StrictModel):
     model: Text
     fallback_provider: Literal["gemini", "ollama"]
     fallback_model: Text
+    # Optional: a stronger model for long-video scripts only (D-129); flash-lite can't hold a
+    # 1,200-word structure. None = the main model.
+    long_script_model: Text | None = None
 
 
 class Budgets(StrictModel):

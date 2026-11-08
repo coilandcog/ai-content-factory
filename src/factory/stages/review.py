@@ -20,7 +20,7 @@ from factory.context import AppContext
 from factory.db import set_status
 from factory.errors import FactoryError
 from factory.integrations.gemini import GeminiClient
-from factory.stages import metadata
+from factory.stages import episode_script, metadata
 from factory.stages import precheck as precheck_stage
 from factory.stages import scenes as scenes_stage
 from factory.stages import script as script_stage
@@ -80,6 +80,9 @@ def approve(
         raise FactoryError("the Engineer's Note must not be empty")
     script = current_script(ctx.conn, content_id)
     narration = _replace_note(script["body_text"], script["engineer_note"] or "", note)
+    plan = json.loads(script["shot_list_json"])
+    if episode_script.is_episode_plan(plan):  # the note is also its own scene (D-129)
+        plan = [{**s, "narration": note} if s["template"] == "note" else s for s in plan]
     problems = precheck_stage.check(ctx, content_id, narration).problems
     if problems and not anyway:
         raise precheck_stage.PrecheckError(content_id, problems)
@@ -91,10 +94,11 @@ def approve(
     with ctx.conn:
         ctx.conn.execute(
             """
-            UPDATE scripts SET engineer_note = ?, body_text = ?, word_count = ?, est_duration_s = ?
+            UPDATE scripts SET engineer_note = ?, body_text = ?, word_count = ?, est_duration_s = ?,
+                shot_list_json = ?
             WHERE id = ?
             """,
-            (note, narration, words, est, script["id"]),
+            (note, narration, words, est, json.dumps(plan, ensure_ascii=False), script["id"]),
         )
         _add_review(ctx.conn, content_id, "approve", reason, via=via)
         set_status(ctx.conn, content_id, "script_approved")  # last: its commit covers all above
@@ -285,6 +289,12 @@ def script_report(conn: sqlite3.Connection, content_id: int) -> str:
         f"LOOP LINE:  {script['loop_line']}",
         "",
     ]
+    if episode_script.is_episode_plan(shots):  # a long video: chapters of scenes (D-129)
+        lines += ["CHAPTERS (each scene's template is the view of the 3D model it plays over):"]
+        lines += episode_script.chapters_report(shots)
+        lines += ["", "SOURCES:"]
+        lines += [f"  - {s['url']} ({s['publisher']}): {s['claim']}" for s in sources]
+        return "\n".join(lines)
     # The film's hero_look is the same in every clip (D-092): show it once.
     looks = [s["prompt_vars"]["hero_look"] for s in shots if "hero_look" in s["prompt_vars"]]
     if looks:

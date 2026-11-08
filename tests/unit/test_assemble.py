@@ -351,6 +351,7 @@ def test_a_long_video_is_16_9_youtube_only_with_chapters(
     from factory.blender import jobs
     from factory.stages import scenes
 
+    monkeypatch.setattr(generate, "EPISODE_RENDERS", True)  # chapter renders come with 2.30
     # Test renders are about 37 s, so this test channel accepts 25-45 s long videos.
     episode = ctx.channel.formats.episode.model_copy(update={"min_s": 25, "max_s": 45})
     formats = ctx.channel.formats.model_copy(update={"episode": episode})

@@ -84,6 +84,9 @@ PROMPTS_FILE = script_stage.FLOW_PROMPTS_FILE  # the prompts issued, read back w
 ISSUED_FILE = "flow_issued.json"
 STILL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")  # optional owner images: still_NN.<ext>
 STILL_SAFE_AREA = "upper third and the lower quarter"  # where labels and subtitles go
+# Long videos wait at script_approved until their scene templates render chapter by chapter
+# (ROADMAP 2.30); tests of the 16:9 assembly switch this on (D-129).
+EPISODE_RENDERS = False
 BLUEPRINT_FILE = films.FILM_FILES["blueprint"]  # the code-drawn film of a blueprint item (D-111)
 
 
@@ -129,6 +132,11 @@ def _issue(ctx: AppContext, row: sqlite3.Row, speech: Synthesizer) -> bool:
         set_status(ctx.conn, content_id, "awaiting_clips", reason="blueprint film next")
         return _draw(ctx, row)
     if row["visual_style"] == "blender":
+        if row["format"] == "episode" and not EPISODE_RENDERS:  # chapter renders: ROADMAP 2.30
+            log.warning("#%s: long-video renders in chapters come with ROADMAP 2.30; it waits",
+                        content_id,
+                        extra={"content_id": content_id, "event": "episode_waits"})  # fmt: skip
+            return False
         if row["object_name"] not in blender.MODELS:  # no model yet: wait, do no work
             log.warning("#%s: %s", content_id, blender.missing_message(row["object_name"]),
                         extra={"content_id": content_id, "event": "blender_missing"})  # fmt: skip

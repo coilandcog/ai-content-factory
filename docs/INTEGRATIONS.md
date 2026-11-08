@@ -22,6 +22,7 @@ Each section is a **contract**: what we call, how we authenticate, the limits, a
 |---|---|---|
 | Auth | API key from Google AI Studio (created with the channel Google account) → `GEMINI_API_KEY` | ✔ |
 | SDK | `google-genai` Python SDK, `client.models.generate_content(...)` | ✔ |
+| Long-video scripts (D-129) | `llm.long_script_model: gemini-3.8-flash` (optional): only long-video scripts use it, with a 120 s timeout (it thinks 20–60 s per answer). Real calls to each model are spaced to its free-tier RPM (`gemini.FREE_TIER_RPM`: flash-lite 15, 3.8-flash 5), so a run of quick calls never gets HTTP 429. On 2026-11-08 3.8-flash wrote a valid outline in 23 s, then returned 503 "high demand" and 504 for the chapters: it is overloaded at times | ✔ outline 2026-11-08; chapters pending |
 | Model | `llm.model: gemini-3.5-flash-lite` in the channel YAML (D-051). `gemini-2.5-flash` and `gemini-2.5-flash-lite` return 404 "no longer available to new users" | ✔ 2026-10-23 (test call HTTP 200) |
 | Free-tier limits | Per **project and per model** (not per key); RPD resets at midnight Pacific (09:00 Berlin). Read in AI Studio → Rate Limit on 2026-10-23 (see table below). Google changes them often: re-check when 429s appear | ✔ 2026-10-23 |
 | Our volume | About 10 calls per content, 50–60 per day maximum → `budgets_per_day.gemini_calls: 60` | — |

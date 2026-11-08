@@ -1,0 +1,39 @@
+Write the narration of chapter {{ chapter_n }} of a long video about the {{ item.object_name }}: "{{ outline.working_title }}".
+
+The whole video, chapter by chapter (THIS chapter is marked):
+{% for c in outline.chapters %}Chapter {{ loop.index }}: {{ c.title }}{% if loop.index == chapter_n %}  <- THIS CHAPTER{% endif %}
+{% for s in c.scenes %}  - [{{ s.template }}] {{ s.explains }}
+{% endfor %}{% endfor %}
+{% if earlier %}Earlier chapters already said this; build on it, never repeat it or its wording:
+{% for chapter in earlier %}"""{{ chapter | join(" ") }}"""
+{% endfor %}{% endif %}
+Return "scenes": one narration per scene of THIS chapter, in order ({{ outline.chapters[chapter_n - 1].scenes | length }} scenes).
+- About {{ scene_words }} words per scene; the chapter has {{ words[0] }}-{{ words[1] }} words in total (count them before answering).
+- Each scene explains what its template shows (what the part does and why it matters), in spoken English for a narrator.
+  The viewer already sees the picture: never narrate it ("lights up", "you can see", "watch as", "on screen").
+- A scene explains only parts its template shows, and names at least one of them. What each template shows:
+{% for name, t in model.TEMPLATES.items() %}  - {{ name }}: {{ t.shows | join(", ") | replace("*", "every part") }}
+{% endfor %}  A part an earlier scene already explained may be mentioned in passing ({{ introduced | join(", ") if introduced else "none yet" }});
+  words like engine, belt or battery are context and always fine.
+- Numbers: only these verified facts, written in digits ("6 diodes", not "six"), each for exactly what it describes;
+  otherwise describe without numbers.
+{% for f in facts %}  - {{ f.about }}: {{ f.text }}
+{% endfor %}- State facts directly: never claim what viewers know, miss or find surprising ("most people", "you might not know").
+{% if chapter_n == 1 %}- Scene 1 opens with the hook: one sentence of at most 16 words that names the machine or its most surprising fact,
+  in line with hook_type "{{ outline.hook_type }}" (your own words).
+{% endif %}{% for s in outline.chapters[chapter_n - 1].scenes %}{% if s.template == "note" %}- The "note" scene is the engineer's personal note: it starts with "{{ note_lead_in }}" and gives one real,
+  specific fact the rest of the video doesn't say (about 25-45 words).
+{% endif %}{% endfor %}{% if chapter_n == outline.chapters | length %}- The last scene is the closing line: one short statement that wraps up the video (never a question).
+{% endif %}
+{% if reference %}
+Reference text (Wikipedia, "{{ reference.title }}"); base the facts on it:
+"""
+{{ reference.extract }}
+"""
+{% endif %}
+{% if feedback %}
+This is a new version. The channel's engineer reviewed the previous version and asked for these changes:
+"""
+{{ feedback.text }}
+"""
+{% endif %}

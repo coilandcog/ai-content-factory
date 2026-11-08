@@ -7,6 +7,7 @@ film's scenes in order, so the script follows what the film shows.
 
 from __future__ import annotations
 
+from factory.blender import Template
 from factory.blueprint.canvas import Fact
 
 MACHINE = "alternator"
@@ -62,3 +63,40 @@ OUTLINE = (
     "Engineer's Note: the opened alternator as a whole (the note may be about any part)",
     "close: the whole alternator again",
 )
+
+# --- long videos (D-129) -------------------------------------------------------------------------
+# The model's parts, as the narration names them. A sentence that names a part its scene doesn't
+# show is refused, so the picture can't contradict the words. Words that are not model parts
+# (engine, belt, battery) are context and always allowed.
+PARTS: dict[str, str] = {
+    "pulley": r"\bpulleys?\b",
+    "fan": r"\bfans?\b",
+    "housing": r"\bhousings?\b|\bcasing\b",
+    "shaft": r"\bshafts?\b",
+    "rotor": r"\brotors?\b|\bclaw",
+    "field coil": r"\bfield (?:coil|winding)s?\b",
+    "slip rings": r"\bslip rings?\b",
+    "brushes": r"\bbrush(?:es)?\b",
+    # "winding" alone can be the rotor's field coil or the stator's: only names that say which
+    # count (Gemini called the field coil "the internal wire winding", 2026-11-08).
+    "stator": r"\bstators?\b|\b(?:stator|three-phase|output) windings?\b",
+    "diodes": r"\bdiodes?\b|\brectifiers?\b",
+    "regulator": r"\bregulators?\b",
+    "output terminal": r"\boutput terminal\b|\bB\+",
+}
+
+# The views a long video's scenes can use.
+TEMPLATES: dict[str, Template] = {
+    "whole": Template(("pulley", "fan", "housing", "shaft"),
+                      "the closed alternator, pulley turning: what it is and where it sits"),
+    "exploded": Template(("*",), "every part pulled apart in order: the parts and how they fit"),
+    "rotor": Template(("rotor", "field coil", "slip rings", "shaft", "pulley", "fan", "housing"),
+                      "the spinning rotor: its field coil makes it an electromagnet"),
+    "stator": Template(("stator", "rotor", "field coil", "housing"),
+                       "the stator windings around the rotor: three-phase alternating current"),
+    "rectifier": Template(("diodes", "regulator", "output terminal", "housing"),
+                          "the 6 diodes and the regulator: direct current at a steady voltage"),
+    "brushes": Template(("brushes", "slip rings", "rotor", "shaft", "field coil", "housing"),
+                        "the carbon brushes on the slip rings: how current reaches the rotor"),
+    "note": Template(("*",), "the opened alternator: the owner's Engineer's Note"),
+}  # fmt: skip

@@ -90,6 +90,7 @@ llm:
   model: gemini-3.5-flash-lite # free tier: 15 RPM, 500 RPD (D-051)
   fallback_provider: ollama
   fallback_model: "llama3.2:3b"
+  long_script_model: gemini-3.8-flash   # long-video scripts only (D-129): 5 RPM, 20 RPD
 
 budgets_per_day:
   gemini_calls: 60

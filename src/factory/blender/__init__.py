@@ -6,10 +6,22 @@ in `job_files/` that only runs inside Blender on the render PC. `jobs.py` packs 
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from types import ModuleType
 
-from factory.blender import alternator
 from factory.errors import FactoryError
+
+
+@dataclass(frozen=True)
+class Template:
+    """One view a machine model can show in a long video (D-129): which of the model's parts are
+    on screen, and what the narration over it explains. Blender draws each template (2.30)."""
+
+    shows: tuple[str, ...]  # keys of the model's PARTS; "*" = every part
+    explains: str
+
+
+from factory.blender import alternator  # noqa: E402  (its module uses Template)
 
 MODELS: dict[str, ModuleType] = {m.MACHINE: m for m in (alternator,)}
 

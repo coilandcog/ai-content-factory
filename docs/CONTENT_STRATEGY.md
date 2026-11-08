@@ -53,6 +53,8 @@ Why: on YouTube, any vertical or square video of 3 minutes or less is a Short, a
 
 ## 5. Script structure
 
+**Long videos (D-129):** 4 chapters (titles become YouTube chapters), each 4–6 scenes. Every scene uses one of the Blender model's scene templates (alternator: whole, exploded, rotor, stator, rectifier, brushes, note) and explains only what that view shows; a part may be mentioned elsewhere only after a scene that shows it explained it. The first scene (template `whole`) opens with a hook of at most 16 words; the Engineer's Note is its own scene (template `note`) in chapter 4; the last scene is a closing statement, never a question. Written by the long-script model in steps (outline, then one call per chapter), about 1,136–1,325 words (480–560 s).
+
 The narrator speaks at about 142 words per minute (`voice.target_wpm`, measured on Kokoro `am_michael`, D-066). The script stage enforces the word range from the channel YAML: `min_s × target_wpm / 60` to `max_s × target_wpm / 60` words (Short 71–118, Deep Dive 154–355), and asks the model for the middle of that range.
 
 **Short (~40 s)**

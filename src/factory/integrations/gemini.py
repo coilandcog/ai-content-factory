@@ -28,6 +28,10 @@ TIMEOUT_MS = 30_000
 MAX_ATTEMPTS = 4  # 1 try + 3 retries, waiting 2 s, 4 s and 8 s (plus up to 1 s of jitter)
 # A file sent inside the request (no upload step) keeps the whole request under Gemini's 20 MB.
 MAX_INLINE_BYTES = 18 * 1024 * 1024
+# Free-tier requests per minute (INTEGRATIONS §1). A long-video script makes many quick calls and
+# once got HTTP 429 (2026-11-08), so real calls to a model are spaced to stay under its limit.
+FREE_TIER_RPM = {"gemini-3.5-flash-lite": 15, "gemini-3.8-flash": 5}
+_last_call: dict[str, float] = {}  # model -> when it was last called (shared by every client)
 
 
 class Media(BaseModel):
@@ -54,8 +58,10 @@ class GeminiClient:
         retry_wait_s: float = 2.0,
     ) -> None:
         self.model = model
+        self._api_key = api_key
         self._before_call = before_call or (lambda: None)
         self._retry_wait_s = retry_wait_s  # tests pass 0 so retries don't sleep
+        self._paced = sdk is None  # only real calls wait for the per-minute limit
         # retry_options is left unset on purpose: the SDK then never retries by itself, so only
         # our retry below runs and every attempt passes through before_call.
         self._sdk = sdk or genai.Client(
@@ -105,6 +111,27 @@ class GeminiClient:
                 )
         raise AssertionError("unreachable")
 
+    def with_model(self, model: str, timeout_s: float | None = None) -> GeminiClient:
+        """The same client (key, budget check) for another model, e.g. long-video scripts
+        (D-129). A real client gets its own connection with `timeout_s`: gemini-3.8-flash thinks
+        for 20-60 s per chapter, past the usual 30 s (HTTP 504 on 2026-11-08)."""
+        sdk = self._sdk
+        if self._paced and timeout_s is not None:
+            options = types.HttpOptions(timeout=int(timeout_s * 1000))
+            sdk = genai.Client(api_key=self._api_key, http_options=options)
+        other = GeminiClient(self._api_key, model, before_call=self._before_call, sdk=sdk,
+                             retry_wait_s=self._retry_wait_s)  # fmt: skip
+        other._paced = self._paced
+        return other
+
+    def _pace(self) -> None:
+        """Wait until this model's per-minute limit allows the next request."""
+        interval = 60 / FREE_TIER_RPM.get(self.model, 15) * 1.05
+        wait = _last_call.get(self.model, 0.0) + interval - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _last_call[self.model] = time.monotonic()
+
     def _send(
         self, system: str, prompt: str, schema: type[BaseModel], media: Media | None = None
     ) -> str:
@@ -132,6 +159,8 @@ class GeminiClient:
         self, system: str, prompt: str, schema: type[BaseModel], media: Media | None
     ) -> str:
         self._before_call()  # may raise BudgetExceededError, which is never retried
+        if self._paced:
+            self._pace()
         log.debug("Gemini prompt (%s): %s", self.model, prompt)
         started = time.monotonic()
         try:
