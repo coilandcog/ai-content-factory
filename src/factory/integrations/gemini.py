@@ -114,7 +114,7 @@ class GeminiClient:
     def with_model(self, model: str, timeout_s: float | None = None) -> GeminiClient:
         """The same client (key, budget check) for another model, e.g. long-video scripts
         (D-129). A real client gets its own connection with `timeout_s`: gemini-3.8-flash thinks
-        for 20-60 s per chapter, past the usual 30 s (HTTP 504 on 2026-11-08)."""
+        for 20-60 s per chapter, past the usual 30 s (HTTP 504 on 2026-11-08), longer when busy."""
         sdk = self._sdk
         if self._paced and timeout_s is not None:
             options = types.HttpOptions(timeout=int(timeout_s * 1000))

@@ -405,3 +405,23 @@ def test_a_kept_chapter_that_fails_todays_checks_is_written_again(ctx: AppContex
 
     assert status(ctx, content_id)[0] == "scripted"
     assert len(sdk.calls) == 3  # chapter 1 kept; chapters 2-4 asked for
+
+
+def test_the_long_script_model_gets_five_minutes_per_answer(
+    ctx: AppContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from factory.integrations.gemini import GeminiClient
+
+    timeouts: list[float | None] = []
+    original = GeminiClient.with_model
+
+    def spy(self: GeminiClient, model: str, timeout_s: float | None = None) -> GeminiClient:
+        timeouts.append(timeout_s)
+        return original(self, model, timeout_s)
+
+    monkeypatch.setattr(GeminiClient, "with_model", spy)
+    episode(ctx)
+
+    run(ctx, *all_answers())
+
+    assert timeouts == [300]  # 120 s cut a busy gemini-3.8-flash off (D-133)
