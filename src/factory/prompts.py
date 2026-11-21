@@ -60,6 +60,15 @@ def render_prompt(
     return RenderedPrompt(text=text, template_path=path, version=_version(env, f"{name}.j2"))
 
 
+def prompt_version(name: str, channel: ChannelConfig, *, prompts_root: Path = PROMPTS_ROOT) -> str:
+    """The version render_prompt would store for <name>.j2, without rendering it."""
+    search_path = [_channel_dir(channel, prompts_root), prompts_root / DEFAULT_DIR_NAME]
+    env = jinja2.Environment(
+        loader=jinja2.FileSystemLoader([str(p) for p in search_path if p.is_dir()])
+    )
+    return _version(env, f"{name}.j2")
+
+
 def _version(env: jinja2.Environment, name: str) -> str:
     """First 10 hex chars of a SHA-256 over the template *and every template it includes*.
 

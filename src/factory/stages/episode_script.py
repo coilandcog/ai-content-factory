@@ -11,19 +11,24 @@ names a model part its scene doesn't show, only verified numbers as digits, no p
 Engineer's Note as its own scene in the last chapter, and each chapter's length.
 The script is stored like any other (`body_text` = the whole narration), with the chapter and
 scene plan in `shot_list_json` and the chapter titles in `chapters`.
+Each step that passes its checks is kept in `script_progress.json` (D-132): when a later call
+fails (the long-script model is often busy), the next run asks only for what is still missing.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import re
 import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 from types import ModuleType
 from typing import Any, ClassVar, Literal
 
 import httpx
-from pydantic import BaseModel, create_model, model_validator
+from pydantic import BaseModel, ValidationError, create_model, model_validator
 
 from factory import blender
 from factory.budgets import check_and_record
@@ -32,7 +37,7 @@ from factory.db import set_status
 from factory.errors import FactoryError, PolicyBlockedError
 from factory.integrations.gemini import GeminiClient
 from factory.integrations.wikimedia import page_summary
-from factory.prompts import render_prompt
+from factory.prompts import prompt_version, render_prompt
 from factory.similarity import closest
 from factory.stages import script as script_stage
 from factory.stages.script import (
@@ -45,6 +50,9 @@ from factory.stages.script import (
     word_count,
     word_range,
 )
+from factory.stages.voice import asset_dir
+
+log = logging.getLogger(__name__)
 
 CHAPTERS = 4
 SCENES_PER_CHAPTER = (4, 6)  # short scenes: flash-lite writes 60-80 words per scene
@@ -55,6 +63,7 @@ SENTENCE = re.compile(r"[^.!?]+[.!?]*")
 LONG_TIMEOUT_S = 120  # the long-script model thinks 20-60 s per answer
 CHAPTER_REASKS = 6  # length is the rule flash-lite misses most; each chapter is a short answer
 NUMBER = re.compile(r"\d[\d,.]*")
+PROGRESS_FILE = "script_progress.json"  # the outline and finished chapters of a running script
 
 
 # --- step 1: the outline -------------------------------------------------------------------------
@@ -322,18 +331,32 @@ def write(
     outline_prompt = _render(ctx, "script_episode_outline", allowed_hooks=hooks,
                              series=getattr(channel.formats, row["format"]).series,
                              chapters=CHAPTERS, scenes=SCENES_PER_CHAPTER, **context)  # fmt: skip
-    outline = llm.generate_json(
-        system=system.text, prompt=outline_prompt.text,
-        schema=outline_schema(model, hooks, reference.url if reference else None),
-        max_reasks=script_stage.MAX_REASKS,
-    )  # fmt: skip
-    if not outline.policy.allowed:
-        raise PolicyBlockedError(outline.policy.reason)
+    schema = outline_schema(model, hooks, reference.url if reference else None)
     low, high = word_range(channel, row["format"])
     share = (low + high) / 2 / CHAPTERS
-    chapters: list[list[str]] = []
-    introduced: set[str] = set()
+    chapter_version = prompt_version(
+        "script_episode_chapter", channel, prompts_root=ctx.root / ctx.settings.paths.prompts_dir
+    )
+    key = fingerprint(row, model, hooks, feedback,
+                      (system.version, outline_prompt.version, chapter_version))  # fmt: skip
+    progress = Progress(asset_dir(ctx, row["id"]) / PROGRESS_FILE, key)
+    outline, chapters = progress.load(schema, model, facts, (low, high, share))
+    if outline is None:
+        outline = llm.generate_json(
+            system=system.text, prompt=outline_prompt.text, schema=schema,
+            max_reasks=script_stage.MAX_REASKS,
+        )  # fmt: skip
+        if not outline.policy.allowed:
+            raise PolicyBlockedError(outline.policy.reason)
+        progress.save(outline, chapters)
+    elif chapters:
+        log.info("#%s: continuing the long script at chapter %s (outline and %s chapter(s) "
+                 "kept)", row["id"], len(chapters) + 1, len(chapters),
+                 extra={"content_id": row["id"], "event": "script_resumed"})  # fmt: skip
+    introduced = introduced_by(model, outline, chapters)
     for n, plan in enumerate(outline.chapters, 1):
+        if n <= len(chapters):
+            continue  # kept from an earlier run
         words = chapter_words(low, high, share, n, sum(word_count(" ".join(c)) for c in chapters))
         # flash-lite writes about 15% under the words it is asked for, so it is asked for more
         scene_words = round(sum(words) / 2 / len(plan.scenes) * 1.15)
@@ -350,6 +373,7 @@ def write(
         chapters.append([s.narration for s in draft.scenes])
         for scene, text in zip(plan.scenes, chapters[-1], strict=True):
             introduced |= shown_parts(model, scene.template, text)
+        progress.save(outline, chapters)
     script = EpisodeScript(outline, chapters)
     sources = script_stage._open_sources(ctx, row, llm, http, script, system.text)
     match = closest(conn, row["channel_id"], row["id"], script.narration(),
@@ -360,7 +384,93 @@ def write(
             f"too similar to #{match.content_id} ({match.score:.2f} > {threshold:.2f})"
         )
     version = f"{system.version}+{outline_prompt.version}"
-    return save(ctx, row["id"], script, sources, llm.model, version, match.score)
+    script_id = save(ctx, row["id"], script, sources, llm.model, version, match.score)
+    progress.done()
+    return script_id
+
+
+# --- resuming a long script (D-132) ---------------------------------------------------------
+
+
+def fingerprint(
+    row: sqlite3.Row,
+    model: ModuleType,
+    hooks: tuple[str, ...],
+    feedback: script_stage.Feedback | None,
+    versions: tuple[str, ...],
+) -> str:
+    """What the kept steps were written for: anything else (a new angle, other facts or views,
+    changed prompts, a Gate 1 redo's feedback) starts the script afresh."""
+    basis = {
+        "item": [row["object_name"], row["format"], row["angle"]],
+        "facts": [f.text for f in model.FACTS.values()],
+        "templates": {k: list(t.shows) for k, t in model.TEMPLATES.items()},
+        "parts": model.PARTS,
+        "hooks": list(hooks),
+        "feedback": [feedback.text, feedback.previous] if feedback else None,
+        "prompts": list(versions),
+    }
+    return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def introduced_by(model: ModuleType, outline: Any, chapters: list[list[str]]) -> set[str]:
+    """The parts the finished chapters explained (the next chapter may refer back to them)."""
+    found: set[str] = set()
+    for plan, texts in zip(outline.chapters, chapters, strict=False):
+        for scene, text in zip(plan.scenes, texts, strict=True):
+            found |= shown_parts(model, scene.template, text)
+    return found
+
+
+@dataclass
+class Progress:
+    """The outline and finished chapters of a long script that is still being written."""
+
+    path: Path
+    key: str
+
+    def load(self, schema: Any, model: ModuleType, facts: list[str],
+             lengths: tuple[int, int, float]) -> tuple[Any, list[list[str]]]:  # fmt: skip
+        """The kept outline (or None) and chapters, each checked again by today's rules; a file
+        for other inputs, or one that no longer passes, is ignored."""
+        try:
+            data = json.loads(self.path.read_text())
+            if data.get("key") != self.key:
+                return None, []
+            outline = schema.model_validate(data["outline"])
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, ValidationError):
+            return None, []
+        low, high, share = lengths
+        chapters: list[list[str]] = []
+        for n, texts in enumerate(data.get("chapters") or [], 1):
+            if n > len(outline.chapters):
+                break
+            so_far = sum(word_count(" ".join(c)) for c in chapters)
+            try:
+                chapter_schema(
+                    model,
+                    outline.chapters[n - 1],
+                    facts,
+                    chapter_words(low, high, share, n, so_far),
+                    first=n == 1,
+                    last=n == CHAPTERS,
+                    introduced=frozenset(introduced_by(model, outline, chapters)),
+                ).model_validate({"scenes": [{"narration": t} for t in texts]})
+            except (ValidationError, TypeError):
+                break  # this chapter and the ones after it are written again
+            chapters.append(list(texts))
+        return outline, chapters
+
+    def save(self, outline: Any, chapters: list[list[str]]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        data = {"key": self.key, "outline": outline.model_dump(mode="json"),
+                "chapters": chapters}  # fmt: skip
+        temp = self.path.with_suffix(".tmp")
+        temp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        temp.replace(self.path)  # never half a file, even if the run stops while writing
+
+    def done(self) -> None:
+        self.path.unlink(missing_ok=True)
 
 
 def save(

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
-from fakes.fake_gemini import FakeGenaiClient, reply
+from fakes.fake_gemini import FakeGenaiClient, http_error, reply
 from test_script_stage import (
     SECOND_SOURCE,
     THIRD_SOURCE,
@@ -23,6 +24,7 @@ from factory.db import add_content, connect, migrate, set_status, upsert_channel
 from factory.stages import episode_script, review
 from factory.stages import script as stage
 from factory.stages.script import NOTE_LEAD_IN, word_count
+from factory.stages.voice import asset_dir
 
 PLAN = [  # chapter title, templates of its scenes
     ("What it is", ["whole", "exploded", "rotor", "rotor"]),
@@ -93,7 +95,10 @@ def ctx(tmp_path: Path) -> AppContext:
     upsert_channel(conn, channel)
     env = EnvSettings(dry_run=True, factory_channel="coil-and-cog",
                       wikimedia_user_agent="CoilAndCogTest/0.1 (https://example.org)")  # fmt: skip
-    yield AppContext(load_settings(), env, channel, conn, REPO_ROOT)
+    # a folder of its own: these stages write asset folders and render jobs, never into data/
+    shutil.copytree(REPO_ROOT / "prompts", tmp_path / "prompts")
+    shutil.copytree(REPO_ROOT / "assets_static" / "fonts", tmp_path / "assets_static" / "fonts")
+    yield AppContext(load_settings(), env, channel, conn, tmp_path)
     conn.close()
 
 
@@ -327,3 +332,76 @@ def test_real_calls_are_spaced_to_the_models_per_minute_limit(
     client._pace()
 
     assert len(waits) == 1 and 12 < waits[0] <= 60 / 5 * 1.05  # 5 requests a minute
+
+
+# --- resuming a long script (D-132) -------------------------------------------------------------
+
+
+def progress_file(ctx: AppContext, content_id: int) -> Path:
+    return asset_dir(ctx, content_id) / episode_script.PROGRESS_FILE
+
+
+def fail_at_chapter_3(ctx: AppContext) -> int:
+    """A run whose third chapter meets a busy Gemini (503 on every attempt): the item fails."""
+    content_id = episode(ctx)
+    busy = [http_error(503)] * 4  # 1 try + 3 retries
+    run(ctx, reply(outline_answer()), reply(chapter_answer(1)), reply(chapter_answer(2)), *busy)
+    assert status(ctx, content_id)[0] == "failed"
+    with ctx.conn:  # reset by hand, as until `factory retry` exists
+        ctx.conn.execute("UPDATE contents SET status = 'idea', status_before_failure = NULL "
+                         "WHERE id = ?", (content_id,))  # fmt: skip
+    return content_id
+
+
+def test_a_failed_long_script_continues_where_it_stopped(ctx: AppContext) -> None:
+    content_id = fail_at_chapter_3(ctx)
+    kept = json.loads(progress_file(ctx, content_id).read_text())
+    assert len(kept["chapters"]) == 2 and len(kept["outline"]["chapters"]) == 4
+
+    sdk = run(ctx, reply(chapter_answer(3)), reply(chapter_answer(4)))
+
+    assert status(ctx, content_id)[0] == "scripted"
+    assert len(sdk.calls) == 2  # only the missing chapters: no outline, no chapters 1-2
+    assert "chapter 3" in sdk.calls[0]["contents"].lower()
+    script = current(ctx, content_id)
+    assert script["body_text"].startswith("Why does your car battery never run flat?")
+    assert len(json.loads(script["shot_list_json"])) == 16
+    assert not progress_file(ctx, content_id).exists()  # done: nothing left to continue
+
+
+def test_a_changed_angle_starts_the_long_script_afresh(ctx: AppContext) -> None:
+    content_id = fail_at_chapter_3(ctx)
+    with ctx.conn:
+        ctx.conn.execute("UPDATE contents SET angle = 'why it needs six diodes' WHERE id = ?",
+                         (content_id,))  # fmt: skip
+
+    sdk = run(ctx, *all_answers())
+
+    assert status(ctx, content_id)[0] == "scripted" and len(sdk.calls) == 5
+
+
+def test_a_broken_progress_file_is_ignored(ctx: AppContext) -> None:
+    content_id = episode(ctx)
+    for broken in ("not json", "[1, 2]"):
+        progress_file(ctx, content_id).parent.mkdir(parents=True, exist_ok=True)
+        progress_file(ctx, content_id).write_text(broken)
+        with ctx.conn:
+            ctx.conn.execute("UPDATE contents SET status = 'idea' WHERE id = ?", (content_id,))
+            ctx.conn.execute("DELETE FROM scripts WHERE content_id = ?", (content_id,))
+
+        sdk = run(ctx, *all_answers())
+
+        assert status(ctx, content_id)[0] == "scripted" and len(sdk.calls) == 5
+
+
+def test_a_kept_chapter_that_fails_todays_checks_is_written_again(ctx: AppContext) -> None:
+    content_id = fail_at_chapter_3(ctx)
+    path = progress_file(ctx, content_id)
+    kept = json.loads(path.read_text())
+    kept["chapters"][1][0] += " The stator windings are 12 feet long."  # an unverified number
+    path.write_text(json.dumps(kept))
+
+    sdk = run(ctx, *[reply(chapter_answer(n)) for n in (2, 3, 4)])
+
+    assert status(ctx, content_id)[0] == "scripted"
+    assert len(sdk.calls) == 3  # chapter 1 kept; chapters 2-4 asked for
